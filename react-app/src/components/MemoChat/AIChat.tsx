@@ -25,6 +25,7 @@ import ChatHistory from './ChatHistory';
 import SmartNotificationManager, { SmartNotificationManagerRef } from '../SmartNotificationManager';
 import { useChatStore } from '../../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
+import AnimatedAICharacter, { type CharacterState } from './AnimatedAICharacter';
 import { useAIChatMessages } from '../../hooks/useAIChatMessages';
 
 interface Message {
@@ -91,10 +92,6 @@ const AIChat: React.FC<AIChatProps> = ({
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  
-  // 会話管理機能
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const [conversationLoading, setConversationLoading] = useState(false);
   
   // 通知システムのref
   const notificationManagerRef = useRef<SmartNotificationManagerRef>(null);
@@ -477,7 +474,21 @@ const AIChat: React.FC<AIChatProps> = ({
       isSendingRef.current = false; // 二重送信防止フラグをリセット
       inputRef.current?.focus();
     }
-  };
+  }, [
+    inputValue, isLoading, pageId, addMessage, onActivityRecord, 
+    scrollToBottomIfNeeded, onMessageSend, persistentMode, 
+    currentMemoContent, memoContent, currentMemoTitle
+  ]);
+
+  useEffect(() => {
+    if (onLoad) {
+      onLoad({
+        sendMessage: (message: string) => {
+          handleSendMessage(message);
+        },
+      });
+    }
+  }, [onLoad, handleSendMessage]);
 
   // Enterキーでメッセージ送信
   const handleKeyPress = (event: React.KeyboardEvent) => {
@@ -657,32 +668,11 @@ const AIChat: React.FC<AIChatProps> = ({
   }, [forceRefresh, clearMessagesIfNeeded, syncMessagesFromStore, loadChatHistory, loadInitialMessages, loadHistoryFromDB, historyLoaded]);
 
   // スクロール処理の設定
-  useEffect(() => {
-    const cleanup = setupScrollHandling();
-    return cleanup;
-  }, [setupScrollHandling]);
-  
-  // メッセージ変更時のスクロール
-  useEffect(() => {
-    if (messages.length > previousMessageCountRef.current) {
-      scrollToBottomIfNeeded();
-      previousMessageCountRef.current = messages.length;
-    }
-  }, [messages, scrollToBottomIfNeeded]);
-  
-  // コンポーネントアンマウント時のクリーンアップ
-  useEffect(() => {
-    return () => {
-      // 全タイマーのクリア
-      timersRef.current.forEach(timer => clearTimeout(timer));
-      timersRef.current.clear();
-      
-      // 非同期処理のキャンセル
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
+  const cleanupScrollHandling = setupScrollHandling();
+  if (messages.length > previousMessageCountRef.current) {
+    scrollToBottomIfNeeded();
+    previousMessageCountRef.current = messages.length;
+  }
 
   return (
     <Box sx={{ 
@@ -690,6 +680,7 @@ const AIChat: React.FC<AIChatProps> = ({
       display: 'flex', 
       flexDirection: 'column',
       backgroundColor: 'background.default',
+      position: 'relative',
     }}>
       {/* ヘッダー */}
       <Box sx={{ 
@@ -948,6 +939,18 @@ const AIChat: React.FC<AIChatProps> = ({
           </Button>
         </Stack>
       </Box>
+
+      {/* アニメキャラクタ（UI機能に影響しないフロート表示） */}
+      <AnimatedAICharacter
+        state={characterState}
+        messageHint={
+          characterState === 'thinking'
+            ? '考え中…'
+            : characterState === 'speaking'
+            ? '話しているよ…'
+            : undefined
+        }
+      />
 
       {/* チャット履歴パネル */}
       <AnimatePresence>
