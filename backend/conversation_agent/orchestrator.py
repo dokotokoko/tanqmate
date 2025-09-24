@@ -6,6 +6,8 @@ import json
 import logging
 import sys
 import os
+import re
+
 from typing import List, Dict, Optional, Any, Tuple
 from datetime import datetime
 from .schema import (
@@ -51,6 +53,15 @@ class ConversationOrchestrator:
         self.conversation_history: List[Dict[str, Any]] = []
         self.support_type_history: List[str] = []
         self.act_history: List[List[str]] = []
+
+        # 既存のLLM応答生成メソッドを、適応型ロジックに差し替え
+        # 既存コードの呼び出し箇所を最小変更にするため、実体を差し替える
+        try:
+            self._generate_llm_response  # 存在確認
+            # 実行時に適応型メソッドへエイリアス
+            self._generate_llm_response = self._generate_llm_response_adaptive  # type: ignore
+        except Exception:
+            pass
     
     # <summary>1ターンの対話処理を実行します（メインエントリポイント）。</summary>
     # <arg name="user_message">ユーザーの入力メッセージ。</arg>
@@ -73,6 +84,12 @@ class ConversationOrchestrator:
         logger.info(f"   - プロジェクトコンテキスト: {bool(project_context)}")
         logger.info(f"   - 履歴件数: {len(conversation_history)}")
         
+        # 最新の履歴を内部にも保持（簡易）
+        try:
+            self.conversation_history = list(conversation_history or [])
+        except Exception:
+            self.conversation_history = []
+
         try:
             # 1. 状態抽出(理解)
             logger.info("📊 Step 1: 状態抽出開始")
@@ -162,7 +179,6 @@ class ConversationOrchestrator:
             conversation_history,
             None,  # プロジェクト情報は渡さない
             use_llm=use_llm,
-            minimal_mode=True,  # 必須フィールドに限定
             mock_mode=True  # 必須フィールドに限定（ゴール、目的、ProjectContext、会話履歴）
         )
         
@@ -326,6 +342,203 @@ class ConversationOrchestrator:
             metadata={"mock": True, "support_type": support_type}
         )
     
+    # 新規: 適応型LLM応答生成（文量・スタイルを自動調整）[2025.9.15 mori]
+    def _generate_llm_response_adaptive(
+        self,
+        state: StateSnapshot,
+        support_type: str,
+        selected_acts: List[str],
+        user_message: str
+    ) -> TurnPackage:
+        """
+        入力長・語彙・履歴・進捗から動機づけ/理解度を推定し、
+        適切な文量とスタイルでLLMに指示して応答を得る。
+        """
+
+        motivation_score, understanding_score = self._assess_motivation_and_understanding(
+            user_message, state, self.conversation_history
+        )
+
+        profile = self._decide_response_profile(
+            motivation_score, understanding_score, state, self.conversation_history, support_type
+        )
+
+        guidelines = self._build_guidelines(profile, motivation_score, understanding_score, state)
+
+        blockers_str = ", ".join(state.blockers) if getattr(state, 'blockers', None) else "なし"
+        uncertainties_str = ", ".join(state.uncertainties) if getattr(state, 'uncertainties', None) else "なし"
+        selected_acts_str = ", ".join(selected_acts)
+
+        prompt = (
+            "あなたは探究学習のメンターAIです。学習科学・動機づけ理論に基づき、\n"
+            "過剰な説明は避け、短い対話のテンポで前進を促してください。\n\n"
+            f"支援タイプ: {support_type}\n"
+            f"発話アクト: {selected_acts_str}\n"
+            "学習状態:\n"
+            f"- 目標: {getattr(state, 'goal', '')}\n"
+            f"- ブロッカー: {blockers_str}\n"
+            f"- 不確実性: {uncertainties_str}\n\n"
+            f"ユーザーのメッセージ: {user_message}\n\n"
+            f"応答ガイドライン:\n{guidelines}\n\n"
+            "出力は必ず次のJSONで返してください（余計なテキストやコードブロックは禁止）。\n"
+            "{\n"
+            "  \"natural_reply\": \"指示に沿った日本語の応答文\",\n"
+            "  \"followups\": [\"短いフォローアップ1\", \"短いフォローアップ2\", \"短いフォローアップ3\"]\n"
+            "}"
+        )
+
+        try:
+            messages = [
+                {"role": "system", "content": "あなたは学習支援の専門家です。日本語で丁寧に応答し、必ず有効なJSONのみを出力します。"},
+                {"role": "user", "content": prompt}
+            ]
+
+            response = self.llm_client.generate_response_with_history(messages)
+
+            # JSON抽出の堅牢化
+            try:
+                json_str = response
+                match = re.search(r"\{[\s\S]*\}\s*$", response)
+                if match:
+                    json_str = match.group(0)
+                result = json.loads(json_str)
+            except Exception:
+                result = json.loads(response)
+
+            return TurnPackage(
+                natural_reply=result.get("natural_reply", "どのようなお手伝いができますか？"),
+                followups=result.get("followups", [])[:3],
+                metadata={
+                    "support_type": support_type,
+                    "profile": profile,
+                    "motivation_score": motivation_score,
+                    "understanding_score": understanding_score,
+                }
+            )
+
+        except Exception as e:
+            logger.error(f"LLM応答生成エラー: {e}")
+            return self._generate_mock_response(state, support_type, selected_acts)
+
+    def _assess_motivation_and_understanding(
+        self,
+        user_message: str,
+        state: StateSnapshot,
+        history: List[Dict[str, Any]],
+    ) -> Tuple[float, float]:
+        """0.0〜1.0で動機づけ/理解度を推定（簡易ヒューリスティクス）。"""
+        text = (user_message or "").strip()
+        length = len(text)
+        neg_words = ["わからない", "無理", "できない", "難しい", "むずかしい", "疲れた", "やめたい", "つらい"]
+        neg_hits = sum(w in text for w in neg_words)
+
+        # 動機づけ
+        base = 0.6 if length >= 50 else 0.4 if length >= 15 else 0.25
+        base -= 0.1 * min(2, neg_hits)
+        try:
+            interest = getattr(state.affect, 'interest', 0) or 0
+            anxiety = getattr(state.affect, 'anxiety', 0) or 0
+        except Exception:
+            interest, anxiety = 0, 0
+        base += (interest - 2) * 0.07
+        base -= (anxiety - 2) * 0.07
+        try:
+            actions = getattr(state.progress_signal, 'actions_in_last_7_days', 0) or 0
+        except Exception:
+            actions = 0
+        base += min(0.2, actions * 0.03)
+        motivation = max(0.0, min(1.0, base))
+
+        # 理解度
+        vague_words = ["なんとなく", "よく", "多分", "たぶん", "とりあえず", "どうすれば"]
+        vague_hits = sum(w in text for w in vague_words)
+        understanding_base = 0.5 + (0.2 if length >= 80 else 0.1 if length >= 40 else -0.05)
+        understanding_base -= 0.08 * min(2, vague_hits)
+        understanding_base -= 0.08 * min(2, neg_hits)
+        understanding = max(0.0, min(1.0, understanding_base))
+
+        return motivation, understanding
+
+    def _decide_response_profile(
+        self,
+        motivation: float,
+        understanding: float,
+        state: StateSnapshot,
+        history: List[Dict[str, Any]],
+        support_type: str,
+    ) -> Dict[str, Any]:
+        """応答の文量・スタイル・フォローアップ方針を決定。"""
+        turns = len(history)
+        try:
+            actions = getattr(state.progress_signal, 'actions_in_last_7_days', 0) or 0
+        except Exception:
+            actions = 0
+
+        if motivation < 0.35 or understanding < 0.35:
+            target = 80
+        elif motivation < 0.55 or understanding < 0.55:
+            target = 160
+        elif actions > 3 or turns > 6:
+            target = 300
+        else:
+            target = 200
+
+        style = {
+            "normalize": motivation < 0.45,
+            "socratic": True,
+            "micro_task": motivation >= 0.4,
+            "offer_choices": understanding < 0.5,
+            "reflect": True,
+        }
+
+        return {
+            "target_chars": target,
+            "style": style,
+        }
+
+    def _build_guidelines(
+        self,
+        profile: Dict[str, Any],
+        motivation: float,
+        understanding: float,
+        state: StateSnapshot,
+    ) -> str:
+        t = profile["target_chars"]
+        style = profile["style"]
+        if t <= 90:
+            length_text = "60〜90文字"
+        elif t <= 160:
+            length_text = "120〜180文字"
+        elif t <= 220:
+            length_text = "180〜260文字"
+        elif t <= 320:
+            length_text = "240〜360文字"
+        else:
+            length_text = "300〜420文字"
+
+        parts = [
+            f"文量は{length_text}。",
+            "専門用語は避け、短い文で。",
+            "原則として質問は1〜2個までで負荷を上げない。",
+            "段落は最大2つ。箇条書きは3点以内。",
+        ]
+        if style.get("normalize"):
+            parts.append("最初に安心づけの一言（肯定・共感）を短く入れる。")
+        if style.get("socratic"):
+            parts.append("問いかけ中心で思考を前に進める。")
+        if style.get("micro_task"):
+            parts.append("次の一歩は5〜10分でできる極小タスクとして1つだけ提案。")
+        if style.get("offer_choices"):
+            parts.append("選択肢を2〜3個に限定し、どれか一つを選べば進める形にする。")
+        if style.get("reflect"):
+            parts.append("ユーザー発話の要点を1文で鏡写しにしてから続ける。")
+
+        parts.append(
+            "followups配列には、さらに軽い確認質問/選択肢/次の一歩のいずれかを3件、各15文字以内で。"
+        )
+
+        return "\n".join(parts)
+    
     # <summary>LLMを使用して自然な応答を生成します（Phase 2で実装）。</summary>
     # <arg name="state">現在の状態スナップショット。</arg>
     # <arg name="support_type">選択された支援タイプ。</arg>
@@ -342,6 +555,37 @@ class ConversationOrchestrator:
         
         # プロンプト構築（prompt.pyから生成）
         prompt = generate_response_prompt(selected_acts, support_type, state, user_message)
+        
+        # ユーザーの入力文字数に基づいて応答の長さを決定
+        input_length = len(user_message)
+        if input_length < 20:
+            response_length_instruction = "簡潔に、およそ80文字程度で応答してください。"
+        elif input_length < 100:
+            response_length_instruction = "およそ200文字程度で応答してください。"
+        else:
+            response_length_instruction = "少し詳しめに、およそ400文字程度で応答してください。"
+
+        # プロンプト構築
+        prompt = f"""あなたは探究学習のメンターAIです。
+        
+選択された発話アクト: {selected_acts}
+支援タイプ: {support_type}
+学習者の状態:
+- 目標: {state.goal}
+- ブロッカー: {', '.join(state.blockers) if state.blockers else 'なし'}
+- 不確実性: {', '.join(state.uncertainties) if state.uncertainties else 'なし'}
+
+ユーザーのメッセージ: {user_message}
+
+上記の情報を基に、選択された発話アクトを自然に組み合わせた応答を生成してください。
+Socratic（問いかけ中心）なアプローチを優先し、必要最小限の情報提供に留めてください。
+{response_length_instruction}
+
+応答形式（JSON）:
+{{
+    "natural_reply": "自然な応答文",
+    "followups": ["フォローアップ1", "フォローアップ2", "フォローアップ3"]
+}}"""
         
         try:
             messages = [
