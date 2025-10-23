@@ -51,6 +51,7 @@ class PolicyEngine:
         """ポリシーエンジンの初期化"""
         self.act_history: List[str] = []
         self.effectiveness_cache: Dict[str, float] = {}
+        self.ACTION_PROMPTING_ACTS = [SpeechAct.ACT, SpeechAct.DECIDE, SpeechAct.OUTLINE]
     
     def select_acts(
         self,
@@ -83,9 +84,29 @@ class PolicyEngine:
         
         # 履歴に基づく調整
         selected_acts = self._adjust_for_history(selected_acts)
+
+        # 行動喚起アクトの回数制御（発話ごと）
+        action_prompt_count = 0
+        final_acts = []
+        acts_to_process = selected_acts[:max_acts]
+
+        for act in acts_to_process:
+            if act in self.ACTION_PROMPTING_ACTS:
+                # 分析結果に基づき、上限を1回に変更
+                if action_prompt_count < 1:
+                    if act not in final_acts:
+                        final_acts.append(act)
+                        action_prompt_count += 1
+                else:
+                    # 上限に達した場合は代替アクトに置換
+                    alternative = self._get_alternative_act(act)
+                    if alternative not in final_acts:
+                        final_acts.append(alternative)
+            else:
+                if act not in final_acts:
+                    final_acts.append(act)
         
-        # 最大数に制限
-        selected_acts = selected_acts[:max_acts]
+        selected_acts = final_acts
         
         # 選択理由の生成
         reason = self._generate_selection_reason(state, support_type, selected_acts)
