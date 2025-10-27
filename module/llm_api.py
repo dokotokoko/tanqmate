@@ -7,7 +7,7 @@ from prompt.prompt import system_prompt, dev_system_prompt
 class learning_plannner():
     def __init__(self):
         load_dotenv()
-        self.model = "gpt-4.1"
+        self.model = "gpt-5"
         
         # 環境変数からAPIキーを取得
         api_key = os.getenv("OPENAI_API_KEY")
@@ -23,7 +23,7 @@ class learning_plannner():
         
         Args:
             messages: 必須。[{"role": "system/user/assistant", "content": "..."}]
-            temperature: 応答の創造性（0.0-1.0）
+            temperature: 応答の創造性（0.0-1.0） - gpt-5では使用しない
             max_tokens: 最大トークン数
             
         Returns:
@@ -31,15 +31,16 @@ class learning_plannner():
         """
         request_params = {
             "model": self.model,
-            "messages": messages,
-            "temperature": temperature
+            "messages": messages
         }
+        
+        # gpt-5ではtemperatureパラメータを使用しない
+        # temperatureパラメータは完全に無視
         
         if max_tokens is not None:
             request_params["max_tokens"] = max_tokens
             
         response = self.client.chat.completions.create(**request_params)
-
         return response.choices[0].message.content
     
     def generate_response_with_WebSearch(self, messages: List[Dict[str, Any]]) -> str:

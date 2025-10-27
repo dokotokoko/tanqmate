@@ -162,7 +162,6 @@ class ConversationOrchestrator:
             conversation_history,
             None,  # プロジェクト情報は渡さない
             use_llm=use_llm,
-            minimal_mode=True,  # 必須フィールドに限定
             mock_mode=True  # 必須フィールドに限定（ゴール、目的、ProjectContext、会話履歴）
         )
         
@@ -260,13 +259,7 @@ class ConversationOrchestrator:
         logger.info(f"発話アクト選択: {selected_acts}")
         
         return selected_acts, reason
-    
-    # <summary>発話アクトに基づいて応答を生成します（Phase 1: モック版）。</summary>
-    # <arg name="state">現在の状態スナップショット。</arg>
-    # <arg name="support_type">選択された支援タイプ。</arg>
-    # <arg name="selected_acts">選択された発話アクトリスト。</arg>
-    # <arg name="user_message">ユーザーの入力メッセージ。</arg>
-    # <returns>応答パッケージ。</returns>
+
     def _generate_response(
         self,
         state: StateSnapshot,
@@ -277,15 +270,9 @@ class ConversationOrchestrator:
         
         if self.use_mock or not self.llm_client:
             return self._generate_llm_response(state, support_type, selected_acts)
-        
-        # Phase 2で実装: LLMを使用した自然文生成
+
         return self._generate_llm_response(state, support_type, selected_acts, user_message)
     
-    # <summary>テンプレートベースのモック応答を生成します。</summary>
-    # <arg name="state">現在の状態スナップショット。</arg>
-    # <arg name="support_type">選択された支援タイプ。</arg>
-    # <arg name="selected_acts">選択された発話アクトリスト。</arg>
-    # <returns>モック応答パッケージ。</returns>
     def _generate_mock_response(
         self,
         state: StateSnapshot,
