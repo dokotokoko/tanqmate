@@ -20,9 +20,6 @@ from collections import deque
 # .envファイルを読み込み
 load_dotenv()
 
-# メモリ管理システムをインポート（使用しない）
-# from memory_manager import MemoryManager, MessageImportance
-
 # プロジェクトルートをPythonパスに追加
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -73,8 +70,6 @@ except ImportError as e:
     PHASE1_AVAILABLE = False
     logger.info(f"ℹ️ Phase 1プール機能は無効です: {e}")
 
-
-
 # =====================
 # Config/Feature flags
 # =====================
@@ -107,7 +102,7 @@ except ImportError:
         logger.warning(f"対話エージェント機能が利用できません: {e}")
 
 # 機能フラグ（環境変数で制御）
-ENABLE_CONVERSATION_AGENT = os.environ.get("ENABLE_CONVERSATION_AGENT", "false").lower() == "true"
+ENABLE_CONVERSATION_AGENT = True
 
 # 認証キャッシュ
 auth_cache = {}
@@ -724,10 +719,8 @@ async def chat_with_ai(
     current_user: int = Depends(get_current_user_cached)
 ):
     """AIとのチャット（最適化版）"""
-    # 最適化フラグ（環境変数で制御可能）
-    use_optimized = os.environ.get("USE_OPTIMIZED_CHAT", "true").lower() == "true"
     
-    if use_optimized and async_llm_client:
+    try:
         # 最適化版を使用
         result = await optimized_chat_with_ai(
             chat_data=chat_data,
@@ -752,7 +745,7 @@ async def chat_with_ai(
             decision_metadata=result.decision_metadata,
             metrics=result.metrics
         )
-    else:
+    except:
         # 既存の処理にフォールバック
         try:
             validate_supabase()
