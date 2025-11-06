@@ -138,11 +138,6 @@ class ConversationOrchestrator:
             return self._generate_fallback_response(str(e))
     
     # <summary>会話履歴から現在の状態を抽出します。</summary>
-    # <arg name="conversation_history">会話履歴。</arg>
-    # <arg name="project_context">プロジェクト情報（任意）。</arg>
-    # <arg name="user_id">ユーザーID（任意）。</arg>
-    # <arg name="conversation_id">会話ID（任意）。</arg>
-    # <returns>現在の状態スナップショット。</returns>
     def _extract_state(
         self,
         conversation_history: List[Dict[str, str]],

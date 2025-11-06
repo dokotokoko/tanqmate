@@ -1,0 +1,4 @@
+//{"src":"topic_03","rel":"generates","dst":"q_001","confidence":0.8}
+//{"src":"q_001","rel":"leads_to","dst":"h_010","confidence":0.7}
+//{"src":"h_010","rel":"is_tested_by","dst":"m_014","confidence":0.8}
+//{"src":"m_014","rel":"results_in","dst":"d_021","confidence":0.6}

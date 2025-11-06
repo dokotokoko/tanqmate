@@ -18,12 +18,18 @@ from prompt.prompt import PLAN_GENERATION_PROMPT
 logger = logging.getLogger(__name__)
 
 class ProjectPlanner:
-    """プロジェクト計画思考エンジン"""
+    """プロジェクト計画思考エンジン（グラフベース拡張版）"""
 
-    # <summary>ProjectPlannerクラスを初期化します。</summary>
-    # <arg name="llm_client">LLMクライアント（既存のmodule.llm_apiを使用）。</arg>
-    def __init__(self, llm_client=None):
+    def __init__(self, llm_client=None, graph_enabled: bool = False):
+        """
+        ProjectPlannerクラスを初期化
+        
+        Args:
+            llm_client: LLMクライアント（既存のmodule.llm_apiを使用）
+            graph_enabled: グラフベースの計画生成機能を使用するか
+        """
         self.llm_client = llm_client
+        self.graph_enabled = graph_enabled
     
     # <summary>プロジェクト計画を生成します。</summary>
     # <arg name="state">学習者の状態。</arg>
@@ -300,3 +306,424 @@ class ProjectPlanner:
                 score += 0.2
         
         return min(1.0, score)
+    
+    def generate_graph_based_plan(self, 
+                                 node: 'Node', 
+                                 state: StateSnapshot,
+                                 inference_result: Optional[Dict[str, Any]] = None,
+                                 predictions: Optional[List[Dict[str, Any]]] = None) -> ProjectPlan:
+        """グラフベースのプロジェクト計画を生成"""
+        
+        if not self.graph_enabled:
+            return self._generate_rule_based(state)
+        
+        # グラフの現在位置から計画を生成
+        from ontology.ontology_graph import NodeType
+        
+        # 推論結果に基づく北極星の設定
+        if inference_result and inference_result.get('inference_source'):
+            source = inference_result['inference_source']
+            if 'pattern:' in source:
+                north_star = "学習パターンに基づく最適化された探究プロセス"
+            elif 'adaptive_rule:' in source:
+                north_star = "個人適応型の探究学習"
+            elif 'structural_gap:' in source:
+                north_star = "構造的学習の完成と統合"
+            else:
+                north_star = "グラフ駆動の探究プロセス"
+        else:
+            north_star = "深化と循環的な学び"
+        
+        # 予測に基づくマイルストーン生成
+        milestones = []
+        if predictions:
+            for i, pred in enumerate(predictions[:5]):
+                node_type = pred.get('node_type', NodeType.QUESTION)
+                confidence = pred.get('confidence', 0.5)
+                
+                title = self._get_milestone_title(node_type)
+                description = self._get_milestone_description(node_type, confidence)
+                target_date = f"{(i+1)*2}-{(i+2)*2}週間後"
+                criteria = self._get_success_criteria(node_type)
+                
+                milestones.append(Milestone(
+                    title=title,
+                    description=description,
+                    target_date=target_date,
+                    success_criteria=criteria,
+                    order=i+1
+                ))
+        else:
+            # デフォルトのグラフベースマイルストーン
+            milestones = self._generate_default_graph_milestones(node)
+        
+        # 次のアクション生成
+        next_actions = self._generate_graph_based_actions(node, inference_result)
+        
+        # 戦略的アプローチの決定
+        strategic_approach = self._determine_strategic_approach(node, inference_result)
+        
+        # リスク要因の分析
+        risk_factors = self._analyze_graph_risks(node, inference_result)
+        
+        return ProjectPlan(
+            north_star=north_star,
+            north_star_metric="グラフのサイクル完成数と学習深度",
+            milestones=milestones,
+            next_actions=next_actions,
+            strategic_approach=strategic_approach,
+            risk_factors=risk_factors,
+            created_at=datetime.now().isoformat(),
+            confidence=inference_result.get('confidence', 0.7) if inference_result else 0.7
+        )
+    
+    def generate_adaptive_plan(self, 
+                              node: 'Node', 
+                              state: StateSnapshot, 
+                              inference_result: Dict[str, Any]) -> ProjectPlan:
+        """適応的プロジェクト計画生成（高度推論結果に基づく）"""
+        
+        # 推論結果から計画を生成
+        predictions = inference_result.get('predictions', [])
+        inference_source = inference_result.get('inference_source', '')
+        
+        # 北極星の設定（推論ソースに応じて調整）
+        if 'pattern:' in inference_source:
+            north_star = "学習パターンに基づく最適化された探究プロセス"
+            north_star_metric = "パターン適合度と学習効率"
+        elif 'adaptive_rule:' in inference_source:
+            north_star = "個人適応型の探究学習"
+            north_star_metric = "個人学習スタイル適合度"
+        else:
+            north_star = "統合的な探究学習"
+            north_star_metric = "探究プロセス完成度"
+        
+        # 予測に基づく適応的マイルストーン
+        milestones = []
+        for i, pred in enumerate(predictions[:4]):
+            milestone = self._create_adaptive_milestone(pred, i+1, inference_source)
+            milestones.append(milestone)
+        
+        # 適応的次の行動
+        next_actions = self._generate_adaptive_actions(inference_result, predictions)
+        
+        # 戦略的アプローチ（推論に基づく）
+        strategic_approach = self._generate_adaptive_strategy(inference_source, predictions)
+        
+        # 適応的リスク分析
+        risk_factors = self._analyze_adaptive_risks(inference_result)
+        
+        return ProjectPlan(
+            north_star=north_star,
+            north_star_metric=north_star_metric,
+            milestones=milestones,
+            next_actions=next_actions,
+            strategic_approach=strategic_approach,
+            risk_factors=risk_factors,
+            created_at=datetime.now().isoformat(),
+            confidence=inference_result.get('confidence', 0.8)
+        )
+    
+    def _get_milestone_title(self, node_type: 'NodeType') -> str:
+        """ノードタイプからマイルストーンタイトルを取得"""
+        
+        from ontology.ontology_graph import NodeType
+        
+        mapping = {
+            NodeType.GOAL: "目標設定の完成",
+            NodeType.QUESTION: "問いの明確化",
+            NodeType.HYPOTHESIS: "仮説形成",
+            NodeType.METHOD: "方法論の確立",
+            NodeType.DATA: "データ収集",
+            NodeType.INSIGHT: "洞察の獲得",
+            NodeType.REFLECTION: "統合的振り返り",
+            NodeType.TOPIC: "テーマの深化",
+            NodeType.WILL: "学習意欲の強化",
+            NodeType.NEED: "必要性の明確化",
+            NodeType.CHALLENGE: "課題の克服"
+        }
+        
+        return mapping.get(node_type, f"{node_type.value}の達成")
+    
+    def _get_milestone_description(self, node_type: 'NodeType', confidence: float) -> str:
+        """ノードタイプと信頼度からマイルストーン説明を生成"""
+        
+        from ontology.ontology_graph import NodeType
+        
+        base_descriptions = {
+            NodeType.GOAL: "探究の目標を具体的で測定可能な形で設定する",
+            NodeType.QUESTION: "探究すべき問いを明確で検証可能な形に洗練する",
+            NodeType.HYPOTHESIS: "検証可能な仮説を論理的に構築する",
+            NodeType.METHOD: "仮説検証のための適切な方法論を選択・設計する",
+            NodeType.DATA: "必要なデータを体系的に収集・整理する",
+            NodeType.INSIGHT: "収集した情報から新たな洞察を導出する",
+            NodeType.REFLECTION: "学習プロセス全体を振り返り統合する"
+        }
+        
+        base_desc = base_descriptions.get(node_type, f"{node_type.value}を効果的に推進する")
+        
+        # 信頼度に基づく調整
+        if confidence > 0.8:
+            return f"{base_desc}（高い確信度での推進）"
+        elif confidence > 0.6:
+            return f"{base_desc}（段階的な推進）"
+        else:
+            return f"{base_desc}（探索的な推進）"
+    
+    def _get_success_criteria(self, node_type: 'NodeType') -> List[str]:
+        """ノードタイプから成功基準を生成"""
+        
+        from ontology.ontology_graph import NodeType
+        
+        criteria_mapping = {
+            NodeType.GOAL: ["SMART形式での目標記述", "測定可能な成果指標"],
+            NodeType.QUESTION: ["明確で焦点の絞られた問い", "検証可能性の確認"],
+            NodeType.HYPOTHESIS: ["論理的な仮説の構築", "検証方法の明確化"],
+            NodeType.METHOD: ["適切な方法論の選択", "実行計画の作成"],
+            NodeType.DATA: ["必要データの特定", "データ収集の完了"],
+            NodeType.INSIGHT: ["新たな発見の記録", "理論との関連付け"],
+            NodeType.REFLECTION: ["学習プロセスの振り返り", "次回への改善点整理"]
+        }
+        
+        return criteria_mapping.get(node_type, [f"{node_type.value}の明確な進展"])
+    
+    def _generate_default_graph_milestones(self, node: 'Node') -> List[Milestone]:
+        """デフォルトのグラフベースマイルストーンを生成"""
+        
+        from ontology.ontology_graph import NodeType
+        
+        # 現在のノードタイプに基づく次の段階を予測
+        current_type = node.type
+        
+        # 学習サイクルに基づく次の段階
+        next_types = self._get_next_node_types(current_type)
+        
+        milestones = []
+        for i, next_type in enumerate(next_types[:4]):
+            title = self._get_milestone_title(next_type)
+            description = self._get_milestone_description(next_type, 0.7)
+            target_date = f"{(i+1)*2}週間後"
+            criteria = self._get_success_criteria(next_type)
+            
+            milestones.append(Milestone(
+                title=title,
+                description=description,
+                target_date=target_date,
+                success_criteria=criteria,
+                order=i+1
+            ))
+        
+        return milestones
+    
+    def _get_next_node_types(self, current_type: 'NodeType') -> List['NodeType']:
+        """現在のノードタイプから次の段階を予測"""
+        
+        from ontology.ontology_graph import NodeType
+        
+        # 探究学習のサイクルに基づく次の段階
+        cycle_mapping = {
+            NodeType.TOPIC: [NodeType.QUESTION, NodeType.GOAL, NodeType.HYPOTHESIS],
+            NodeType.GOAL: [NodeType.QUESTION, NodeType.METHOD, NodeType.HYPOTHESIS],
+            NodeType.QUESTION: [NodeType.HYPOTHESIS, NodeType.METHOD, NodeType.DATA],
+            NodeType.HYPOTHESIS: [NodeType.METHOD, NodeType.DATA, NodeType.INSIGHT],
+            NodeType.METHOD: [NodeType.DATA, NodeType.INSIGHT, NodeType.REFLECTION],
+            NodeType.DATA: [NodeType.INSIGHT, NodeType.REFLECTION, NodeType.HYPOTHESIS],
+            NodeType.INSIGHT: [NodeType.REFLECTION, NodeType.HYPOTHESIS, NodeType.QUESTION],
+            NodeType.REFLECTION: [NodeType.QUESTION, NodeType.HYPOTHESIS, NodeType.GOAL]
+        }
+        
+        return cycle_mapping.get(current_type, [NodeType.QUESTION, NodeType.HYPOTHESIS, NodeType.METHOD])
+    
+    def _generate_graph_based_actions(self, node: 'Node', inference_result: Optional[Dict[str, Any]]) -> List[NextAction]:
+        """グラフに基づく次のアクションを生成"""
+        
+        actions = []
+        
+        # 推論結果からアクションを導出
+        if inference_result:
+            support_type = inference_result.get('support_type')
+            actions.extend(self._get_actions_for_support_type(support_type, node))
+        
+        # ノードタイプに基づくデフォルトアクション
+        actions.extend(self._get_default_actions_for_node(node))
+        
+        # 優先度でソート
+        actions.sort(key=lambda x: x.urgency * x.importance, reverse=True)
+        
+        return actions[:5]  # 最大5個
+    
+    def _get_actions_for_support_type(self, support_type: str, node: 'Node') -> List[NextAction]:
+        """支援タイプに基づくアクションを生成"""
+        
+        actions = []
+        
+        if support_type == "UNDERSTANDING":
+            actions.append(NextAction(
+                action="現在の理解状況を整理し、不明点を明確にする",
+                urgency=5,
+                importance=5,
+                reason="理解が曖昧な状態では効果的な学習が困難",
+                expected_outcome="明確な理解と疑問点の特定"
+            ))
+        
+        elif support_type == "PATHFINDING":
+            actions.append(NextAction(
+                action="次のステップの具体的な道筋を計画する",
+                urgency=4,
+                importance=4,
+                reason="方向性が見えない状況を解決する必要",
+                expected_outcome="明確な行動計画の作成"
+            ))
+        
+        elif support_type == "REFRAMING":
+            actions.append(NextAction(
+                action="現在の問題を新しい視点から捉え直す",
+                urgency=3,
+                importance=5,
+                reason="視点の転換により新たな解決策が見つかる可能性",
+                expected_outcome="新しい視点と解決のヒント"
+            ))
+        
+        return actions
+    
+    def _get_default_actions_for_node(self, node: 'Node') -> List[NextAction]:
+        """ノードタイプに基づくデフォルトアクションを生成"""
+        
+        from ontology.ontology_graph import NodeType
+        
+        actions = []
+        
+        if node.type == NodeType.QUESTION:
+            actions.append(NextAction(
+                action="問いをより具体的で検証可能な形に洗練する",
+                urgency=4,
+                importance=5,
+                reason="明確な問いが探究の方向性を決定",
+                expected_outcome="焦点の絞られた研究問題"
+            ))
+        
+        elif node.type == NodeType.HYPOTHESIS:
+            actions.append(NextAction(
+                action="仮説を検証するための方法を設計する",
+                urgency=4,
+                importance=4,
+                reason="仮説は検証されてこそ価値がある",
+                expected_outcome="具体的な検証計画"
+            ))
+        
+        return actions
+    
+    def _determine_strategic_approach(self, node: 'Node', inference_result: Optional[Dict[str, Any]]) -> str:
+        """戦略的アプローチを決定"""
+        
+        if inference_result and 'pattern:' in inference_result.get('inference_source', ''):
+            return "学習パターンに基づく個別最適化アプローチ"
+        elif inference_result and 'structural_gap:' in inference_result.get('inference_source', ''):
+            return "構造的欠損の補完を重視したアプローチ"
+        elif node.depth > 0.7:
+            return "深掘り型の専門特化アプローチ"
+        elif node.clarity < 0.5:
+            return "明確化を重視した段階的アプローチ"
+        else:
+            return "バランス型の総合的アプローチ"
+    
+    def _analyze_graph_risks(self, node: 'Node', inference_result: Optional[Dict[str, Any]]) -> List[str]:
+        """グラフベースのリスク分析"""
+        
+        risks = []
+        
+        # ノード属性に基づくリスク
+        if node.clarity < 0.3:
+            risks.append("目標や方向性の不明確さ")
+        
+        if node.depth < 0.2:
+            risks.append("表面的な理解に留まるリスク")
+        
+        if node.alignment_goal < 0.5:
+            risks.append("目標との不整合")
+        
+        # 推論結果に基づくリスク
+        if inference_result:
+            confidence = inference_result.get('confidence', 0.5)
+            if confidence < 0.5:
+                risks.append("推論の不確実性が高い")
+        
+        # デフォルトリスク
+        if not risks:
+            risks = ["学習の停滞", "モチベーションの低下"]
+        
+        return risks
+    
+    def _create_adaptive_milestone(self, prediction: Dict[str, Any], order: int, inference_source: str) -> Milestone:
+        """適応的マイルストーンを作成"""
+        
+        node_type = prediction.get('node_type')
+        confidence = prediction.get('confidence', 0.5)
+        
+        title = self._get_milestone_title(node_type)
+        description = f"{self._get_milestone_description(node_type, confidence)}（{inference_source}に基づく）"
+        target_date = f"{order*2}-{(order+1)*2}週間後"
+        criteria = self._get_success_criteria(node_type)
+        
+        return Milestone(
+            title=title,
+            description=description,
+            target_date=target_date,
+            success_criteria=criteria,
+            order=order
+        )
+    
+    def _generate_adaptive_actions(self, inference_result: Dict[str, Any], predictions: List[Dict[str, Any]]) -> List[NextAction]:
+        """適応的次のアクションを生成"""
+        
+        actions = []
+        
+        # 推論結果に基づく最優先アクション
+        support_type = inference_result.get('support_type')
+        if support_type:
+            actions.extend(self._get_actions_for_support_type(support_type, None))
+        
+        # 予測に基づくアクション
+        for pred in predictions[:2]:
+            node_type = pred.get('node_type')
+            if node_type:
+                action_text = f"{self._get_milestone_title(node_type)}に向けた準備を開始する"
+                actions.append(NextAction(
+                    action=action_text,
+                    urgency=3,
+                    importance=4,
+                    reason="予測される次の段階への準備",
+                    expected_outcome=f"{node_type.value}への円滑な移行"
+                ))
+        
+        return actions
+    
+    def _generate_adaptive_strategy(self, inference_source: str, predictions: List[Dict[str, Any]]) -> str:
+        """適応的戦略を生成"""
+        
+        if 'pattern:' in inference_source:
+            return f"学習パターン「{inference_source.split(':')[1]}」に最適化された個別学習戦略"
+        elif 'adaptive_rule:' in inference_source:
+            return "個人の学習スタイルに適応した柔軟な探究戦略"
+        elif predictions:
+            return f"予測される{len(predictions)}段階の学習サイクルに基づく計画的戦略"
+        else:
+            return "データ駆動型の適応学習戦略"
+    
+    def _analyze_adaptive_risks(self, inference_result: Dict[str, Any]) -> List[str]:
+        """適応的リスク分析"""
+        
+        risks = []
+        
+        confidence = inference_result.get('confidence', 0.5)
+        if confidence < 0.6:
+            risks.append("推論の不確実性による計画の不安定性")
+        
+        inference_source = inference_result.get('inference_source', '')
+        if 'pattern:' in inference_source:
+            risks.append("パターンへの過度の依存")
+        
+        if not inference_result.get('predictions'):
+            risks.append("将来予測の不足による短期視点")
+        
+        return risks or ["一般的な学習リスク"]

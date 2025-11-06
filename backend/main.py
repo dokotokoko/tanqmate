@@ -2,7 +2,9 @@ from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import sys
 import os
@@ -70,6 +72,18 @@ except ImportError as e:
     PHASE1_AVAILABLE = False
     logger.info(f"ℹ️ Phase 1プール機能は無効です: {e}")
 
+from ontology.ontology_graph import (
+    InquiryOntologyGraph, Node, Edge, NodeType, RelationType
+)
+from ontology.ontology_adapter import OntologyAdapter
+from ontology.ontology_orchestrator import OntologyOrchestrator
+from ontology.conversation_filter import ConversationFilter, AdvancedConversationFilter
+from ontology_inference_logger import (
+    OntologyInferenceLogger, InferenceStepType, get_inference_logger
+)
+ONTOLOGY_GRAPH_AVAILABLE = True
+logger.info("✅ オントロジーグラフシステムが利用可能です")
+
 # =====================
 # Config/Feature flags
 # =====================
@@ -118,6 +132,9 @@ app = FastAPI(
 
 # 探究学習APIルーターを登録
 app.include_router(inquiry_router)
+
+# 静的ファイル提供
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # パフォーマンス最適化ミドルウェア
 app.add_middleware(GZipMiddleware, minimum_size=1000)  # レスポンス圧縮
@@ -198,16 +215,10 @@ class UserResponse(BaseModel):
     username: str
     message: str
 
-# 学習プロセス関連のモデルは削除済み（使用しない）
-
 # チャット関連
 class ChatMessage(BaseModel):
     message: str
     context: Optional[str] = None
-    # ページ依存フィールドを削除（独立設計のため）
-    # page: Optional[str] = "general"  # 削除
-    # page_id: Optional[str] = None     # 削除  
-    # memo_content: Optional[str] = None # 削除
 
 class ChatResponse(BaseModel):
     response: str
@@ -377,6 +388,110 @@ class AdminUserCreate(BaseModel):
     username: str
     password: str
 
+# =============================================================================
+# オントロジーグラフシステム関連モデル
+# =============================================================================
+
+class OntologyChatRequest(BaseModel):
+    """オントロジーグラフ対話リクエスト"""
+    message: str
+    use_graph_mode: bool = True
+    project_id: Optional[int] = None
+    debug_mode: bool = False
+    include_inference_log: bool = True
+
+class OntologyChatResponse(BaseModel):
+    """オントロジーグラフ対話レスポンス"""
+    response: str
+    timestamp: str
+    # グラフ関連情報
+    graph_context: Optional[Dict[str, Any]] = None
+    current_node: Optional[Dict[str, Any]] = None
+    next_suggestions: List[Dict[str, Any]] = Field(default_factory=list)
+    # 推論詳細
+    inference_trace_id: Optional[str] = None
+    inference_steps: List[Dict[str, Any]] = Field(default_factory=list)
+    # システム情報
+    support_type: str = ""
+    selected_acts: List[str] = Field(default_factory=list)
+    processing_time_ms: int = 0
+    success: bool = True
+    error_message: Optional[str] = None
+
+class NodeCreateRequest(BaseModel):
+    """ノード作成リクエスト"""
+    type: str = Field(..., description="ノードタイプ (Goal, Question, Hypothesis, Method, Data, Insight, Reflection, Will, Need, Topic, Challenge)")
+    text: str = Field(..., description="ノードの内容")
+    clarity: float = Field(0.5, ge=0.0, le=1.0)
+    depth: float = Field(0.5, ge=0.0, le=1.0)
+    alignment_goal: float = Field(0.5, ge=0.0, le=1.0)
+    tags: List[str] = Field(default_factory=list)
+
+class NodeResponse(BaseModel):
+    """ノードレスポンス"""
+    id: str
+    type: str
+    text: str
+    student_id: str
+    timestamp: str
+    state: str
+    confidence: float
+    clarity: float
+    depth: float
+    alignment_goal: float
+    tags: List[str]
+    metadata: Dict[str, Any]
+
+class EdgeCreateRequest(BaseModel):
+    """エッジ作成リクエスト"""
+    src_node_id: str = Field(..., description="ソースノードID")
+    dst_node_id: str = Field(..., description="宛先ノードID")
+    relation_type: str = Field(..., description="関係タイプ (generates, motivates, grounds, frames, leads_to, is_tested_by, results_in, leads_to_insight, modifies, aligned_with)")
+    confidence: float = Field(0.7, ge=0.0, le=1.0)
+
+class EdgeResponse(BaseModel):
+    """エッジレスポンス"""
+    src: str
+    rel: str
+    dst: str
+    confidence: float
+    timestamp: str
+    metadata: Dict[str, Any]
+
+class GraphStateResponse(BaseModel):
+    """グラフ状態レスポンス"""
+    user_id: str
+    current_node: Optional[NodeResponse] = None
+    progress: Dict[str, Any]
+    suggestions: List[Dict[str, Any]]
+    nodes: List[NodeResponse]
+    edges: List[EdgeResponse]
+    statistics: Dict[str, Any]
+
+class InferenceTraceResponse(BaseModel):
+    """推論トレースレスポンス"""
+    trace_id: str
+    user_id: str
+    conversation_id: str
+    user_message: str
+    start_time: str
+    end_time: Optional[str] = None
+    steps: List[Dict[str, Any]]
+    final_response: str
+    total_processing_time_ms: int
+    graph_state_before: Dict[str, Any]
+    graph_state_after: Dict[str, Any]
+    success: bool
+    error_message: Optional[str] = None
+
+class InferenceVisualizationResponse(BaseModel):
+    """推論可視化レスポンス"""
+    trace_info: Dict[str, Any]
+    step_flow: List[Dict[str, Any]]
+    graph_changes: Dict[str, Any]
+    performance_stats: Dict[str, Any]
+    confidence_scores: List[float]
+
 # === グローバル変数 ===
 llm_client = None
 supabase: Client = None
@@ -392,10 +507,16 @@ conversation_orchestrator = None
 # 会話管理システム
 conversation_manager: Optional[ConversationManager] = None
 
+# オントロジーグラフシステム
+ontology_adapter: Optional['OntologyAdapter'] = None
+enhanced_orchestrator: Optional['OntologyOrchestrator'] = None
+inference_logger: Optional['OntologyInferenceLogger'] = None
+conversation_filter: Optional['AdvancedConversationFilter'] = None
+
 @app.on_event("startup")
 async def startup_event():
     """アプリケーション起動時の初期化（最適化版）"""
-    global llm_client, supabase, conversation_orchestrator, phase1_llm_manager, async_llm_client, conversation_manager
+    global llm_client, supabase, conversation_orchestrator, phase1_llm_manager, async_llm_client, conversation_manager, enhanced_orchestrator
     
     try:
         # Supabaseクライアント初期化（コネクション設定最適化）
@@ -458,9 +579,45 @@ async def startup_event():
             if not CONVERSATION_AGENT_AVAILABLE:
                 logger.info("⚠️ 対話エージェントモジュールが利用不可です")
         
-        # メモリ管理システム初期化（使用しない）
-        # global memory_manager
-        # memory_manager = MemoryManager(model="gpt-4.1-nano", max_messages=100)
+        # オントロジーグラフシステム初期化
+        global ontology_adapter, enhanced_orchestrator, inference_logger, conversation_filter
+        
+        # 会話フィルターを最初に初期化（オントロジーと独立）
+        conversation_filter = AdvancedConversationFilter()
+        logger.info("✅ 会話フィルター初期化成功")
+        
+        if ONTOLOGY_GRAPH_AVAILABLE:
+            try:
+                # オントロジーアダプターを初期化
+                ontology_adapter = OntologyAdapter(
+                    ontology_path="ontology.yaml",
+                    constraints_path="constraints.yaml"
+                )
+                
+                # 推論ログシステムを初期化
+                inference_logger = get_inference_logger()
+                
+                # EnhancedOrchestratorV2を初期化
+                enhanced_orchestrator = OntologyOrchestrator(
+                    llm_client=llm_client,
+                    use_mock=False,
+                    use_graph=True,
+                    use_advanced_inference=True,
+                    ontology_path="ontology.yaml",
+                    constraints_path="constraints.yaml"
+                )
+                
+                logger.info("✅ オントロジーグラフシステム（EnhancedOrchestratorV2）初期化完了")
+            except Exception as e:
+                logger.error(f"❌ オントロジーグラフシステム初期化エラー: {e}")
+                import traceback
+                logger.error(f"詳細エラー: {traceback.format_exc()}")
+                ontology_adapter = None
+                enhanced_orchestrator = None
+                inference_logger = None
+                # conversation_filter はすでに初期化済みなので None にしない
+        else:
+            logger.info("⚠️ オントロジーグラフシステムは利用不可です")
         
         logger.info("アプリケーション初期化完了（最適化版）")
         
@@ -609,6 +766,74 @@ async def update_conversation_timestamp(conversation_id: str):
         logger.error(f"conversation timestamp更新エラー: {e}")
 
 # === エンドポイント実装 ===
+
+# オントロジーテストページ（優先度を上げるため最初に定義）
+@app.get("/ontology-test", response_class=HTMLResponse)
+async def ontology_test_page():
+    """オントロジーグラフシステム テストページ"""
+    logger.info("📊 /ontology-test エンドポイントが呼び出されました")
+    try:
+        # HTMLファイルを読み込み
+        file_path = "static/ontology-test.html"
+        logger.info(f"📂 HTMLファイルを読み込み中: {file_path}")
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        logger.info("✅ HTMLファイルの読み込みが完了しました")
+        return HTMLResponse(content=content)
+    except FileNotFoundError:
+        # HTMLファイルが見つからない場合の代替コンテンツ
+        logger.error("❌ ontology-test.html ファイルが見つかりません")
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>オントロジーテストページ - エラー</title>
+                <meta charset="utf-8">
+            </head>
+            <body>
+                <h1>エラー: テストページが見つかりません</h1>
+                <p>オントロジーテストページ (static/ontology-test.html) が見つかりません。</p>
+                <p><a href="/docs">API ドキュメント</a> | <a href="/">ホーム</a></p>
+            </body>
+            </html>
+            """,
+            status_code=404
+        )
+
+# オントロジーテストページ（API経由アクセス用）
+@app.get("/api/ontology-test", response_class=HTMLResponse)
+async def api_ontology_test_page():
+    """オントロジーグラフシステム テストページ（API経由）"""
+    logger.info("📊 /api/ontology-test エンドポイントが呼び出されました")
+    try:
+        # HTMLファイルを読み込み
+        file_path = "static/ontology-test.html"
+        logger.info(f"📂 HTMLファイルを読み込み中: {file_path}")
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        logger.info("✅ HTMLファイルの読み込みが完了しました")
+        return HTMLResponse(content=content)
+    except FileNotFoundError:
+        # HTMLファイルが見つからない場合の代替コンテンツ
+        logger.error("❌ ontology-test.html ファイルが見つかりません")
+        return HTMLResponse(
+            content="""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>オントロジーテストページ - エラー</title>
+                <meta charset="utf-8">
+            </head>
+            <body>
+                <h1>エラー: テストページが見つかりません</h1>
+                <p>オントロジーテストページ (static/ontology-test.html) が見つかりません。</p>
+                <p><a href="/docs">API ドキュメント</a> | <a href="/">ホーム</a></p>
+            </body>
+            </html>
+            """,
+            status_code=404
+        )
 
 @app.get("/")
 async def root():
@@ -2505,6 +2730,628 @@ async def cleanup_test_users():
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"テストユーザー削除でエラーが発生しました: {str(e)}"
         )
+
+# =============================================================================
+# オントロジーグラフシステム エンドポイント
+# =============================================================================
+
+@app.post("/ontology-chat", response_model=OntologyChatResponse)
+async def ontology_chat(
+    request: OntologyChatRequest,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """オントロジーグラフを用いた対話エンドポイント（EnhancedOrchestratorV2使用）"""
+    start_time = time.time()
+    
+    try:
+        validate_supabase()
+        
+        if not ONTOLOGY_GRAPH_AVAILABLE or not enhanced_orchestrator or not inference_logger:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="オントロジーグラフシステム（EnhancedOrchestratorV2）が利用できません"
+            )
+        
+        # 会話IDを取得または作成
+        conversation_id = await get_or_create_global_chat_session(current_user)
+        
+        # 会話履歴を取得
+        conversation_history = []
+        try:
+            recent_messages = await asyncio.to_thread(
+                lambda: supabase.table("chat_logs")
+                .select("sender, message")
+                .eq("conversation_id", conversation_id)
+                .order("created_at", desc=False)
+                .limit(20)
+                .execute()
+            )
+            
+            for msg in recent_messages.data:
+                role = "user" if msg["sender"] == "user" else "assistant"
+                conversation_history.append({
+                    "role": role,
+                    "content": msg["message"]
+                })
+        except Exception as e:
+            logger.error(f"会話履歴取得エラー: {e}")
+        
+        # 会話フィルターで挨拶判定
+        logger.info(f"🔍 会話フィルター状態: {conversation_filter is not None}")
+        if conversation_filter:
+            logger.info(f"🔍 フィルタリング対象メッセージ: '{request.message}'")
+            should_skip, greeting_response, filter_reason = conversation_filter.filter_message(
+                request.message, 
+                user_id=str(current_user)
+            )
+            logger.info(f"🔍 フィルター結果: skip={should_skip}, reason={filter_reason}")
+            
+            if should_skip and greeting_response:
+                # 挨拶として処理（オントロジー照合をスキップ）
+                logger.info(f"🤝 挨拶として処理: filter_reason={filter_reason}")
+                
+                # チャットログを保存（挨拶）
+                user_message_data = {
+                    "user_id": current_user,
+                    "page": "ontology",
+                    "sender": "user",
+                    "message": request.message,
+                    "conversation_id": conversation_id,
+                    "context_data": json.dumps({
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "filter_reason": filter_reason,
+                        "skipped_ontology": True
+                    })
+                }
+                await asyncio.to_thread(
+                    lambda: supabase.table("chat_logs").insert(user_message_data).execute()
+                )
+                
+                assistant_message_data = {
+                    "user_id": current_user,
+                    "page": "ontology",
+                    "sender": "ai",
+                    "message": greeting_response,
+                    "conversation_id": conversation_id,
+                    "context_data": json.dumps({
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "response_type": "greeting",
+                        "filter_reason": filter_reason
+                    })
+                }
+                await asyncio.to_thread(
+                    lambda: supabase.table("chat_logs").insert(assistant_message_data).execute()
+                )
+                
+                # 挨拶応答を返す
+                return OntologyChatResponse(
+                    response=greeting_response,
+                    timestamp=datetime.now(timezone.utc).isoformat(),
+                    support_type="GREETING",
+                    selected_acts=["GREET"],
+                    current_node=None,
+                    next_suggestions=[],
+                    graph_context={
+                        "filter_reason": filter_reason,
+                        "skipped_ontology": True
+                    },
+                    processing_time_ms=int((time.time() - start_time) * 1000),
+                    success=True
+                )
+        
+        # 推論トレースを開始
+        trace_id = None
+        if request.include_inference_log:
+            trace_id = inference_logger.start_inference_trace(
+                user_id=str(current_user),
+                conversation_id=conversation_id,
+                user_message=request.message
+            )
+        
+        try:
+            # EnhancedOrchestratorV2で対話処理を実行
+            logger.info(f"🚀 EnhancedOrchestratorV2による対話処理開始: user_id={current_user}")
+            
+            result = enhanced_orchestrator.process_turn(
+                user_message=request.message,
+                conversation_history=conversation_history,
+                project_context=None,
+                user_id=current_user,
+                conversation_id=conversation_id,
+                session_context={"trace_id": trace_id}
+            )
+            
+            logger.info(f"✅ EnhancedOrchestratorV2対話処理完了")
+            
+            # 結果から必要な情報を抽出
+            response_text = result.get("natural_reply", "申し訳ありませんが、応答の生成に失敗しました。")
+            support_type = result.get("support_type", "PATHFINDING")
+            selected_acts = result.get("acts", ["INFORM"])
+            current_node = result.get("current_node")
+            
+            # グラフ状態とその他の情報を結果から取得
+            graph_context = result.get("graph_context", {})
+            suggestions = result.get("next_suggestions", [])
+            followups = result.get("followups", [])
+            
+            # チャットログを保存
+            user_message_data = {
+                "user_id": current_user,
+                "page": "ontology",
+                "sender": "user",
+                "message": request.message,
+                "conversation_id": conversation_id,
+                "context_data": json.dumps({
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "ontology_mode": True,
+                    "trace_id": trace_id
+                }, ensure_ascii=False)
+            }
+            await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(user_message_data).execute())
+            
+            ai_message_data = {
+                "user_id": current_user,
+                "page": "ontology",
+                "sender": "assistant",
+                "message": response_text,
+                "conversation_id": conversation_id,
+                "context_data": json.dumps({
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "ontology_mode": True,
+                    "support_type": support_type,
+                    "selected_acts": selected_acts,
+                    "trace_id": trace_id
+                }, ensure_ascii=False)
+            }
+            await asyncio.to_thread(lambda: supabase.table("chat_logs").insert(ai_message_data).execute())
+            
+            # 推論トレースを完了
+            processing_time = int((time.time() - start_time) * 1000)
+            if request.include_inference_log:
+                inference_logger.complete_inference_trace(
+                    final_response=response_text,
+                    graph_state_before={},
+                    graph_state_after=graph_context,
+                    success=True
+                )
+            
+            # レスポンスを構築
+            return OntologyChatResponse(
+                response=response_text,
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                graph_context=graph_context,
+                current_node=current_node,
+                next_suggestions=suggestions,
+                inference_trace_id=trace_id,
+                inference_steps=[step.to_dict() for step in inference_logger.current_trace.steps] if inference_logger.current_trace else [],
+                support_type=support_type,
+                selected_acts=selected_acts,
+                processing_time_ms=processing_time,
+                success=True
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ EnhancedOrchestratorV2処理エラー: {e}")
+            import traceback
+            logger.error(f"詳細エラー: {traceback.format_exc()}")
+            
+            # 推論トレースにエラーを記録
+            if request.include_inference_log and inference_logger:
+                inference_logger.complete_inference_trace(
+                    final_response="",
+                    graph_state_before={},
+                    graph_state_after={},
+                    success=False,
+                    error_message=str(e)
+                )
+            raise e
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"オントロジー対話エラー: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        
+        processing_time = int((time.time() - start_time) * 1000)
+        return OntologyChatResponse(
+            response="申し訳ございません。処理中にエラーが発生しました。",
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            processing_time_ms=processing_time,
+            success=False,
+            error_message=str(e)
+        )
+
+
+@app.get("/ontology-graph/{user_id}", response_model=GraphStateResponse)
+async def get_ontology_graph_state(
+    user_id: int,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """ユーザーのオントロジーグラフ状態を取得"""
+    try:
+        validate_supabase()
+        
+        if user_id != current_user:
+            raise HTTPException(status_code=403, detail="アクセス権限がありません")
+        
+        if not ONTOLOGY_GRAPH_AVAILABLE or not ontology_adapter:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="オントロジーグラフシステムが利用できません"
+            )
+        
+        user_id_str = str(user_id)
+        
+        # グラフコンテキストを一度だけ取得
+        graph_context = ontology_adapter.get_graph_context(user_id_str)
+        
+        # コンテキストから現在のノード情報を取得
+        current_node_dict = graph_context.get("current_node")
+        current_node_response = NodeResponse(**current_node_dict) if current_node_dict else None
+
+        # ユーザーの全ノードを構築
+        user_nodes = [n for n in ontology_adapter.graph.nodes.values() if n.student_id == user_id_str]
+        user_node_ids = {n.id for n in user_nodes}
+        nodes_response = [NodeResponse(
+            id=node.id, type=node.type.value, text=node.text, student_id=node.student_id,
+            timestamp=node.timestamp.isoformat(), state=node.state, confidence=node.confidence,
+            clarity=node.clarity, depth=node.depth, alignment_goal=node.alignment_goal,
+            tags=node.tags, metadata=node.metadata
+        ) for node in user_nodes]
+
+        # ユーザーの全エッジを構築
+        user_edges = [e for e in ontology_adapter.graph.edges if e.src in user_node_ids and e.dst in user_node_ids]
+        edges_response = [EdgeResponse(
+            src=edge.src, rel=edge.rel.value, dst=edge.dst,
+            confidence=edge.confidence, timestamp=edge.timestamp.isoformat(),
+            metadata=edge.metadata
+        ) for edge in user_edges]
+        
+        # 統計情報を構築
+        statistics = {
+            "node_count": len(nodes_response),
+            "edge_count": len(edges_response),
+            "cycles_completed": graph_context.get("cycles_completed", 0)
+        }
+
+        return GraphStateResponse(
+            user_id=user_id_str,
+            current_node=current_node_response,
+            progress=graph_context.get("progress", {}),
+            suggestions=graph_context.get("suggestions", []),
+            nodes=nodes_response,
+            edges=edges_response,
+            statistics=statistics
+        )
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"オントロジーグラフ状態の取得中に予期せぬエラー: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"グラフ状態の取得中にサーバーエラーが発生しました: {str(e)}"
+        )
+        
+        # エッジ一覧を構築
+        user_edges = [edge for edge in ontology_adapter.graph.edges 
+                      if edge.src in [node.id for node in user_nodes]]
+        
+        edges_response = [EdgeResponse(
+            src=edge.src,
+            rel=edge.rel.value,
+            dst=edge.dst,
+            confidence=edge.confidence,
+            timestamp=edge.timestamp.isoformat(),
+            metadata=edge.metadata
+        ) for edge in user_edges]
+        
+        # 統計情報
+        statistics = {
+            "total_nodes": len(user_nodes),
+            "total_edges": len(user_edges),
+            "node_types": list(set(node.type.value for node in user_nodes)),
+            "avg_confidence": sum(node.confidence for node in user_nodes) / len(user_nodes) if user_nodes else 0,
+            "avg_clarity": sum(node.clarity for node in user_nodes) / len(user_nodes) if user_nodes else 0
+        }
+        
+        return GraphStateResponse(
+            user_id=str(user_id),
+            current_node=NodeResponse(**graph_context["current_node"]) if graph_context.get("current_node") else None,
+            progress=graph_context.get("progress", {}),
+            suggestions=graph_context.get("suggestions", []),
+            nodes=nodes_response,
+            edges=edges_response,
+            statistics=statistics
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"グラフ状態取得エラー: {e}")
+        handle_database_error(e, "グラフ状態の取得")
+
+
+@app.post("/ontology-nodes", response_model=NodeResponse)
+async def create_ontology_node(
+    request: NodeCreateRequest,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """オントロジーノードを作成"""
+    try:
+        validate_supabase()
+        
+        if not ONTOLOGY_GRAPH_AVAILABLE or not ontology_adapter:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="オントロジーグラフシステムが利用できません"
+            )
+        
+        # ノードタイプを検証
+        try:
+            node_type = NodeType(request.type)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"無効なノードタイプ: {request.type}"
+            )
+        
+        # ノードを作成
+        node = Node(
+            id=f"{request.type.lower()}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{current_user}",
+            type=node_type,
+            text=request.text,
+            student_id=str(current_user),
+            timestamp=datetime.now(),
+            clarity=request.clarity,
+            depth=request.depth,
+            alignment_goal=request.alignment_goal,
+            tags=request.tags
+        )
+        
+        # グラフに追加
+        success = ontology_adapter.graph.add_node(node)
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail="ノードの追加に失敗しました（ID重複の可能性）"
+            )
+        
+        return NodeResponse(
+            id=node.id,
+            type=node.type.value,
+            text=node.text,
+            student_id=node.student_id,
+            timestamp=node.timestamp.isoformat(),
+            state=node.state,
+            confidence=node.confidence,
+            clarity=node.clarity,
+            depth=node.depth,
+            alignment_goal=node.alignment_goal,
+            tags=node.tags,
+            metadata=node.metadata
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"ノード作成エラー: {e}")
+        handle_database_error(e, "ノードの作成")
+
+
+@app.post("/ontology-edges", response_model=EdgeResponse)
+async def create_ontology_edge(
+    request: EdgeCreateRequest,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """オントロジーエッジを作成"""
+    try:
+        validate_supabase()
+        
+        if not ONTOLOGY_GRAPH_AVAILABLE or not ontology_adapter:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="オントロジーグラフシステムが利用できません"
+            )
+        
+        # 関係タイプを検証
+        try:
+            relation_type = RelationType(request.relation_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"無効な関係タイプ: {request.relation_type}"
+            )
+        
+        # ノードの存在確認
+        if request.src_node_id not in ontology_adapter.graph.nodes:
+            raise HTTPException(
+                status_code=404,
+                detail=f"ソースノードが存在しません: {request.src_node_id}"
+            )
+        
+        if request.dst_node_id not in ontology_adapter.graph.nodes:
+            raise HTTPException(
+                status_code=404,
+                detail=f"宛先ノードが存在しません: {request.dst_node_id}"
+            )
+        
+        # エッジを作成
+        edge = Edge(
+            src=request.src_node_id,
+            rel=relation_type,
+            dst=request.dst_node_id,
+            confidence=request.confidence,
+            timestamp=datetime.now()
+        )
+        
+        # グラフに追加（制約チェック付き）
+        success = ontology_adapter.graph.add_edge(edge)
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail="エッジの追加に失敗しました（制約違反の可能性）"
+            )
+        
+        return EdgeResponse(
+            src=edge.src,
+            rel=edge.rel.value,
+            dst=edge.dst,
+            confidence=edge.confidence,
+            timestamp=edge.timestamp.isoformat(),
+            metadata=edge.metadata
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"エッジ作成エラー: {e}")
+        handle_database_error(e, "エッジの作成")
+
+
+@app.get("/ontology-inference/{trace_id}", response_model=InferenceTraceResponse)
+async def get_inference_trace(
+    trace_id: str,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """推論トレースを取得"""
+    try:
+        if not ONTOLOGY_GRAPH_AVAILABLE or not inference_logger:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="推論ログシステムが利用できません"
+            )
+        
+        trace = inference_logger.get_trace(trace_id)
+        if not trace:
+            raise HTTPException(status_code=404, detail="推論トレースが見つかりません")
+        
+        # アクセス権限チェック
+        if trace.user_id != str(current_user):
+            raise HTTPException(status_code=403, detail="アクセス権限がありません")
+        
+        return InferenceTraceResponse(**trace.to_dict())
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"推論トレース取得エラー: {e}")
+        handle_database_error(e, "推論トレースの取得")
+
+
+@app.get("/ontology-inference/{trace_id}/visualization", response_model=InferenceVisualizationResponse)
+async def get_inference_visualization(
+    trace_id: str,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """推論トレースの可視化データを取得"""
+    try:
+        if not ONTOLOGY_GRAPH_AVAILABLE or not inference_logger:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="推論ログシステムが利用できません"
+            )
+        
+        visualization_data = inference_logger.get_trace_visualization_data(trace_id)
+        if not visualization_data:
+            raise HTTPException(status_code=404, detail="推論トレースが見つかりません")
+        
+        # アクセス権限チェック
+        trace_info = visualization_data.get("trace_info", {})
+        if trace_info.get("user_id") != str(current_user):
+            raise HTTPException(status_code=403, detail="アクセス権限がありません")
+        
+        return InferenceVisualizationResponse(**visualization_data)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"推論可視化データ取得エラー: {e}")
+        handle_database_error(e, "推論可視化データの取得")
+
+
+@app.get("/ontology-inference/user/{user_id}/traces")
+async def get_user_inference_traces(
+    user_id: int,
+    limit: int = 10,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """ユーザーの推論トレース一覧を取得"""
+    try:
+        # アクセス権限チェック
+        if user_id != current_user:
+            raise HTTPException(status_code=403, detail="アクセス権限がありません")
+        
+        if not ONTOLOGY_GRAPH_AVAILABLE or not inference_logger:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="推論ログシステムが利用できません"
+            )
+        
+        traces = inference_logger.get_user_traces(str(user_id), limit)
+        
+        return {
+            "user_id": user_id,
+            "traces": [trace.to_dict() for trace in traces],
+            "total_count": len(traces)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"ユーザー推論トレース取得エラー: {e}")
+        handle_database_error(e, "ユーザー推論トレースの取得")
+
+
+@app.get("/ontology-inference/statistics")
+async def get_inference_statistics(
+    current_user: int = Depends(get_current_user_cached)
+):
+    """推論システムの統計情報を取得"""
+    try:
+        if not ONTOLOGY_GRAPH_AVAILABLE or not inference_logger:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="推論ログシステムが利用できません"
+            )
+        
+        statistics = inference_logger.get_system_statistics()
+        
+        return {
+            "system_statistics": statistics,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"推論統計取得エラー: {e}")
+        handle_database_error(e, "推論統計の取得")
+
+
+
+@app.get("/ontology-status")
+async def get_ontology_system_status():
+    """オントロジーシステムの稼働状況を確認"""
+    return {
+        "ontology_graph_available": ONTOLOGY_GRAPH_AVAILABLE,
+        "ontology_adapter_initialized": ontology_adapter is not None,
+        "inference_logger_initialized": inference_logger is not None,
+        "test_page_url": "/ontology-test",
+        "api_endpoints": {
+            "chat": "/ontology-chat",
+            "graph_state": "/ontology-graph/{user_id}",
+            "create_node": "/ontology-nodes",
+            "create_edge": "/ontology-edges",
+            "inference_trace": "/ontology-inference/{trace_id}",
+            "inference_visualization": "/ontology-inference/{trace_id}/visualization",
+            "user_traces": "/ontology-inference/user/{user_id}/traces",
+            "statistics": "/ontology-inference/statistics"
+        },
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
 
 # =============================================
 # Phase 1: メトリクス・監視エンドポイント

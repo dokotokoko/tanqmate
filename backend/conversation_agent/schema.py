@@ -30,6 +30,9 @@ class StateSnapshot(BaseModel):
     project_context: Optional[Dict[str, Any]] = Field(None, description="プロジェクト情報（theme, question, hypothesis等）")
     project_id: Optional[int] = Field(None, description="プロジェクトID")
     
+    # 対話コンテキスト情報
+    conversation_context: Optional[Dict[str, Any]] = Field(None, description="対話の文脈情報（トピック、文脈チェーン等）")
+    
     # オプション情報（後方互換性のため残す）
     time_horizon: Optional[str] = Field("", description="時間軸")
     last_action: Optional[str] = Field("", description="最後の行動")
@@ -151,3 +154,6 @@ class ConversationMetrics(BaseModel):
     turns_count: int = Field(0, ge=0, description="会話継続ターン数")
     satisfaction_score: Optional[float] = Field(None, ge=1.0, le=5.0, description="ユーザー満足度")
     lens_effectiveness: Dict[str, float] = Field(default_factory=dict, description="レンズ別効果測定")
+    inference_quality: float = Field(0.5, ge=0.0, le=1.0, description="推論品質スコア")
+    learned_patterns_count: int = Field(0, ge=0, description="学習済みパターン数")
+    adaptive_rules_count: int = Field(0, ge=0, description="適応ルール数")

@@ -1,0 +1,29 @@
+version: 0.1
+classes:
+  - Goal
+  - Question
+  - Hypothesis
+  - Method
+  - Data        # EvidenceでもOK
+  - Insight
+  - Reflection
+  - Will
+  - Need
+  - Topic
+  - Challenge
+
+relations:
+  generates:        {domain: Topic,    range: Question}
+  motivates:        {domain: Will,     range: Question}
+  grounds:          {domain: Need,     range: Question}
+  frames:           {domain: Goal,     range: Question}
+  leads_to:         {domain: Question, range: Hypothesis}
+  is_tested_by:     {domain: Hypothesis, range: Method}
+  results_in:       {domain: Method, range: Data}
+  leads_to_insight: {domain: Data, range: Insight}
+  modifies:         {domain: Insight,  range: Hypothesis}
+  aligned_with:     {domain: Question, range: Goal}
+
+allowed_paths:
+  - [Question, leads_to, Hypothesis, is_tested_by, Method, results_in, Data]
+  - [Data, leads_to_insight, Insight, modifies, Hypothesis]
