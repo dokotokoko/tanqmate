@@ -1,0 +1,79 @@
+must_have:
+  - path: [Question, leads_to, Hypothesis]
+  - path: [Hypothesis, is_tested_by, Method]
+
+guards:
+  - if: {node.type: "Question", clarity_lt: 0.5}
+    then: {suggest: "Clarify", message: "問いの明確化が必要"}
+
+# 構造的要件: オントロジーに基づく欠損検出と質問生成
+structural_requirements:
+  # ゴールがある場合の要件
+  - if_exists: 
+      type: "Goal"
+    must_have:
+      type: "Question"
+      relation: "aligned_with"
+    gap_prompt: "このゴールを達成するための具体的な問いは何ですか？"
+    clarification_prompt: "あなたの目標「{goal_text}」について、どのような問いを探究したいですか？"
+    priority: "high"
+    
+  # 問いがある場合の要件  
+  - if_exists:
+      type: "Question"
+    must_have:
+      type: "Hypothesis"
+      relation: "leads_to"
+    gap_prompt: "この問いに対する仮説は何ですか？"
+    clarification_prompt: "「{question_text}」という問いについて、どのような仮説を立てますか？"
+    priority: "high"
+    
+  # 仮説がある場合の要件
+  - if_exists:
+      type: "Hypothesis"
+    must_have:
+      type: "Method"
+      relation: "is_tested_by"
+    gap_prompt: "この仮説を検証する方法は何ですか？"
+    clarification_prompt: "「{hypothesis_text}」という仮説を検証するには、どのような方法を使いますか？"
+    priority: "medium"
+    
+  # 方法がある場合の要件
+  - if_exists:
+      type: "Method"
+    must_have:
+      type: "Data"
+      relation: "results_in"
+    gap_prompt: "この方法でどのようなデータを収集しますか？"
+    clarification_prompt: "「{method_text}」を実行することで、どのようなデータや結果を得られますか？"
+    priority: "medium"
+    
+  # データがある場合の要件
+  - if_exists:
+      type: "Data"
+    must_have:
+      type: "Insight"
+      relation: "leads_to_insight"
+    gap_prompt: "このデータから何がわかりますか？"
+    clarification_prompt: "得られたデータ「{data_text}」から、どのような洞察や気づきがありますか？"
+    priority: "medium"
+
+# より高度な構造的チェック
+advanced_structural_checks:
+  # 問いとゴールの整合性
+  - name: "question_goal_alignment"
+    condition: "has_both(Question, Goal)"
+    check: "has_relation(Question, Goal, aligned_with)"
+    gap_prompt: "この問いはあなたのゴールとどのように関連していますか？"
+    
+  # 探究の深さチェック
+  - name: "inquiry_depth"
+    condition: "path_exists([Question, Hypothesis, Method])"
+    check: "path_length >= 3"
+    gap_prompt: "探究をもう少し深めてみませんか？次に何を調べたいですか？"
+    
+  # 循環的学習の促進
+  - name: "insight_reflection_cycle"
+    condition: "has_node(Insight)"
+    check: "has_outgoing_relation(Insight, modifies, Hypothesis)"
+    gap_prompt: "この洞察を踏まえて、最初の仮説を修正しますか？"

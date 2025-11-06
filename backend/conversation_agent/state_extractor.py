@@ -1,12 +1,14 @@
 """
 会話履歴から学習状態を抽出するモジュール
 LLMを使用した動的な状態抽出と、ヒューリスティックなフォールバック処理を実装
+グラフベースの学習状態抽出機能を含む
 """
 
 import json
 import logging
 import sys
 import os
+import re
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 from .schema import StateSnapshot, Affect, ProgressSignal
@@ -18,26 +20,27 @@ from prompt.prompt import STATE_EXTRACT_PROMPT
 logger = logging.getLogger(__name__)
 
 class StateExtractor:
-    """会話履歴から状態スナップショットを抽出"""
+    """会話履歴から状態スナップショットを抽出（グラフ対応拡張版）"""
     
-    # <summary>状態抽出器を初期化します。</summary>
-    # <arg name="llm_client">LLMクライアント（既存のmodule.llm_apiを使用）。</arg>
-    def __init__(self, llm_client=None):
-        self.llm_client = llm_client
+    def __init__(self, llm_client=None, graph_enabled: bool = False):
+        """
+        状態抽出器を初期化
         
-    # <summary>会話履歴から状態を抽出するメイン関数です。</summary>
-    # <arg name="conversation_history">[{"sender": "user/assistant", "message": "..."}]形式の履歴。</arg>
-    # <arg name="project_context">プロジェクト情報（既存システムから取得）。</arg>
-    # <arg name="use_llm">LLMを使用するか（Falseの場合はヒューリスティック処理）。</arg>
-    # <arg name="mock_mode">最小限の状態抽出モード（ゴール、目的、ProjectContext、会話履歴のみに焦点）。</arg>
-    # <returns>抽出された状態スナップショット。</returns>
+        Args:
+            llm_client: LLMクライアント（既存のmodule.llm_apiを使用）
+            graph_enabled: グラフベースの拡張機能を使用するか
+        """
+        self.llm_client = llm_client
+        self.graph_enabled = graph_enabled
+        
     def extract_from_history(
         self,
         conversation_history: List[Dict[str, str]],
         project_context: Optional[Dict[str, Any]] = None,
         use_llm: bool = True,
-        mock_mode: bool = False #mock
+        mock_mode: bool = False
     ) -> StateSnapshot:
+        """会話履歴から状態を抽出するメイン関数（基本版）"""
         
         if mock_mode:
             # Mock用に必要最低限の入力（入力パラメータ：ゴール, 目的, ProjectContext, 会話履歴）
@@ -51,12 +54,61 @@ class StateExtractor:
                 return self._extract_heuristic(conversation_history, project_context)
         else:
             return self._extract_heuristic(conversation_history, project_context)
+    
+    def extract_enhanced_state(self, 
+                              conversation_history: List[Dict[str, str]],
+                              project_context: Optional[Dict[str, Any]],
+                              user_id: Optional[int],
+                              conversation_id: Optional[str],
+                              session_info: Optional[Dict[str, Any]] = None) -> StateSnapshot:
+        """拡張状態抽出（セッション情報と会話文脈の統合）"""
+        
+        # 基本状態抽出
+        state = self.extract_from_history(conversation_history, project_context)
+        
+        # グラフ機能が有効の場合のみ拡張処理
+        if not self.graph_enabled or not session_info:
+            return state
+        
+        # 会話履歴から文脈を抽出
+        conversation_context = self._extract_conversation_context(conversation_history)
+        self._set_conversation_context(state, conversation_context)
+        
+        # セッション情報から状態を強化
+        if session_info.get('context_history'):
+            # 過去のコンテキストから学習パターンを抽出
+            recent_contexts = session_info['context_history'][-5:]  # 最近5件
+            
+            # 繰り返しパターンの検出
+            if len(recent_contexts) >= 3:
+                common_blockers = self._find_common_elements([ctx.get('blockers', []) for ctx in recent_contexts])
+                common_uncertainties = self._find_common_elements([ctx.get('uncertainties', []) for ctx in recent_contexts])
+                
+                # 繰り返し要素をlooping_signalsに追加
+                state.progress_signal.looping_signals.extend([
+                    f"繰り返しブロッカー: {blocker}" for blocker in common_blockers
+                ])
+                state.progress_signal.looping_signals.extend([
+                    f"繰り返し不確実性: {uncertainty}" for uncertainty in common_uncertainties
+                ])
+        
+        # ユーザープリファレンスの反映
+        if session_info.get('user_preferences'):
+            prefs = session_info['user_preferences']
+            
+            # 支援タイプの好みを反映
+            if 'preferred_support_type' in prefs:
+                state.metadata = state.metadata or {}
+                state.metadata['preferred_support_type'] = prefs['preferred_support_type']
+            
+            # 学習スタイルを反映
+            if 'learning_style' in prefs:
+                state.metadata = state.metadata or {}
+                state.metadata['learning_style'] = prefs['learning_style']
+        
+        return state
 
-
-    # <summary>LLMを使用して状態を抽出します（デフォルト関数）。</summary>
-    # <arg name="conversation_history">会話履歴。</arg>
-    # <arg name="project_context">プロジェクト情報（任意）。</arg>
-    # <returns>抽出された状態スナップショット。</returns>
+    # LLMを使用して状態を抽出します（デフォルト関数）。
     def _extract_with_llm(
         self,
         conversation_history: List[Dict[str, str]],
@@ -163,9 +215,7 @@ class StateExtractor:
         
         return state
     
-    # <summary>会話履歴を文字列フォーマットに変換します。</summary>
-    # <arg name="conversation_history">会話履歴。</arg>
-    # <returns>フォーマットされた会話文字列。</returns>
+    # <summary>会話履歴を文字列フォーマットに変換します。
     def _format_conversation(self, conversation_history: List[Dict[str, str]]) -> str:
         lines = []
         for msg in conversation_history:
@@ -173,10 +223,7 @@ class StateExtractor:
             lines.append(f"{role}: {msg.get('message', '')}")
         return "\n".join(lines)
     
-    # <summary>キーワード分析により状態を更新します。</summary>
-    # <arg name="state">現在の状態スナップショット。</arg>
-    # <arg name="messages">分析対象のメッセージリスト。</arg>
-    # <returns>更新された状態スナップショット。</returns>
+    # キーワード分析により状態を更新します。
     def _analyze_keywords(self, state: StateSnapshot, messages: List[str]) -> StateSnapshot:
         
         all_text = " ".join(messages).lower()
@@ -314,3 +361,138 @@ class StateExtractor:
         logger.info(f"最小限状態抽出完了: goal={state.goal}, purpose={state.purpose}")
         
         return state
+    
+    def _get_conversation_context(self, state) -> Dict[str, Any]:
+        """安全にconversation_contextを取得する"""
+        try:
+            return getattr(state, 'conversation_context', {}) or {}
+        except AttributeError:
+            return {}
+    
+    def _set_conversation_context(self, state, context: Dict[str, Any]) -> None:
+        """安全にconversation_contextを設定する"""
+        try:
+            state.conversation_context = context
+        except AttributeError:
+            logger.warning("StateSnapshotにconversation_contextフィールドが存在しません。動的に追加します。")
+            setattr(state, 'conversation_context', context)
+
+    def _extract_conversation_context(self, conversation_history: List[Dict[str, str]]) -> Dict[str, Any]:
+        """会話履歴から文脈情報を汎用的に抽出"""
+        
+        context = {
+            'topics': [],
+            'current_topic': None,
+            'mentioned_entities': [],
+            'key_phrases': [],
+            'context_chain': [],
+            'user_interests': [],
+            'discussion_subjects': []
+        }
+        
+        if not conversation_history:
+            return context
+        
+        # 最近の会話から重要な要素を抽出
+        recent_messages = conversation_history[-10:] if len(conversation_history) > 10 else conversation_history
+        
+        # 直前の会話内容を重視
+        previous_assistant_response = None
+        
+        for msg in recent_messages:
+            if msg.get('role') == 'user' or msg.get('sender') == 'user':
+                user_text = msg.get('content', '') or msg.get('message', '')
+                
+                # 名詞句を抽出（簡易的な方法）
+                # 「〜について」「〜に関して」「〜を」などのパターンで主題を検出
+                topic_patterns = [
+                    r'(.+?)について',
+                    r'(.+?)に関して',
+                    r'(.+?)に興味',
+                    r'(.+?)を(.+?)したい',
+                    r'(.+?)が(.+?)です',
+                    r'(.+?)で(.+?)を'
+                ]
+                
+                for pattern in topic_patterns:
+                    matches = re.findall(pattern, user_text)
+                    if matches:
+                        if isinstance(matches[0], tuple):
+                            # タプルの場合、最初の要素を取得
+                            topic = matches[0][0].strip()
+                        else:
+                            topic = matches[0].strip()
+                        
+                        # 短すぎる場合はスキップ
+                        if len(topic) > 1 and topic not in ['それ', 'これ', 'あれ', '何']:
+                            if topic not in context['mentioned_entities']:
+                                context['mentioned_entities'].append(topic)
+                            context['current_topic'] = topic
+                
+                # ユーザーの回答から興味・関心を抽出
+                # 短い回答（単語や短文）も文脈として保持
+                if len(user_text) < 20 and not any(punct in user_text for punct in ['？', '?', '。']):
+                    # 短い回答は興味の表明として扱う
+                    context['user_interests'].append(user_text.strip())
+                    if not context['current_topic']:
+                        context['current_topic'] = user_text.strip()
+                
+                # アクション関連の動詞を検出
+                action_words = ['作る', '作り', '開発', '構築', '実装', '設計', 'つくる', '制作',
+                              '学ぶ', '学習', '勉強', '研究', '調べる', '知る', '理解',
+                              '始める', 'やる', '試す', '使う', '活用', '応用']
+                
+                for word in action_words:
+                    if word in user_text:
+                        if context['current_topic']:
+                            phrase = f"{context['current_topic']}を{word}"
+                        else:
+                            phrase = f"{word}こと"
+                        context['key_phrases'].append(phrase)
+            
+            elif msg.get('role') == 'assistant' or msg.get('sender') == 'assistant':
+                # アシスタントの質問から文脈を抽出
+                assistant_text = msg.get('content', '') or msg.get('message', '')
+                previous_assistant_response = assistant_text
+                
+                # 「何に興味がありますか？」のような質問から文脈を抽出
+                question_patterns = [
+                    r'何に(.+?)ますか',
+                    r'(.+?)の何に',
+                    r'(.+?)について',
+                    r'どんな(.+?)を'
+                ]
+                
+                for pattern in question_patterns:
+                    matches = re.findall(pattern, assistant_text)
+                    if matches:
+                        # アシスタントが聞いているトピックも文脈として保持
+                        for match in matches:
+                            if isinstance(match, str) and len(match) > 1:
+                                context['discussion_subjects'].append(match)
+        
+        # トピックチェーンを構築
+        all_topics = context['mentioned_entities'] + context['user_interests']
+        if all_topics:
+            context['topics'] = all_topics[:5]  # 最大5つのトピック
+            context['context_chain'] = all_topics[-3:]  # 最近の3つ
+        
+        # 文脈の継続性を確保
+        if not context['current_topic'] and context['user_interests']:
+            # 現在のトピックが不明な場合、最新の興味を使用
+            context['current_topic'] = context['user_interests'][-1]
+        
+        return context
+    
+    def _find_common_elements(self, element_lists: List[List[str]]) -> List[str]:
+        """複数のリストから共通要素を見つける"""
+        if not element_lists or len(element_lists) < 2:
+            return []
+        
+        # 最初のリストを基準に、他のリストにも含まれる要素を探す
+        common_elements = []
+        for element in element_lists[0]:
+            if all(element in other_list for other_list in element_lists[1:]):
+                common_elements.append(element)
+        
+        return common_elements

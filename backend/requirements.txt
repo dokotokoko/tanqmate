@@ -15,7 +15,10 @@ tiktoken==0.8.0
 python-dotenv==1.0.1
 pydantic==2.10.6
 
-# 認証関連（将来の実装用）
+# 認証関連
 PyJWT==2.10.1
 bcrypt==4.3.0 
-supabase==2.15.0 
+supabase==2.15.0
+python-jose[cryptography]==3.3.0 
+
+numpy==2.0.2

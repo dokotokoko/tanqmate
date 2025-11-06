@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>オントロジーグラフシステム テスト - 探Qメイト</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --primary-color: #ff6b2c;
+            --primary-light: #ff8a50;
+            --primary-dark: #e55a24;
+            --secondary-color: #4ecdc4;
+            --background-color: #fafafa;
+            --surface-color: #ffffff;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            --border-color: #e0e0e0;
+            --shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            --shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans JP', 'Roboto', sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+            color: white;
+            padding: 20px 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+
+        .main-content {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 400px;
+            gap: 20px;
+            min-height: 0;
+        }
+
+        .chat-section {
+            background: var(--surface-color);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            background: var(--primary-color);
+            color: white;
+            padding: 15px 20px;
+            font-weight: 500;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .mode-toggle {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .mode-toggle:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 500px;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .message.user {
+            flex-direction: row-reverse;
+        }
+
+        .message-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .message.user .message-avatar {
+            background: var(--primary-color);
+        }
+
+        .message.assistant .message-avatar {
+            background: var(--secondary-color);
+        }
+
+        .message-content {
+            background: var(--background-color);
+            padding: 12px 16px;
+            border-radius: 12px;
+            max-width: 70%;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .message.user .message-content {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .message-time {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .chat-input {
+            padding: 20px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .input-group {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .input-field {
+            flex: 1;
+            min-height: 44px;
+            padding: 12px 16px;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 0.95rem;
+            resize: vertical;
+            transition: border-color 0.2s;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .send-button {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .send-button:hover:not(:disabled) {
+            background: var(--primary-dark);
+            transform: translateY(-1px);
+        }
+
+        .send-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .analysis-panel {
+            background: var(--surface-color);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel-tabs {
+            display: flex;
+            background: var(--background-color);
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 12px 16px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .tab-button.active {
+            background: var(--secondary-color);
+            color: white;
+        }
+
+        .tab-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            max-height: 600px;
+        }
+
+        .graph-visualization {
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: #f8f9fa;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+        }
+
+        .node-item {
+            background: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+        }
+
+        .node-type {
+            font-weight: 600;
+            color: var(--primary-color);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .node-text {
+            margin: 8px 0;
+            font-size: 0.95rem;
+        }
+
+        .node-metrics {
+            display: flex;
+            gap: 16px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .inference-step {
+            background: var(--background-color);
+            border-left: 4px solid var(--secondary-color);
+            padding: 12px 16px;
+            margin-bottom: 12px;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .step-type {
+            font-weight: 600;
+            color: var(--secondary-color);
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+        }
+
+        .step-reasoning {
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+        }
+
+        .step-metadata {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 16px;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border-color);
+            border-top: 2px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 12px 0;
+        }
+
+        .success {
+            color: #2e7d32;
+            background: #e8f5e8;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin: 12px 0;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: var(--background-color);
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+            border: 1px solid var(--border-color);
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--primary-color);
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        @media (max-width: 1024px) {
+            .main-content {
+                grid-template-columns: 1fr;
+                grid-template-rows: 1fr auto;
+            }
+            
+            .analysis-panel {
+                max-height: 400px;
+            }
+        }
+
+        .controls {
+            background: var(--surface-color);
+            padding: 16px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox {
+            width: 18px;
+            height: 18px;
+        }
+
+        .control-label {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+
+        .user-info {
+            background: var(--surface-color);
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .auth-input {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            width: 120px;
+            font-size: 0.9rem;
+        }
+
+        .auth-button {
+            background: var(--secondary-color);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧠 オントロジーグラフシステム テスト</h1>
+            <p>探究学習支援AIの推論プロセスを可視化・分析するテスト環境</p>
+        </div>
+
+        <div class="user-info">
+            <div class="control-group">
+                <label class="control-label">ユーザーID:</label>
+                <input type="number" id="userId" class="auth-input" value="123" placeholder="ユーザーID">
+                <button id="authButton" class="auth-button">認証設定</button>
+            </div>
+            <div class="control-group">
+                <span class="control-label">認証状態: </span>
+                <span id="authStatus">未設定</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="control-group">
+                <input type="checkbox" id="graphMode" class="checkbox" checked>
+                <label for="graphMode" class="control-label">グラフモード</label>
+            </div>
+            <div class="control-group">
+                <input type="checkbox" id="debugMode" class="checkbox">
+                <label for="debugMode" class="control-label">デバッグモード</label>
+            </div>
+            <div class="control-group">
+                <input type="checkbox" id="inferenceLog" class="checkbox" checked>
+                <label for="inferenceLog" class="control-label">推論ログ</label>
+            </div>
+            <button id="clearChat" class="auth-button">チャット履歴クリア</button>
+            <button id="refreshGraph" class="auth-button">グラフ状態更新</button>
+        </div>
+
+        <div class="main-content">
+            <div class="chat-section">
+                <div class="chat-header">
+                    <span>🤖 オントロジーAIチャット</span>
+                    <button id="modeToggle" class="mode-toggle">通常モード</button>
+                </div>
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message assistant">
+                        <div class="message-avatar">🤖</div>
+                        <div class="message-content">
+                            <div>こんにちは！オントロジーグラフシステムのテストへようこそ。探究したいテーマについて自由にお話しください。推論プロセスを詳細に分析します。</div>
+                            <div class="message-time">システム起動時</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input">
+                    <div class="input-group">
+                        <textarea 
+                            id="messageInput" 
+                            class="input-field" 
+                            placeholder="探究したいテーマや質問を入力してください..."
+                            rows="2"
+                        ></textarea>
+                        <button id="sendButton" class="send-button">
+                            <span>📤</span>
+                            送信
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="analysis-panel">
+                <div class="panel-tabs">
+                    <button class="tab-button active" data-tab="graph">📊 グラフ状態</button>
+                    <button class="tab-button" data-tab="inference">🔍 推論ログ</button>
+                    <button class="tab-button" data-tab="stats">📈 統計</button>
+                </div>
+
+                <div class="tab-content">
+                    <div id="graphTab" class="tab-panel active">
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-value" id="nodeCount">0</div>
+                                <div class="stat-label">ノード数</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="edgeCount">0</div>
+                                <div class="stat-label">エッジ数</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="progressValue">0%</div>
+                                <div class="stat-label">進捗</div>
+                            </div>
+                        </div>
+
+                        <div class="graph-visualization" id="graphVisualization">
+                            <div>グラフデータを読み込み中...</div>
+                        </div>
+
+                        <div id="nodesList">
+                            <!-- ノード一覧がここに表示される -->
+                        </div>
+
+                        <div id="suggestions">
+                            <!-- 次のステップ提案がここに表示される -->
+                        </div>
+                    </div>
+
+                    <div id="inferenceTab" class="tab-panel" style="display: none;">
+                        <div id="currentTrace">
+                            <!-- 現在の推論トレースがここに表示される -->
+                        </div>
+                        
+                        <div id="traceHistory">
+                            <!-- 過去の推論トレースがここに表示される -->
+                        </div>
+                    </div>
+
+                    <div id="statsTab" class="tab-panel" style="display: none;">
+                        <div id="systemStats">
+                            <div class="loading">
+                                <div class="spinner"></div>
+                                システム統計を読み込み中...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // グローバル変数
+        let authToken = null;
+        let currentTraceId = null;
+        let graphData = null;
+        let elements = {};
+
+        // DOMContentLoaded後に要素を取得
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM要素を取得
+            elements = {
+                userId: document.getElementById('userId'),
+                authButton: document.getElementById('authButton'),
+                authStatus: document.getElementById('authStatus'),
+                messageInput: document.getElementById('messageInput'),
+                sendButton: document.getElementById('sendButton'),
+                chatMessages: document.getElementById('chatMessages'),
+                modeToggle: document.getElementById('modeToggle'),
+                graphMode: document.getElementById('graphMode'),
+                debugMode: document.getElementById('debugMode'),
+                inferenceLog: document.getElementById('inferenceLog'),
+                clearChat: document.getElementById('clearChat'),
+                refreshGraph: document.getElementById('refreshGraph'),
+                nodeCount: document.getElementById('nodeCount'),
+                edgeCount: document.getElementById('edgeCount'),
+                progressValue: document.getElementById('progressValue'),
+                graphVisualization: document.getElementById('graphVisualization'),
+                nodesList: document.getElementById('nodesList'),
+                suggestions: document.getElementById('suggestions'),
+                currentTrace: document.getElementById('currentTrace'),
+                traceHistory: document.getElementById('traceHistory'),
+                systemStats: document.getElementById('systemStats')
+            };
+
+            // イベントリスナーを設定
+            setupEventListeners();
+            
+            // 初期フォーカス
+            elements.messageInput.focus();
+        });
+
+        // API関数
+        const api = {
+            async ontologyChat(message) {
+                const response = await fetch('/api/ontology-chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        use_graph_mode: elements.graphMode.checked,
+                        debug_mode: elements.debugMode.checked,
+                        include_inference_log: elements.inferenceLog.checked
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'API エラーが発生しました');
+                }
+
+                return await response.json();
+            },
+
+            async getGraphState(userId) {
+                const response = await fetch(`/api/ontology-graph/${userId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('グラフ状態の取得に失敗しました');
+                }
+
+                return await response.json();
+            },
+
+            async getInferenceTrace(traceId) {
+                const response = await fetch(`/api/ontology-inference/${traceId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('推論トレースの取得に失敗しました');
+                }
+
+                return await response.json();
+            },
+
+            async getInferenceVisualization(traceId) {
+                const response = await fetch(`/api/ontology-inference/${traceId}/visualization`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('推論可視化データの取得に失敗しました');
+                }
+
+                return await response.json();
+            },
+
+            async getUserTraces(userId, limit = 5) {
+                const response = await fetch(`/api/ontology-inference/user/${userId}/traces?limit=${limit}`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('推論履歴の取得に失敗しました');
+                }
+
+                return await response.json();
+            },
+
+            async getSystemStats() {
+                const response = await fetch('/api/ontology-inference/statistics', {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('システム統計の取得に失敗しました');
+                }
+
+                return await response.json();
+            }
+        };
+
+        // UI更新関数
+        const ui = {
+            addMessage(role, content, timestamp = new Date()) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${role}`;
+                
+                const avatar = role === 'user' ? '👤' : '🤖';
+                const timeStr = new Date(timestamp).toLocaleTimeString();
+                
+                messageDiv.innerHTML = `
+                    <div class="message-avatar">${avatar}</div>
+                    <div class="message-content">
+                        <div>${content}</div>
+                        <div class="message-time">${timeStr}</div>
+                    </div>
+                `;
+                
+                elements.chatMessages.appendChild(messageDiv);
+                elements.chatMessages.scrollTop = elements.chatMessages.scrollHeight;
+            },
+
+            showLoading(container, message = '読み込み中...') {
+                container.innerHTML = `
+                    <div class="loading">
+                        <div class="spinner"></div>
+                        ${message}
+                    </div>
+                `;
+            },
+
+            showError(container, message) {
+                container.innerHTML = `<div class="error">❌ ${message}</div>`;
+            },
+
+            updateGraphTab(data) {
+                // 統計更新
+                elements.nodeCount.textContent = data.nodes.length;
+                elements.edgeCount.textContent = data.edges.length;
+                elements.progressValue.textContent = 
+                    Math.round(data.progress.progress * 100) + '%';
+
+                // グラフ可視化（簡易版）
+                elements.graphVisualization.innerHTML = `
+                    <div style="text-align: center;">
+                        <div style="font-size: 1.2rem; margin-bottom: 10px;">
+                            📊 グラフ構造概要
+                        </div>
+                        <div style="display: flex; justify-content: space-around; align-items: center;">
+                            <div>
+                                <div style="width: 60px; height: 60px; background: var(--primary-color); 
+                                           border-radius: 50%; display: flex; align-items: center; 
+                                           justify-content: center; color: white; font-weight: bold;">
+                                    ${data.nodes.length}
+                                </div>
+                                <div style="margin-top: 8px; font-size: 0.9rem;">ノード</div>
+                            </div>
+                            <div style="color: var(--text-secondary);">━━━━</div>
+                            <div>
+                                <div style="width: 60px; height: 60px; background: var(--secondary-color); 
+                                           border-radius: 50%; display: flex; align-items: center; 
+                                           justify-content: center; color: white; font-weight: bold;">
+                                    ${data.edges.length}
+                                </div>
+                                <div style="margin-top: 8px; font-size: 0.9rem;">エッジ</div>
+                            </div>
+                        </div>
+                        <div style="margin-top: 16px; padding: 12px; background: var(--background-color); 
+                                   border-radius: 8px; font-size: 0.9rem;">
+                            現在の段階: <strong>${data.progress.stage || '初期段階'}</strong>
+                        </div>
+                    </div>
+                `;
+
+                // ノード一覧
+                if (data.nodes.length > 0) {
+                    elements.nodesList.innerHTML = `
+                        <h4 style="margin-bottom: 12px; color: var(--text-primary);">📝 ノード一覧</h4>
+                        ${data.nodes.map(node => `
+                            <div class="node-item">
+                                <div class="node-type">${node.type}</div>
+                                <div class="node-text">${node.text}</div>
+                                <div class="node-metrics">
+                                    <span>明確性: ${Math.round(node.clarity * 100)}%</span>
+                                    <span>深さ: ${Math.round(node.depth * 100)}%</span>
+                                    <span>信頼度: ${Math.round(node.confidence * 100)}%</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    elements.nodesList.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 20px;">まだノードがありません</div>';
+                }
+
+                // 提案
+                if (data.suggestions && data.suggestions.length > 0) {
+                    elements.suggestions.innerHTML = `
+                        <h4 style="margin-bottom: 12px; color: var(--text-primary);">💡 次のステップ提案</h4>
+                        ${data.suggestions.map(suggestion => `
+                            <div style="background: var(--background-color); padding: 12px; 
+                                       border-radius: 8px; margin-bottom: 8px; border-left: 4px solid var(--primary-color);">
+                                <div style="font-weight: 500; margin-bottom: 4px;">
+                                    ${suggestion.action || suggestion.type}
+                                </div>
+                                <div style="font-size: 0.9rem; color: var(--text-secondary);">
+                                    ${suggestion.reason || '推奨されるアクション'}
+                                </div>
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    elements.suggestions.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 20px;">現在、提案はありません</div>';
+                }
+            },
+
+            updateInferenceTab(steps, traceId) {
+                if (steps && steps.length > 0) {
+                    elements.currentTrace.innerHTML = `
+                        <h4 style="margin-bottom: 12px; color: var(--text-primary);">
+                            🔍 最新の推論プロセス (ID: ${traceId})
+                        </h4>
+                        ${steps.map((step, index) => `
+                            <div class="inference-step">
+                                <div class="step-type">
+                                    Step ${index + 1}: ${step.step_type.replace('_', ' ')}
+                                </div>
+                                <div class="step-reasoning">${step.reasoning}</div>
+                                <div class="step-metadata">
+                                    <span>信頼度: ${Math.round(step.confidence * 100)}%</span>
+                                    <span>処理時間: ${step.processing_time_ms}ms</span>
+                                </div>
+                            </div>
+                        `).join('')}
+                    `;
+                } else {
+                    elements.currentTrace.innerHTML = '<div style="color: var(--text-secondary); text-align: center; padding: 20px;">推論ステップがありません</div>';
+                }
+            },
+
+            updateStatsTab(stats) {
+                if (stats) {
+                    elements.systemStats.innerHTML = `
+                        <h4 style="margin-bottom: 16px; color: var(--text-primary);">📈 システム統計</h4>
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.system_statistics.total_traces}</div>
+                                <div class="stat-label">総トレース数</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${Math.round(stats.system_statistics.success_rate * 100)}%</div>
+                                <div class="stat-label">成功率</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.system_statistics.avg_processing_time_ms}ms</div>
+                                <div class="stat-label">平均処理時間</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${stats.system_statistics.active_users}</div>
+                                <div class="stat-label">アクティブユーザー</div>
+                            </div>
+                        </div>
+                        <div style="background: var(--background-color); padding: 16px; border-radius: 8px; margin-top: 16px;">
+                            <h5 style="margin-bottom: 12px;">人気の推論ステップ</h5>
+                            ${stats.system_statistics.popular_step_types.map(([type, count]) => `
+                                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                                    <span>${type.replace('_', ' ')}</span>
+                                    <span style="font-weight: 500;">${count}回</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                } else {
+                    this.showError(elements.systemStats, 'システム統計の取得に失敗しました');
+                }
+            }
+        };
+
+        // イベントハンドラー
+        async function handleSendMessage() {
+            console.log('送信ボタンがクリックされました');
+            const message = elements.messageInput.value.trim();
+            console.log('メッセージ:', message, 'authToken:', authToken);
+            
+            if (!message) {
+                console.log('メッセージが空です');
+                return;
+            }
+            if (!authToken) {
+                console.log('認証トークンがありません');
+                alert('先に認証を行ってください');
+                return;
+            }
+
+            elements.sendButton.disabled = true;
+            elements.messageInput.disabled = true;
+
+            // ユーザーメッセージを表示
+            ui.addMessage('user', message);
+            elements.messageInput.value = '';
+
+            try {
+                // API呼び出し
+                const response = await api.ontologyChat(message);
+
+                // AIレスポンスを表示
+                ui.addMessage('assistant', response.response, response.timestamp);
+
+                // トレースIDを保存
+                if (response.inference_trace_id) {
+                    currentTraceId = response.inference_trace_id;
+                }
+
+                // グラフデータを更新
+                if (response.graph_context) {
+                    ui.updateGraphTab(response.graph_context);
+                }
+
+                // 推論ステップを更新
+                if (response.inference_steps) {
+                    ui.updateInferenceTab(response.inference_steps, response.inference_trace_id);
+                }
+
+                // グラフ状態を更新
+                await updateGraphState();
+
+            } catch (error) {
+                ui.addMessage('assistant', `エラーが発生しました: ${error.message}`, new Date());
+                console.error('Chat error:', error);
+            } finally {
+                elements.sendButton.disabled = false;
+                elements.messageInput.disabled = false;
+                elements.messageInput.focus();
+            }
+        }
+
+        async function updateGraphState() {
+            const userId = elements.userId.value;
+            if (!userId || !authToken) return;
+
+            try {
+                const data = await api.getGraphState(userId);
+                graphData = data;
+                ui.updateGraphTab(data);
+            } catch (error) {
+                console.error('Graph state update error:', error);
+            }
+        }
+
+        async function updateSystemStats() {
+            if (!authToken) return;
+
+            try {
+                ui.showLoading(elements.systemStats, 'システム統計を読み込み中...');
+                const stats = await api.getSystemStats();
+                ui.updateStatsTab(stats);
+            } catch (error) {
+                ui.showError(elements.systemStats, error.message);
+            }
+        }
+
+        function setupAuth() {
+            const userId = elements.userId.value;
+            if (!userId) {
+                alert('ユーザーIDを入力してください');
+                return;
+            }
+
+            authToken = userId;
+            elements.authStatus.textContent = `認証済み (User: ${userId})`;
+            elements.authStatus.style.color = 'var(--secondary-color)';
+            
+            // 初期データを読み込み
+            updateGraphState();
+            updateSystemStats();
+        }
+
+        // タブ切り替え
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                const targetTab = button.dataset.tab;
+                
+                // タブボタンの状態更新
+                document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                button.classList.add('active');
+                
+                // タブコンテンツの表示切り替え
+                document.querySelectorAll('.tab-panel').forEach(panel => {
+                    panel.style.display = 'none';
+                });
+                document.getElementById(targetTab + 'Tab').style.display = 'block';
+
+                // アクティブなタブに応じてデータを更新
+                if (targetTab === 'stats') {
+                    updateSystemStats();
+                }
+            });
+        });
+
+        // イベントリスナー設定関数
+        function setupEventListeners() {
+            if (!elements.sendButton) {
+                console.error('送信ボタンが見つかりません');
+                return;
+            }
+
+            elements.authButton.addEventListener('click', setupAuth);
+            elements.sendButton.addEventListener('click', handleSendMessage);
+            elements.clearChat.addEventListener('click', () => {
+                elements.chatMessages.innerHTML = `
+                    <div class="message assistant">
+                        <div class="message-avatar">🤖</div>
+                        <div class="message-content">
+                            <div>チャット履歴がクリアされました。新しい探究を始めましょう！</div>
+                            <div class="message-time">${new Date().toLocaleTimeString()}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            elements.refreshGraph.addEventListener('click', updateGraphState);
+
+            elements.messageInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                }
+            });
+
+            elements.modeToggle.addEventListener('click', () => {
+                elements.graphMode.checked = !elements.graphMode.checked;
+                elements.modeToggle.textContent = elements.graphMode.checked ? 'グラフモード' : '通常モード';
+            });
+
+            console.log('イベントリスナーが設定されました', {
+                sendButton: elements.sendButton,
+                messageInput: elements.messageInput
+            });
+        }
+    </script>
+</body>
+</html>

@@ -26,6 +26,7 @@ const NotificationDemoPage = lazy(() => import('./pages/NotificationDemoPage'));
 const ThemeDeepDiveGame = lazy(() => import('./components/FrameworkGames/ThemeDeepDiveGame'));
 const ConversationAgentTestPage = lazy(() => import('./pages/ConversationAgentTestPage'));
 const InquiryExplorer = lazy(() => import('./components/InquiryExplorer/InquiryExplorer'));
+const OntologyTestPage = lazy(() => import('./pages/OntologyTestPage'));
 
 // import QuestBoardPage from './pages/QuestBoardPage'; // 一時的に非表示
 
@@ -196,6 +197,7 @@ function App() {
                 } 
               />
 
+
               <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route path="chat" element={<ChatPage />} />
                 <Route path="home" element={<LazyWrapper><HomePage /></LazyWrapper>} />
@@ -209,6 +211,7 @@ function App() {
                 <Route path="framework-games/theme-deep-dive" element={<LazyWrapper><ThemeDeepDiveGame /></LazyWrapper>} />
                 <Route path="conversation-agent-test" element={<LazyWrapper><ConversationAgentTestPage /></LazyWrapper>} />
                 <Route path="notification-demo" element={<LazyWrapper><NotificationDemoPage /></LazyWrapper>} />
+                <Route path="ontology-test" element={<LazyWrapper><OntologyTestPage /></LazyWrapper>} />
               </Route>
               
               {/* 未定義ルートのフォールバック */}
