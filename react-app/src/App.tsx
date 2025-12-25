@@ -5,6 +5,11 @@ import { QueryClient, QueryClientProvider } from 'react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from './stores/authStore';
 import { useThemeStore } from './stores/themeStore';
+import { SupabaseAuthProvider } from './contexts/SupabaseAuthContext';
+import SupabaseLoginPage from './pages/SupabaseLoginPage';
+import SupabaseRegisterPage from './pages/SupabaseRegisterPage';
+import PasswordResetPage from './pages/PasswordResetPage'
+
 
 // 重要なページは静的インポート（初期ロードに必要）
 import LoginPage from './pages/LoginPage';
@@ -140,85 +145,91 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        <Router>
-          <AnimatePresence mode="wait">
-            <Routes>
-              {/* 使い方ページ（認証不要） */}
-              <Route 
-                path="/" 
-                element={
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <LazyWrapper><GuidePage /></LazyWrapper>
-                  </motion.div>
-                } 
-              />
-              
-              {/* ログインページ */}
-              <Route 
-                path="/login" 
-                element={
-                  user ? <Navigate to="/chat" replace /> : 
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <LoginPage />
-                  </motion.div>
-                } 
-              />
-              
-              {/* アプリケーション本体（認証必要） */}
-              <Route path="/app" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                <Route index element={<Navigate to="/chat" replace />} />
-              </Route>
-              
-              {/* InquiryExplorer - サイドバーなしのフルスクリーン */}
-              <Route 
-                path="/inquiry-explorer" 
-                element={
-                  <ProtectedRoute>
+        <SupabaseAuthProvider>
+          <Router>
+            <AnimatePresence mode="wait">
+              <Routes>
+                {/* 使い方ページ（認証不要） */}
+                <Route 
+                  path="/" 
+                  element={
                     <motion.div
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20 }}
                       transition={{ duration: 0.3 }}
-                      style={{ height: '100vh' }}
                     >
-                      <LazyWrapper><InquiryExplorer /></LazyWrapper>
+                      <LazyWrapper><GuidePage /></LazyWrapper>
                     </motion.div>
-                  </ProtectedRoute>
-                } 
-              />
+                  } 
+                />
+                
+                {/* ログインページ */}
+                <Route 
+                  path="/login" 
+                  element={
+                    user ? <Navigate to="/chat" replace /> : 
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <LoginPage />
+                    </motion.div>
+                  } 
+                />
+                
+                {/* アプリケーション本体（認証必要） */}
+                <Route path="/app" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                  <Route index element={<Navigate to="/chat" replace />} />
+                </Route>
+                
+                {/* InquiryExplorer - サイドバーなしのフルスクリーン */}
+                <Route 
+                  path="/inquiry-explorer" 
+                  element={
+                    <ProtectedRoute>
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3 }}
+                        style={{ height: '100vh' }}
+                      >
+                        <LazyWrapper><InquiryExplorer /></LazyWrapper>
+                      </motion.div>
+                    </ProtectedRoute>
+                  } 
+                />
 
+                {/* Supabase認証テストページ */}
+                <Route path="/auth/login-test" element={<LazyWrapper><SupabaseLoginPage /></LazyWrapper>} />
+                <Route path="/auth/register-test" element={<LazyWrapper><SupabaseRegisterPage /></LazyWrapper>} />
+                <Route path="/auth/reset-password-test" element={<LazyWrapper><PasswordResetPage /></LazyWrapper>} />
 
-              <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                <Route path="chat" element={<ChatPage />} />
-                <Route path="home" element={<LazyWrapper><HomePage /></LazyWrapper>} />
-                <Route path="dashboard" element={<DashboardPage />} />
-                <Route path="projects/:projectId" element={<LazyWrapper><ProjectPage /></LazyWrapper>} />
-                <Route path="projects/:projectId/memos/:memoId" element={<LazyWrapper><MemoPage /></LazyWrapper>} />
-                <Route path="step/:stepNumber" element={<LazyWrapper><StepPage /></LazyWrapper>} />
-                <Route path="memos" element={<LazyWrapper><MultiMemoPage /></LazyWrapper>} />
-                <Route path="inquiry" element={<LazyWrapper><GeneralInquiryPage /></LazyWrapper>} />
-                {/* <Route path="quests" element={<QuestBoardPage />} /> 一時的に非表示 */}
-                <Route path="framework-games/theme-deep-dive" element={<LazyWrapper><ThemeDeepDiveGame /></LazyWrapper>} />
-                <Route path="conversation-agent-test" element={<LazyWrapper><ConversationAgentTestPage /></LazyWrapper>} />
-                <Route path="notification-demo" element={<LazyWrapper><NotificationDemoPage /></LazyWrapper>} />
-                <Route path="ontology-test" element={<LazyWrapper><OntologyTestPage /></LazyWrapper>} />
-              </Route>
-              
-              {/* 未定義ルートのフォールバック */}
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </AnimatePresence>
-        </Router>
+                <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+                  <Route path="chat" element={<ChatPage />} />
+                  <Route path="home" element={<LazyWrapper><HomePage /></LazyWrapper>} />
+                  <Route path="dashboard" element={<DashboardPage />} />
+                  <Route path="projects/:projectId" element={<LazyWrapper><ProjectPage /></LazyWrapper>} />
+                  <Route path="projects/:projectId/memos/:memoId" element={<LazyWrapper><MemoPage /></LazyWrapper>} />
+                  <Route path="step/:stepNumber" element={<LazyWrapper><StepPage /></LazyWrapper>} />
+                  <Route path="memos" element={<LazyWrapper><MultiMemoPage /></LazyWrapper>} />
+                  <Route path="inquiry" element={<LazyWrapper><GeneralInquiryPage /></LazyWrapper>} />
+                  {/* <Route path="quests" element={<QuestBoardPage />} /> 一時的に非表示 */}
+                  <Route path="framework-games/theme-deep-dive" element={<LazyWrapper><ThemeDeepDiveGame /></LazyWrapper>} />
+                  <Route path="conversation-agent-test" element={<LazyWrapper><ConversationAgentTestPage /></LazyWrapper>} />
+                  <Route path="notification-demo" element={<LazyWrapper><NotificationDemoPage /></LazyWrapper>} />
+                  <Route path="ontology-test" element={<LazyWrapper><OntologyTestPage /></LazyWrapper>} />
+                </Route>
+                
+                {/* 未定義ルートのフォールバック */}
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </AnimatePresence>
+          </Router>
+        </SupabaseAuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

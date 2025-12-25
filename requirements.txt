@@ -51,6 +51,7 @@ Jinja2==3.1.5
 jiter==0.8.2
 jsonschema==4.23.0
 jsonschema-specifications==2024.10.1
+lexical==0.38.2
 locust==2.37.12
 locust-cloud==1.25.0
 MarkupSafe==3.0.2

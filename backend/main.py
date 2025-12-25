@@ -521,7 +521,7 @@ async def startup_event():
     try:
         # Supabaseクライアント初期化（コネクション設定最適化）
         supabase_url = os.environ.get("SUPABASE_URL")
-        supabase_key = os.environ.get("SUPABASE_KEY")
+        supabase_key = os.environ.get("SUPABASE_ANON_KEY")
         
         if not supabase_url or not supabase_key:
             raise ValueError("Supabase環境変数が設定されていません")
