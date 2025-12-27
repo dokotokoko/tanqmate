@@ -1,13 +1,12 @@
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from openai import OpenAI
 from dotenv import load_dotenv
-from prompt.prompt import system_prompt, dev_system_prompt
 
 class learning_plannner():
     def __init__(self):
         load_dotenv()
-        self.model = "gpt-4.1"
+        self.model = "gpt-5.2"
         
         # 環境変数からAPIキーを取得
         api_key = os.getenv("OPENAI_API_KEY")
@@ -16,64 +15,96 @@ class learning_plannner():
             raise ValueError("OpenAI APIキーが設定されていません。環境変数OPENAI_API_KEYを設定してください。")
         
         self.client = OpenAI(api_key=api_key)
-
-    def generate_response(self, messages: List[Dict[str, str]], temperature: float = 0.7, max_tokens: int = None) -> str:
+    
+    def text(self, role: str, content: str) -> Dict[str, Any]:
         """
-        統合された対話関数（履歴ベース）
+        テキスト入力用のResponse API input itemを作成
         
         Args:
-            messages: 必須。[{"role": "system/user/assistant", "content": "..."}]
-            temperature: 応答の創造性（0.0-1.0）
+            role: "system", "user", "assistant"のいずれか
+            content: メッセージのテキスト内容
+            
+        Returns:
+            Response API用のinput item
+        """
+
+        return {
+            "role": role,
+            "content": [{"type": "input_text", "text": content}]
+        }
+    
+    def image(self, role: str, image_data: Any, text: Optional[str] = None) -> Dict[str, Any]:
+        """
+        画像入力用のResponse API input itemを作成（将来実装用）
+        
+        Args:
+            role: "system", "user", "assistant"のいずれか
+            image_data: 画像データ
+            text: 画像に付随するテキスト（オプション）
+            
+        Returns:
+            Response API用のinput item
+        """
+        parts = []
+        if text:
+            parts.append({"type": "input_text", "text": text})
+        # 画像は現時点ではサポートされていない可能性があるため、コメントアウト
+        # parts.append({"type": "input_image", "data": image_data})
+        return {
+            "role": role,
+            "content": parts
+        }
+
+    def generate_response(self, input_items: List[Dict[str, Any]], max_tokens: Optional[int] = None) -> str:
+        """
+        Response APIを使用してLLMから応答を生成
+        純粋なinput形式のみを受け付ける
+        
+        Args:
+            input_items: Response API形式のinput items
             max_tokens: 最大トークン数
             
         Returns:
             str: 生成された応答テキスト
         """
+
+        # Response APIのパラメータ構築
         request_params = {
             "model": self.model,
-            "messages": messages,
-            "temperature": temperature
+            "input": input_items,
+            "tools": [{"type": "web_search"}],
+            "store": True  # 応答を保存
         }
         
         if max_tokens is not None:
-            request_params["max_tokens"] = max_tokens
-            
-        response = self.client.chat.completions.create(**request_params)
+            request_params["max_output_tokens"] = max_tokens
+        
+        # Response APIを呼び出し
+        # response = self.client.responses.create(**request_params)
 
-        return response.choices[0].message.content
+        resp = self.client.responses.create(
+            model=self.model,
+            input=input_items,
+            tools=[{"type": "web_search"}],
+            store=True,
+        )
+
+        return resp
     
-    def generate_response_with_WebSearch(self, messages: List[Dict[str, Any]]) -> str:
+    def generate_response_with_WebSearch(self, input_items: List[Dict[str, Any]]) -> str:
         """
         WebSearch機能付きレスポンス生成
         
         Args:
-            messages: メッセージ履歴
+            input_items: Response API形式のinput items
             
         Returns:
             WebSearch結果を含むLLMからの応答
         """
-        input_items = self._to_input_items(messages)
         resp = self.client.responses.create(
             model=self.model,
             input=input_items,
-            tools=[{"type": "web_search_preview"}],
+            tools=[{"type": "web_search"}],
             store=True,
         )
         return resp.output_text
-    
-    def _to_input_items(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """
-        Chat Completionsの messages([{role, content:str|list}]) を
-        Responses APIの input(items: role + content-parts) に変換
-        """
-        items = []
-        for m in messages:
-            c = m.get("content", "")
-            # 文字列のみ想定（必要ならlist対応を拡張）
-            if isinstance(c, list):
-                # 既にparts想定の形式ならそのまま使う
-                parts = c
-            else:
-                parts = [{"type": "input_text", "text": str(c)}]
-            items.append({"role": m["role"], "content": parts})
-        return items
