@@ -7,7 +7,7 @@ import os
 import asyncio
 import time
 import logging
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, AsyncIterator
 from openai import OpenAI, AsyncOpenAI
 from dotenv import load_dotenv
 from collections import deque
@@ -57,6 +57,15 @@ class learning_plannner():
     # =====================================
     # 共通メソッド
     # =====================================
+
+    @staticmethod
+    def text_type_role(role: str) -> str:
+        """
+        Responses API のバリデーションに合わせる。
+        - user/system/developer: input_text
+        - assistant: output_text（refusal はモデル側が返す）
+        """
+        return "output_text" if role == "assistant" else "input_text"
     
     def text(self, role: str, content: str) -> Dict[str, Any]:
         """
@@ -71,7 +80,7 @@ class learning_plannner():
         """
         return {
             "role": role,
-            "content": [{"type": "input_text", "text": content}]
+            "content": [{"type": self.text_type_role(role),  "text": content}]
         }
     
     def image(self, role: str, image_data: Any, text: Optional[str] = None) -> Dict[str, Any]:
@@ -96,6 +105,34 @@ class learning_plannner():
         }
     
     # =====================================
+    # 出力抽出ユーティリティ
+    # =====================================
+
+    @staticmethod
+    def extract_output_text(resp: Any) -> str:
+        """
+        SDK差分を吸収しつつ、最終テキストを取り出す
+        """
+        if hasattr(resp, "output_text") and resp.output_text:
+            return resp.output_text
+
+        # fallback: output の message を走査
+        texts: List[str] = []
+        output = getattr(resp, "output", None) or []
+        for item in output:
+            if getattr(item, "type", None) == "message":
+                for c in getattr(item, "content", None) or []:
+                    if getattr(c, "type", None) in ("output_text", "text"):
+                        t = getattr(c, "text", None)
+                        if t:
+                            texts.append(t)
+
+        if texts:
+            return "\n".join(texts)
+
+        return str(resp)
+    
+    # =====================================
     # 同期メソッド
     # =====================================
     
@@ -113,11 +150,10 @@ class learning_plannner():
         start_time = time.time()
 
         # Response APIのパラメータ構築
-        # NOTE: 既存挙動に合わせ、同期版も web_search ツールを常に渡す（呼び出すかはモデルが判断）
         request_params: Dict[str, Any] = {
             "model": self.model,
             "input": input_items,
-            "tools": [{"type": "web_search"}],
+            "tools": [{"type": "web_search"}], # NOTE: web_search ツールを常に渡す（呼び出すかはモデルが判断）
             "store": True,
         }
 
@@ -126,15 +162,31 @@ class learning_plannner():
 
         # Response APIを呼び出し
         resp = self.client.responses.create(**request_params)
-        
-        # メトリクス更新
         self._update_metrics(time.time() - start_time, "sync")
         
         return resp
     
+    
+    def generate_text(self, input_items: List[Dict[str, Any]], max_tokens: Optional[int] = None) -> str:
+        """
+        Response オブジェクトから生成されたテキストデータを取り出す
+        
+        Args:
+            input_items: Response API形式のinput items
+            max_tokens: 最大トークン数
+            
+        Returns:
+            output_text
+        """
+        resp = self.generate_response(input_items, max_tokens=max_tokens)
+        output_text = self.extract_output_text(resp)
+
+        return output_text
+
+    
     def generate_response_with_WebSearch(self, input_items: List[Dict[str, Any]]) -> str:
         """
-        WebSearch機能付きレスポンス生成（同期版）
+        WebSearch機能付きレスポンス生成 → `generate_response`にWeb検索は統合したため実質不要
         
         Args:
             input_items: Response API形式のinput items
@@ -174,7 +226,6 @@ class learning_plannner():
                 request_params: Dict[str, Any] = {
                     "model": self.model,
                     "input": input_items,
-                    # NOTE: web_search ツールを常に渡す（呼び出すかはモデルが判断）
                     "tools": [{"type": "web_search"}],
                     "store": True,
                 }
@@ -200,52 +251,63 @@ class learning_plannner():
                 max_tokens
             )
     
-    async def generate_response_streaming(
-        self, 
-        input_items: List[Dict[str, Any]], 
-        callback: Optional[callable] = None,
-        max_tokens: Optional[int] = None
-    ):
+    async def generate_text(self, input_items: List[Dict[str, Any]], max_tokens: Optional[int] = None) -> str:
         """
-        ストリーミング対応の非同期レスポンス生成
+        Response オブジェクトから生成されたテキストデータを取り出す(非同期)
         
         Args:
             input_items: Response API形式のinput items
-            callback: チャンクごとに呼ばれるコールバック関数
             max_tokens: 最大トークン数
             
-        Yields:
-            レスポンスのチャンク
+        Returns:
+            output_text
         """
-        try:
+        resp = self.generate_response_async(input_items, max_tokens=max_tokens)
+        output_text = self.extract_output_text(resp)
+
+        return output_text
+    
+    async def generate_response_streaming(
+            self,
+            input_items: List[Dict[str, Any]],
+            callback: Optional[callable] = None,
+            max_tokens: Optional[int] = None
+        ) -> AsyncIterator[str]:
+            """
+            Responses API の streaming は event.type を見て delta を拾う
+            """
             async with self.semaphore:
-                # Response APIのパラメータ構築
-                request_params = {
+                request_params: Dict[str, Any] = {
                     "model": self.model,
                     "input": input_items,
+                    "tools": [{"type": "web_search"}],
                     "stream": True,
-                    "store": True
+                    "store": True,
                 }
-                
                 if max_tokens is not None:
                     request_params["max_output_tokens"] = max_tokens
-                
+
                 stream = await self.async_client.responses.create(**request_params)
-                
-                full_content = ""
-                async for chunk in stream:
-                    if hasattr(chunk, 'output_text') and chunk.output_text:
-                        content = chunk.output_text
-                        full_content += content
-                        
-                        if callback:
-                            await callback(content)
-                        
-                        yield content
-                
-        except Exception as e:
-            logger.error(f"❌ ストリーミングAPI呼び出しエラー: {e}")
-            raise
+
+                async for event in stream:
+                    etype = getattr(event, "type", None)
+
+                    # テキスト生成の増分
+                    if etype == "response.output_text.delta":
+                        delta = getattr(event, "delta", "") or ""
+                        if delta:
+                            if callback:
+                                await callback(delta)
+                            yield delta
+
+                    # エラーイベント
+                    elif etype == "error":
+                        raise RuntimeError(str(event))
+
+                    # 完了イベントなどは無視（必要ならここでハンドル）
+                    # - response.completed
+                    # - response.created
+                    # - response.web_search.* など
     
     async def batch_generate_responses(
         self, 
