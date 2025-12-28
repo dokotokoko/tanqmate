@@ -238,7 +238,7 @@ class ChatService(BaseService):
             self.dump_response_events(response_obj)
             
             # Response APIのoutput_textを取得
-            response = response_obj.output_text if hasattr(response_obj, 'output_text') else str(response_obj)
+            response = llm_client.extract_output_text(response_obj)
             
             return {
                 "response": response,
@@ -286,7 +286,7 @@ class ChatService(BaseService):
             self.dump_response_events(response_obj)
             
             # Response APIのoutput_textを取得
-            response = response_obj.output_text if hasattr(response_obj, 'output_text') else str(response_obj)
+            response = llm_client.extract_output_text(response_obj)
             
             return {
                 "response": response,
