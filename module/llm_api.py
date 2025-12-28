@@ -111,18 +111,19 @@ class learning_plannner():
             Response object
         """
         start_time = time.time()
-        
+
         # Response APIのパラメータ構築
-        request_params = {
+        # NOTE: 既存挙動に合わせ、同期版も web_search ツールを常に渡す（呼び出すかはモデルが判断）
+        request_params: Dict[str, Any] = {
             "model": self.model,
             "input": input_items,
             "tools": [{"type": "web_search"}],
-            "store": True
+            "store": True,
         }
-        
+
         if max_tokens is not None:
             request_params["max_output_tokens"] = max_tokens
-        
+
         # Response APIを呼び出し
         resp = self.client.responses.create(**request_params)
         
@@ -170,10 +171,12 @@ class learning_plannner():
             # セマフォを使用して同時実行数を制限
             async with self.semaphore:
                 # Response APIのパラメータ構築
-                request_params = {
+                request_params: Dict[str, Any] = {
                     "model": self.model,
                     "input": input_items,
-                    "store": True
+                    # NOTE: web_search ツールを常に渡す（呼び出すかはモデルが判断）
+                    "tools": [{"type": "web_search"}],
+                    "store": True,
                 }
                 
                 if max_tokens is not None:
