@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 """
 Conversation Agent API テストスクリプト
+（実験機能 - experiment/conversation_agent用）
 
 使い方:
-1. バックエンドサーバーを起動
+1. プロジェクトルートでバックエンドサーバーを起動
 2. ユーザーIDを設定
-3. このスクリプトを実行
+3. このディレクトリでスクリプトを実行
 
+cd experiment/conversation_agent/test
 python test_conversation_agent.py
 """
 

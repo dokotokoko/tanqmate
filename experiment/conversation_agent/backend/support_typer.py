@@ -9,8 +9,8 @@ import os
 from typing import Optional, Dict, Any, List
 from .schema import StateSnapshot, SupportType
 
-# prompt.pyへのパスを追加
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+# prompt.pyへのパスを追加（プロジェクトルートへ）
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 from prompt.prompt import SUPPORT_TYPE_PROMPT
 
 logger = logging.getLogger(__name__)

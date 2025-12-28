@@ -29,8 +29,8 @@ import {
   Warning,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
-import AIChat from '../components/MemoChat/AIChat';
-import { useAuthStore } from '../stores/authStore';
+import AIChat from '../../react-app/src/components/MemoChat/AIChat';
+import { useAuthStore } from '../../react-app/src/stores/authStore';
 
 const ConversationAgentTestPage: React.FC = () => {
   const { user } = useAuthStore();

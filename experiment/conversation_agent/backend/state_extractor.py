@@ -11,8 +11,8 @@ from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 from .schema import StateSnapshot, Affect, ProgressSignal
 
-# prompt.pyへのパスを追加
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+# prompt.pyへのパスを追加（プロジェクトルートへ）
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 from prompt.prompt import STATE_EXTRACT_PROMPT
 
 logger = logging.getLogger(__name__)

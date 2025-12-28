@@ -22,8 +22,8 @@ from .support_typer import SupportTyper
 from .policies import PolicyEngine
 from .project_planner import ProjectPlanner
 
-# prompt.pyへのパスを追加
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+# prompt.pyへのパスを追加（プロジェクトルートへ）
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
 from prompt.prompt import generate_response_prompt
 
 logger = logging.getLogger(__name__)

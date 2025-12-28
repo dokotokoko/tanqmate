@@ -12,6 +12,11 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
+import sys
+import os
+# プロジェクトルートを追加
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..')))
+
 from async_helpers import (
     AsyncDatabaseHelper,
     AsyncProjectContextBuilder,
@@ -96,7 +101,7 @@ async def optimized_chat_with_conversation_agent(
         if conversation_orchestrator is None:
             try:
                 # 動的インポートで初期化を試みる
-                from conversation_agent import ConversationOrchestrator
+                from . import ConversationOrchestrator
                 temp_orchestrator = ConversationOrchestrator(
                     llm_client=llm_client,
                     use_mock=request.mock_mode
