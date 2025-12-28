@@ -14,7 +14,7 @@ from backend.async_helpers import (
     parallel_fetch_context_and_history,
     parallel_save_chat_logs
 )
-from module.async_llm_api import get_async_llm_client
+from module.llm_api import get_async_llm_client
 """
 
 # ===================================
