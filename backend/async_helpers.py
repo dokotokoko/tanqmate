@@ -228,6 +228,9 @@ class AsyncProjectContextBuilder:
             else:
                 logger.info("🔴 利用可能なプロジェクトが見つかりませんでした")
         
+        elif page_id == '' or page_id is None:
+            # page_idが空またはNoneの場合、プロジェクトなしで続行
+            logger.info("ℹ️ page_idが空です。プロジェクトコンテキストなしで処理します。")
         else:
             logger.info(f"🔴 page_id形式が未対応: {page_id}")
         
