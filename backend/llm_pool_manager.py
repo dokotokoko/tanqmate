@@ -11,8 +11,7 @@ from typing import List, Optional, Dict, Any
 from queue import Queue, Empty
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from module.llm_api import learning_plannner
-from module.async_llm_api import AsyncLearningPlanner
+from module.llm_api import learning_plannner, AsyncLearningPlanner
 
 logger = logging.getLogger(__name__)
 
