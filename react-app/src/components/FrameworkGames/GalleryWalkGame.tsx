@@ -93,7 +93,7 @@ const GalleryWalkGame: React.FC = () => {
 
   return (
     <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-      <Paper elevation={3} sx={{ p: 4, borderRadius: 3 }}>
+      <Paper elevation={3} sx={{ p: 4, borderRadius: 2.1 }}>
         <Typography variant="h4" component="h1" gutterBottom align="center">
           ギャラリーウォーク＋ドット投票
         </Typography>
@@ -235,7 +235,7 @@ const GalleryWalkGame: React.FC = () => {
               </>
             ) : !votingComplete ? (
               <>
-                <Box sx={{ mb: 3, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                <Box sx={{ mb: 3, p: 2, bgcolor: 'background.default', borderRadius: 0.7 }}>
                   <Typography variant="subtitle1" gutterBottom>
                     投票モード
                   </Typography>
@@ -301,7 +301,7 @@ const GalleryWalkGame: React.FC = () => {
               </>
             ) : (
               <>
-                <Box sx={{ mb: 3, p: 2, bgcolor: 'primary.light', borderRadius: 1 }}>
+                <Box sx={{ mb: 3, p: 2, bgcolor: 'primary.light', borderRadius: 0.7 }}>
                   <Typography variant="subtitle1" gutterBottom>
                     投票結果
                   </Typography>

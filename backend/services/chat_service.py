@@ -20,8 +20,6 @@ class ChatService(BaseService):
     
     def __init__(self, supabase_client, user_id: Optional[int] = None):
         super().__init__(supabase_client, user_id)
-        self.conversation_agent_available = False  # 実験機能として無効化
-        self.phase1_available = self._check_phase1_system()
         self.history_limit_default = int(os.environ.get("CHAT_HISTORY_LIMIT_DEFAULT", "50"))
         self.history_limit_max = int(os.environ.get("CHAT_HISTORY_LIMIT_MAX", "100"))
     
@@ -50,7 +48,9 @@ class ChatService(BaseService):
         message: str,
         user_id: int,
         project_id: Optional[str] = None,
-        session_type: str = "general"
+        session_type: str = "general",
+        response_style: Optional[str] = "auto",
+        custom_instruction: Optional[str] = None
     ) -> Dict[str, Any]:
         """メインチャット処理（統合最適化版）"""
         start_time = time.time()
@@ -87,7 +87,7 @@ class ChatService(BaseService):
             # Phase 2: AI応答生成（フォールバック機構付き）
             llm_start = time.time()
             ai_response = await self._generate_ai_response(
-                message, user_id, project_context, conversation_history, session_type
+                message, user_id, project_context, conversation_history, session_type, response_style, custom_instruction
             )
 
             metrics["llm_response_time"] = time.time() - llm_start
@@ -150,73 +150,37 @@ class ChatService(BaseService):
         user_id: int,
         project_context: str,
         conversation_history: List[Dict],
-        session_type: str
+        session_type: str,
+        response_style: Optional[str] = "auto",
+        custom_instruction: Optional[str] = None
     ) -> Dict[str, Any]:
-        """AI応答生成（フォールバック機構付き）"""
+        """AI応答生成（シンプル版）"""
         
-        # Option 1: 対話エージェント（最優先）
-        if self.conversation_agent_available and session_type == "conversation_agent":
-            try:
-                return await self._process_with_conversation_agent(
-                    message, user_id, project_context, conversation_history
-                )
-            except Exception as e:
-                self.logger.warning(f"Conversation agent failed, falling back: {e}")
-        
-        # Option 2: 非同期LLMクライアント
+        # 非同期LLMクライアントを優先的に使用
         try:
             return await self._process_with_async_llm(
-                message, project_context, conversation_history
+                message, project_context, conversation_history, response_style, custom_instruction
             )
         except Exception as e:
-            self.logger.warning(f"Async LLM failed, falling back: {e}")
-        
-        # Option 3: 同期LLMクライアント（最終フォールバック）
-        return await self._process_with_sync_llm(
-            message, project_context, conversation_history
-        )
+            self.logger.warning(f"Async LLM failed, falling back to sync: {e}")
+            # 同期LLMクライアント（フォールバック）
+            return await self._process_with_sync_llm(
+                message, project_context, conversation_history, response_style, custom_instruction
+            )
     
-    async def _process_with_conversation_agent(
-        self,
-        message: str,
-        user_id: int,
-        project_context: str,
-        conversation_history: List[Dict]
-    ) -> Dict[str, Any]:
-        """対話エージェントによる処理"""
-        try:
-            from conversation_agent import ConversationOrchestrator
-            
-            context_data = self._build_ai_context_data(project_context, conversation_history)
-            orchestrator = ConversationOrchestrator()
-            
-            result = await orchestrator.process_request({
-                "message": message,
-                "user_id": user_id,
-                "context": context_data,
-                "session_type": "conversation_agent"
-            })
-            
-            response = self._extract_agent_payload(result)
-            return {
-                "response": response.get("message", "対話エージェントからの応答を取得できませんでした。"),
-                "agent_used": True,
-                "fallback_used": False
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Conversation agent error: {e}")
-            raise
     
     async def _process_with_async_llm(
         self,
         message: str,
         project_context: str,
-        conversation_history: List[Dict]
+        conversation_history: List[Dict],
+        response_style: Optional[str] = "auto",
+        custom_instruction: Optional[str] = None
     ) -> Dict[str, Any]:
         """非同期LLMクライアントによる処理"""
         try:
             from module.llm_api import get_async_llm_client
+            from .response_styles import ResponseStyleManager
             
             llm_client = get_async_llm_client()  # awaitは不要
             if not llm_client:
@@ -224,12 +188,17 @@ class ChatService(BaseService):
             
             context_data = self._build_context_data(project_context, conversation_history)
             
+            # 応答スタイルに応じたシステムプロンプトを取得
+            if response_style == "custom" and custom_instruction:
+                # カスタムスタイルの場合は、プロンプトテンプレートに指示を埋め込む
+                from prompt import RESPONSE_STYLE_PROMPTS
+                system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
+            else:
+                system_prompt = ResponseStyleManager.get_system_prompt(response_style)
+            
             # llm_clientのgenerate_response_asyncメソッドを呼び出す
             input_items = [
-                llm_client.text(
-                    "system",
-                    "あなたは学習支援AIアシスタントです。必要に応じて利用可能なweb_searchツールを使い、根拠となる出典URLを含めて回答してください。",
-                ),
+                llm_client.text("system", system_prompt),
                 llm_client.text("user", f"{context_data}\n\n{message}")
             ]
             response_obj = await llm_client.generate_response_async(input_items)
@@ -254,25 +223,33 @@ class ChatService(BaseService):
         self,
         message: str,
         project_context: str,
-        conversation_history: List[Dict]
+        conversation_history: List[Dict],
+        response_style: Optional[str] = "auto",
+        custom_instruction: Optional[str] = None
     ) -> Dict[str, Any]:
         """同期LLMクライアントによる処理（最終フォールバック）"""
         try:
             import sys
             #sys.path.append('C:\\Users\\kouta\\learning-assistant')
             from module.llm_api import learning_plannner
+            from .response_styles import ResponseStyleManager
             
             context_data = self._build_context_data(project_context, conversation_history)
+            
+            # 応答スタイルに応じたシステムプロンプトを取得
+            if response_style == "custom" and custom_instruction:
+                # カスタムスタイルの場合は、プロンプトテンプレートに指示を埋め込む
+                from prompt import RESPONSE_STYLE_PROMPTS
+                system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
+            else:
+                system_prompt = ResponseStyleManager.get_system_prompt(response_style)
             
             # learning_plannnerクラスのインスタンスを作成
             llm_instance = learning_plannner()
             
             # 同期処理を非同期コンテキストで実行
             input_items = [
-                llm_instance.text(
-                    "system",
-                    "あなたは学習支援AIアシスタントです。必要に応じて利用可能なweb_searchツールを使い、根拠となる出典URLを含めて回答してください。",
-                ),
+                llm_instance.text("system", system_prompt),
                 llm_instance.text("user", f"{context_data}\n\n{message}")
             ]
             
@@ -375,26 +352,6 @@ class ChatService(BaseService):
         
         return "\n\n".join(context_parts)
     
-    def _build_ai_context_data(
-        self,
-        project_context: str,
-        conversation_history: List[Dict]
-    ) -> Dict[str, Any]:
-        """AIコンテキストデータ構築（辞書形式）"""
-        return {
-            "project_context": project_context or "",
-            "conversation_history": conversation_history or [],
-            "history_length": len(conversation_history) if conversation_history else 0
-        }
-    
-    def _extract_agent_payload(self, agent_result: Dict[str, Any]) -> Dict[str, Any]:
-        """エージェントペイロード抽出"""
-        if "result" in agent_result:
-            return agent_result["result"]
-        elif "response" in agent_result:
-            return {"message": agent_result["response"]}
-        else:
-            return {"message": str(agent_result)}
     
     async def _update_conversation_timestamp_async(self, conversation_id: str) -> None:
         """非同期タイムスタンプ更新（ノンブロッキング）"""
@@ -407,18 +364,3 @@ class ChatService(BaseService):
         except Exception as e:
             self.logger.warning(f"Conversation timestamp update failed: {e}")
     
-    def _check_conversation_agent(self) -> bool:
-        """対話エージェント利用可能性チェック"""
-        try:
-            from conversation_agent import ConversationOrchestrator
-            return True
-        except ImportError:
-            return False
-    
-    def _check_phase1_system(self) -> bool:
-        """Phase 1システム利用可能性チェック"""
-        try:
-            from phase1_llm_system import get_phase1_manager
-            return True
-        except ImportError:
-            return False

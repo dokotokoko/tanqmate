@@ -276,7 +276,7 @@ const SimpleTutorial: React.FC<SimpleTutorialProps> = ({
               width: targetRect.width + 8,
               height: targetRect.height + 8,
               border: `3px solid ${theme.palette.primary.main}`,
-              borderRadius: '8px',
+              borderRadius: '5.6px',
               zIndex: 2147483647,
               pointerEvents: 'none',
               boxShadow: '0 0 20px rgba(5, 155, 255, 0.5)',

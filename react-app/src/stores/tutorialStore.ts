@@ -229,7 +229,7 @@ export const DEFAULT_TUTORIAL_STYLE = {
   tooltip: {
     fontSize: '16px',
     padding: '20px',
-    borderRadius: '12px',
+    borderRadius: '8.4px',
     boxShadow: '0 8px 30px rgba(0, 0, 0, 0.12)',
   },
   beacon: {

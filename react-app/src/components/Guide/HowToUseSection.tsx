@@ -128,7 +128,7 @@ const HowToUseSection: React.FC = () => {
           <Grid item xs={12} md={6}>
             <Stack spacing={3}>
               <Stack direction="row" alignItems="center" spacing={1.5}>
-                <Box sx={{ width: 14, height: 14, bgcolor: '#FF7A00', borderRadius: 0.5 }} />
+                <Box sx={{ width: 14, height: 14, bgcolor: '#FF7A00', borderRadius: 0.35 }} />
                 <Typography variant="subtitle1" sx={{ color: '#6d87a8', fontWeight: 700 }}>
                   問いかけによる思考の深化
                 </Typography>
@@ -233,7 +233,7 @@ const HowToUseSection: React.FC = () => {
                         height: 8, 
                         width: 150, 
                         bgcolor: '#2b3a4d',
-                        borderRadius: 4,
+                        borderRadius: 2.8,
                         mb: 0.8,
                       }} />
                       <Box sx={{ 
@@ -262,7 +262,7 @@ const HowToUseSection: React.FC = () => {
                           p: 2,
                           bgcolor: '#FF7A00',
                           color: 'white',
-                          borderRadius: '20px 20px 4px 20px',
+                          borderRadius: '14px 14px 2.8px 14px',
                           boxShadow: '0 4px 12px rgba(255, 122, 0, 0.2)',
                         }}
                       >
@@ -291,7 +291,7 @@ const HowToUseSection: React.FC = () => {
                           maxWidth: '75%',
                           p: 2,
                           bgcolor: '#f0f4f8',
-                          borderRadius: '4px 20px 20px 20px',
+                          borderRadius: '2.8px 14px 14px 14px',
                         }}
                       >
                         <Typography variant="body2" sx={{ fontSize: '0.85rem', lineHeight: 1.6, color: '#334155', mb: 1 }}>
@@ -315,7 +315,7 @@ const HowToUseSection: React.FC = () => {
                           maxWidth: '65%',
                           p: 2,
                           bgcolor: '#FF7A00',
-                          borderRadius: '20px 20px 4px 20px',
+                          borderRadius: '14px 14px 2.8px 14px',
                           boxShadow: '0 4px 12px rgba(255, 122, 0, 0.2)',
                         }}
                       >
@@ -341,7 +341,7 @@ const HowToUseSection: React.FC = () => {
                         sx={{
                           p: 2,
                           bgcolor: '#f0f4f8',
-                          borderRadius: '4px 20px 20px 20px',
+                          borderRadius: '2.8px 14px 14px 14px',
                         }}
                       >
                         <Stack direction="row" spacing={0.8}>
@@ -541,7 +541,7 @@ const HowToUseSection: React.FC = () => {
                         height: 8, 
                         width: 120, 
                         bgcolor: '#2b3a4d',
-                        borderRadius: 4,
+                        borderRadius: 2.8,
                         mb: 0.8,
                       }} />
                       <Box sx={{ 

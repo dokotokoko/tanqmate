@@ -123,7 +123,7 @@ const LearningNotifications: React.FC<LearningNotificationsProps> = ({
               severity={getNotificationColor(notification.type)}
               sx={{
                 boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-                borderRadius: 2,
+                borderRadius: 1.4,
                 '& .MuiAlert-icon': {
                   fontSize: '1.5rem'
                 }

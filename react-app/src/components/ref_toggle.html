@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Writing Style Selector - Animation Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f3f4f6;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    /* コンテナ */
+    .container {
+      background: white;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      max-width: 700px;
+      width: 100%;
+    }
+
+    /* ========================================
+       1. トグルスイッチのアニメーション
+       ======================================== */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .toggle-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .toggle {
+      width: 44px;
+      height: 24px;
+      background: #e5e7eb;
+      border-radius: 12px;
+      position: relative;
+      /* ★ 背景色のアニメーション */
+      transition: background-color 0.3s ease;
+    }
+
+    .toggle.active {
+      background: #3b82f6;
+    }
+
+    .toggle-knob {
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+      /* ★ つまみの移動アニメーション（バウンス効果付き） */
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .toggle.active .toggle-knob {
+      transform: translateX(20px);
+    }
+
+    .toggle-label {
+      font-weight: 500;
+      color: #1f2937;
+      font-size: 15px;
+    }
+
+    .language-btn {
+      background: transparent;
+      border: none;
+      color: #6b7280;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    /* ========================================
+       2. パネル展開アニメーション
+       ======================================== */
+    .panel {
+      /* 閉じた状態：高さ0、透明 */
+      max-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      /* ★ 展開・収縮アニメーション */
+      transition: 
+        max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+        opacity 0.3s ease 0.1s,
+        margin 0.3s ease;
+      margin-bottom: 0;
+    }
+
+    .panel.open {
+      /* 開いた状態 */
+      max-height: 300px;
+      opacity: 1;
+      margin-bottom: 16px;
+    }
+
+    .panel-content {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding-top: 12px;
+    }
+
+    .styles-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      flex: 1;
+    }
+
+    /* ========================================
+       3. スタイルボタンのアニメーション
+       ======================================== */
+    .style-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 14px;
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 20px;
+      cursor: pointer;
+      position: relative;
+      font-family: inherit;
+      /* ★ ホバー・選択時のスムーズな変化 */
+      transition: 
+        background-color 0.2s ease,
+        border-color 0.2s ease,
+        transform 0.15s ease,
+        box-shadow 0.2s ease;
+    }
+
+    .style-btn:hover {
+      background: #f3f4f6;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+
+    .style-btn:active {
+      transform: translateY(0);
+    }
+
+    .style-btn.selected {
+      background: #eff6ff;
+      border-color: #93c5fd;
+    }
+
+    .style-emoji {
+      font-size: 16px;
+    }
+
+    .style-label {
+      font-size: 14px;
+      color: #374151;
+    }
+
+    /* ★ チェックマークバッジ - ポップインアニメーション */
+    .check-badge {
+      position: absolute;
+      top: -6px;
+      right: -6px;
+      width: 18px;
+      height: 18px;
+      background: #3b82f6;
+      color: white;
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      /* ★ 弾むようなポップインアニメーション */
+      animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+
+    @keyframes popIn {
+      0% {
+        transform: scale(0);
+        opacity: 0;
+      }
+      50% {
+        transform: scale(1.2);
+      }
+      100% {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    /* + More instructions ボタン（点線） */
+    .more-btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 16px;
+      background: transparent;
+      border: 1px dashed #9ca3af;
+      border-radius: 20px;
+      color: #9ca3af;
+      cursor: pointer;
+      font-size: 14px;
+      font-family: inherit;
+      transition: 
+        border-color 0.2s ease,
+        color 0.2s ease;
+    }
+
+    .more-btn:hover {
+      border-color: #6b7280;
+      color: #6b7280;
+    }
+
+    .settings-btn {
+      background: transparent;
+      border: none;
+      color: #9ca3af;
+      cursor: pointer;
+      font-size: 20px;
+      padding: 8px;
+      transition: color 0.2s ease;
+    }
+
+    .settings-btn:hover {
+      color: #6b7280;
+    }
+
+    /* テキストエリア */
+    .input-area {
+      width: 100%;
+      min-height: 120px;
+      padding: 12px;
+      border: none;
+      border-top: 1px solid #e5e7eb;
+      resize: none;
+      font-size: 16px;
+      color: #374151;
+      font-family: inherit;
+    }
+
+    .input-area::placeholder {
+      color: #9ca3af;
+    }
+
+    .input-area:focus {
+      outline: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- ヘッダー：トグルスイッチ -->
+    <div class="header">
+      <div class="toggle-wrapper" onclick="togglePanel()">
+        <div class="toggle" id="toggle">
+          <div class="toggle-knob"></div>
+        </div>
+        <span class="toggle-label">Writing style</span>
+      </div>
+      <button class="language-btn">⇄ Japanese</button>
+    </div>
+
+    <!-- 展開パネル -->
+    <div class="panel" id="panel">
+      <div class="panel-content">
+        <div class="styles-grid" id="stylesGrid">
+          <!-- JavaScriptで生成 -->
+        </div>
+        <button class="settings-btn">⚙</button>
+      </div>
+    </div>
+
+    <!-- テキストエリア -->
+    <textarea class="input-area" placeholder="Type in any language..."></textarea>
+  </div>
+
+  <script>
+    const styles = [
+      { id: 'polite', emoji: '🤓', label: 'Polite' },
+      { id: 'casual', emoji: '😻', label: 'Casual' },
+      { id: 'friend', emoji: '💬', label: 'Friend chat' },
+      { id: 'genz', emoji: '🧢', label: 'Gen Z' },
+      { id: 'forum', emoji: '🗳', label: 'Forum thread' },
+      { id: 'engaging', emoji: '🤹', label: 'Engaging' },
+      { id: 'child', emoji: '🔔', label: 'Child-friendly' },
+      { id: 'business', emoji: '🎯', label: 'Business email' },
+      { id: 'support', emoji: '🏗', label: 'Customer Support' },
+      { id: 'promo', emoji: '🎺', label: 'Social Media Promo' },
+      { id: 'social', emoji: '🧑', label: 'Everyday Social Post' },
+      { id: 'micro', emoji: '📊', label: 'Microcopy' },
+    ];
+
+    let isOpen = false;
+    let selectedStyle = null;
+
+    // スタイルボタンを生成
+    function renderStyles() {
+      const grid = document.getElementById('stylesGrid');
+      grid.innerHTML = '';
+      
+      styles.forEach(style => {
+        const btn = document.createElement('button');
+        btn.className = `style-btn ${selectedStyle === style.id ? 'selected' : ''}`;
+        btn.onclick = () => selectStyle(style.id);
+        btn.innerHTML = `
+          <span class="style-emoji">${style.emoji}</span>
+          <span class="style-label">${style.label}</span>
+          ${selectedStyle === style.id ? '<span class="check-badge">✓</span>' : ''}
+        `;
+        grid.appendChild(btn);
+      });
+
+      // + More instructions ボタン
+      const moreBtn = document.createElement('button');
+      moreBtn.className = 'more-btn';
+      moreBtn.textContent = '+ More instructions';
+      grid.appendChild(moreBtn);
+    }
+
+    // トグル開閉
+    function togglePanel() {
+      isOpen = !isOpen;
+      document.getElementById('toggle').classList.toggle('active', isOpen);
+      document.getElementById('panel').classList.toggle('open', isOpen);
+    }
+
+    // スタイル選択
+    function selectStyle(id) {
+      selectedStyle = selectedStyle === id ? null : id;
+      renderStyles();
+    }
+
+    // 初期化
+    renderStyles();
+  </script>
+</body>
+</html>

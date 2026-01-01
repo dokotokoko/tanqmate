@@ -87,14 +87,14 @@ function App() {
       },
     },
     shape: {
-      borderRadius: 20,
+      borderRadius: 14,
     },
     components: {
       MuiButton: {
         styleOverrides: {
           root: {
             textTransform: 'none',
-            borderRadius: 20,
+            borderRadius: 14,
             fontWeight: 600,
             padding: '10px 24px',
             transition: 'all 0.3s ease',
@@ -109,7 +109,7 @@ function App() {
         styleOverrides: {
           root: {
             boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-            borderRadius: 24,
+            borderRadius: 16.8,
           },
         },
       },
@@ -117,7 +117,7 @@ function App() {
         styleOverrides: {
           root: {
             '& .MuiOutlinedInput-root': {
-              borderRadius: 20,
+              borderRadius: 14,
               transition: 'all 0.3s ease',
               '&:hover': {
                 '& .MuiOutlinedInput-notchedOutline': {

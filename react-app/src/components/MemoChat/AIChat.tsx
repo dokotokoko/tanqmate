@@ -26,6 +26,7 @@ import SmartNotificationManager, { SmartNotificationManagerRef } from '../SmartN
 import { useChatStore } from '../../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
 import { useAIChatMessages } from '../../hooks/useAIChatMessages';
+import ResponseStyleSelector, { ResponseStyle } from './ResponseStyleSelector';
 
 interface Message {
   id: string;
@@ -95,6 +96,9 @@ const AIChat: React.FC<AIChatProps> = ({
   // 会話管理機能
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [conversationLoading, setConversationLoading] = useState(false);
+  
+  // 応答スタイルの状態
+  const [responseStyle, setResponseStyle] = useState<ResponseStyle | null>(null);
   
   // 通知システムのref
   const notificationManagerRef = useRef<SmartNotificationManagerRef>(null);
@@ -363,7 +367,11 @@ const AIChat: React.FC<AIChatProps> = ({
       if (onMessageSend) {
         // 継続モードの場合は現在のメモコンテンツを使用、そうでなければ従来通り
         const contextContent = persistentMode ? currentMemoContent : memoContent;
-        aiResponse = await onMessageSend(userMessage.content, contextContent);
+        // 応答スタイルをAPIに渡す
+        const messageWithStyle = responseStyle ? 
+          `[応答スタイル: ${responseStyle.label}]\n${userMessage.content}` : 
+          userMessage.content;
+        aiResponse = await onMessageSend(messageWithStyle, contextContent);
       } else {
         // データベース対応のチャットAPIを使用
         // ユーザーIDを取得
@@ -391,6 +399,8 @@ const AIChat: React.FC<AIChatProps> = ({
             body: JSON.stringify({
               message: userMessage.content,
               context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
+              response_style: responseStyle?.id || 'auto',
+              custom_instruction: responseStyle?.customInstruction || undefined,
             }),
           });
 
@@ -820,7 +830,7 @@ const AIChat: React.FC<AIChatProps> = ({
                         color: message.role === 'assistant' 
                           ? 'text.primary' 
                           : 'primary.contrastText',
-                        borderRadius: 2,
+                        borderRadius: 1.4,
                       }}
                     >
                       {message.isSplit && message.chunks ? (
@@ -914,7 +924,17 @@ const AIChat: React.FC<AIChatProps> = ({
       <Box sx={{ 
         p: 2, 
         backgroundColor: 'background.default',
+        borderTop: 1,
+        borderColor: 'divider',
       }}>
+        {/* 応答スタイルセレクター */}
+        <Box sx={{ mb: 1.5 }}>
+          <ResponseStyleSelector
+            selectedStyle={responseStyle}
+            onStyleChange={setResponseStyle}
+          />
+        </Box>
+        
         <Stack direction="row" spacing={1} alignItems="flex-end">
           <TextField
             ref={inputRef}
@@ -929,7 +949,7 @@ const AIChat: React.FC<AIChatProps> = ({
             disabled={isLoading}
             sx={{
               '& .MuiOutlinedInput-root': {
-                borderRadius: 2,
+                borderRadius: 1.4,
               },
             }}
           />
@@ -941,7 +961,7 @@ const AIChat: React.FC<AIChatProps> = ({
               minWidth: 'auto',
               px: 2,
               py: 1.5,
-              borderRadius: 2,
+              borderRadius: 1.4,
             }}
           >
             <SendIcon />

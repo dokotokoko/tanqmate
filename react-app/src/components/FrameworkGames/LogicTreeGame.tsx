@@ -142,7 +142,7 @@ const LogicTreeGame: React.FC = () => {
           elevation={2}
           sx={{
             p: 2,
-            borderRadius: 2,
+            borderRadius: 1.4,
             bgcolor: level === 0 ? 'primary.light' : 'background.paper',
             width: level === 0 ? '50%' : '90%',
             maxWidth: 250,
@@ -237,7 +237,7 @@ const LogicTreeGame: React.FC = () => {
 
   return (
     <Container maxWidth={false} sx={{ mt: 4, mb: 4, px: { xs: 2, md: 4 } }}>
-      <Paper elevation={3} sx={{ p: 4, borderRadius: 3 }}>
+      <Paper elevation={3} sx={{ p: 4, borderRadius: 2.1 }}>
         <Typography variant="h4" component="h1" gutterBottom align="center">
           ロジックツリー／Issue Tree
         </Typography>
@@ -278,7 +278,7 @@ const LogicTreeGame: React.FC = () => {
               minHeight: 600,
               p: 2,
               border: '1px dashed #ccc',
-              borderRadius: 2,
+              borderRadius: 1.4,
             }}>
               <Box sx={{ 
                 minWidth: 800,

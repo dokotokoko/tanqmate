@@ -355,7 +355,7 @@ const MindMapGame: React.FC = () => {
           elevation={isSelected ? 8 : 2}
           sx={{
             p: 2,
-            borderRadius: isRoot ? '50%' : 2,
+            borderRadius: isRoot ? '50%' : 1.4,
             width: isRoot ? 120 : 'auto',
             height: isRoot ? 120 : 'auto',
             minWidth: isRoot ? 120 : 150,
@@ -511,7 +511,7 @@ const MindMapGame: React.FC = () => {
 
   return (
     <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-      <Paper elevation={3} sx={{ p: 4, borderRadius: 3 }}>
+      <Paper elevation={3} sx={{ p: 4, borderRadius: 2.1 }}>
         <Typography variant="h4" component="h1" gutterBottom align="center">
           マインドマップ × Good Time Journal
         </Typography>
@@ -565,7 +565,7 @@ const MindMapGame: React.FC = () => {
                     width: '100%',
                     height: 600,
                     border: '1px dashed #ccc',
-                    borderRadius: 2,
+                    borderRadius: 1.4,
                     overflow: 'hidden',
                     userSelect: 'none',
                     cursor: draggedNodeId ? 'grabbing' : 'default',

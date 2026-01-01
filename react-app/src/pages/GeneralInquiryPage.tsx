@@ -216,7 +216,7 @@ ${memoContent ? 'メモに書かれている内容も参考にさせていただ
               '&:hover': {
                 background: 'linear-gradient(45deg, #52BAFF, #00406B)',
               },
-              borderRadius: 2,
+              borderRadius: 1.4,
               px: 3,
               py: 1.5,
             }}

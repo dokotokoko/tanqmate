@@ -779,7 +779,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
             right: 0,
             height: '10px',
             backgroundColor: 'rgba(0, 0, 0, 0.05)',
-            borderRadius: '0 0 16px 16px',
+            borderRadius: '0 0 11.2px 11.2px',
             transition: 'all 0.3s ease',
             overflow: 'hidden',
           }}
@@ -808,7 +808,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
             top: '10px',
             left: '50%',
             backgroundColor: 'background.paper',
-            borderRadius: '12px',
+            borderRadius: '8.4px',
             pointerEvents: 'none', // ホバーコンテンツがマウスイベントを妨害しないようにする
             boxShadow: '0 4px 20px rgba(0, 0, 0, 0.12)',
             whiteSpace: 'nowrap',
@@ -863,7 +863,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
             {/* Step1メインコンテンツ */}
             <Box sx={{ flex: 1, p: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
               {/* テーマ入力エリア */}
-              <Box sx={{ p: 3, backgroundColor: 'background.paper', borderRadius: 1 }}>
+              <Box sx={{ p: 3, backgroundColor: 'background.paper', borderRadius: 0.7 }}>
                 <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   探究テーマを決めましょう
                 </Typography>
@@ -891,7 +891,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
               {/* 思考整理エリア（メモ帳機能付き） */}
               {isMemoOpen ? (
                 /* メモ帳分割表示 */
-                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'background.paper', borderRadius: 1 }}>
+                <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', backgroundColor: 'background.paper', borderRadius: 0.7 }}>
                   <PanelGroup direction="horizontal" style={{ height: '100%' }}>
                     {/* ガイダンスパネル */}
                     <Panel defaultSize={60} minSize={40} maxSize={80}>
@@ -904,7 +904,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
                         </Typography>
 
                         <Stack spacing={2}>
-                          <Box sx={{ p: 2, backgroundColor: 'background.paper', borderRadius: 1 }}>
+                          <Box sx={{ p: 2, backgroundColor: 'background.paper', borderRadius: 0.7 }}>
                             <Typography variant="subtitle2" gutterBottom>
                               興味・関心の領域
                             </Typography>
@@ -930,7 +930,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
                             </List>
                           </Box>
 
-                          <Box sx={{ p: 2, backgroundColor: 'background.paper', borderRadius: 1 }}>
+                          <Box sx={{ p: 2, backgroundColor: 'background.paper', borderRadius: 0.7 }}>
                             <Typography variant="subtitle2" gutterBottom>
                               テーマの絞り込み
                             </Typography>
@@ -1071,7 +1071,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
                 </Box>
               ) : (
                 /* ガイダンスのみ表示 */
-                <Box sx={{ flex: 1, p: 3, overflow: 'auto', backgroundColor: 'background.paper', borderRadius: 1 }}>
+                <Box sx={{ flex: 1, p: 3, overflow: 'auto', backgroundColor: 'background.paper', borderRadius: 0.7 }}>
                   <Typography variant="h6" gutterBottom>
                     思考の整理（右上の「メモ帳」ボタンでメモを取りながら考えることができます）
                   </Typography>
@@ -1080,7 +1080,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
                   </Typography>
                   
                   <Stack spacing={3}>
-                    <Box sx={{ p: 2, backgroundColor: 'background.default', borderRadius: 1 }}>
+                    <Box sx={{ p: 2, backgroundColor: 'background.default', borderRadius: 0.7 }}>
                       <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
                         興味・関心の領域
                       </Typography>
@@ -1109,7 +1109,7 @@ AIアシスタントが社会との繋がりを見つけることをサポート
                       </List>
                     </Box>
 
-                    <Box sx={{ p: 2, backgroundColor: 'background.default', borderRadius: 1 }}>
+                    <Box sx={{ p: 2, backgroundColor: 'background.default', borderRadius: 0.7 }}>
                       <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
                         テーマの絞り込み
                       </Typography>
