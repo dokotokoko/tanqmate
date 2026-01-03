@@ -1,5 +1,9 @@
 # LLMクライアント単一インスタンス問題 - 移行ガイド
 
+> **更新（2026-01）**  
+> 本リポジトリでは、LLM同時実行の制御を **`backend/module/llm_api.py` の `AsyncLearningPlanner` が持つ `asyncio.Semaphore` に統一**しました。  
+> そのため、旧来の `llm_pool_manager.py` / `load_balancer.py` ベースの案は **冗長・混乱要因**になるため削除/非推奨となっています。
+
 ## 🎯 問題の詳細分析
 
 ### 現状の問題構造
@@ -59,12 +63,10 @@ if llm_client.api_key_exceeded:
 # llm_client = None
 
 # === 新コード ===
-from backend.llm_pool_manager import get_llm_pool
-from backend.load_balancer import get_load_balancer, LoadBalanceStrategy
+from module.llm_api import get_async_llm_client
 
-# プール・負荷分散器の初期化
-llm_pool = None
-llm_load_balancer = None
+# 非同期LLMクライアント（内部でSemaphoreにより同時実行を制限）
+async_llm_client = None
 ```
 
 ### Step 2: startup_eventの更新
@@ -72,30 +74,17 @@ llm_load_balancer = None
 ```python
 @app.on_event("startup")
 async def startup_event():
-    global llm_pool, llm_load_balancer
+    global async_llm_client
     
     try:
         # 既存のコード...
         
-        # === 新しいLLM管理システム ===
-        # レベル1: コネクションプール（簡単導入）
-        llm_pool = await get_llm_pool(
-            pool_size=int(os.environ.get("LLM_POOL_SIZE", "10")),
-            connection_timeout=30.0
+        # === 新しいLLM管理システム（統一版）===
+        # LLM_POOL_SIZE は AsyncLearningPlanner の Semaphore に適用（初回のみ有効）
+        async_llm_client = get_async_llm_client(
+            pool_size=int(os.environ.get("LLM_POOL_SIZE", "10"))
         )
-        logger.info("✅ LLMコネクションプール初期化完了")
-        
-        # レベル2: 負荷分散（高性能）
-        if os.environ.get("ENABLE_LOAD_BALANCER", "false").lower() == "true":
-            llm_load_balancer = await get_load_balancer(
-                strategy=LoadBalanceStrategy.ADAPTIVE,
-                pool_configs=[
-                    {"pool_size": 8, "weight": 1.0, "name": "primary"},
-                    {"pool_size": 6, "weight": 0.8, "name": "secondary"},
-                    {"pool_size": 4, "weight": 0.6, "name": "backup"}
-                ]
-            )
-            logger.info("✅ LLM負荷分散器初期化完了")
+        logger.info("✅ 非同期LLMクライアント初期化完了（Semaphoreで同時実行を制限）")
             
     except Exception as e:
         logger.error(f"LLM システム初期化エラー: {e}")
@@ -112,19 +101,11 @@ async def chat_with_ai(
 ):
     """AIとのチャット（最適化版）"""
     try:
-        # === 新しいLLMクライアント取得方式 ===
-        
-        # レベル2: 負荷分散器使用（推奨）
-        if llm_load_balancer:
-            async with await llm_load_balancer.get_client(prefer_async=True) as client:
-                response = await client.generate_response_async(messages)
-        
-        # レベル1: プール使用（フォールバック）
-        elif llm_pool:
-            async with llm_pool.get_async_client() as client:
-                response = await client.generate_response_async(messages)
-        
-        # レベル0: 既存方式（緊急フォールバック）
+        # === 統一版: 非同期LLMクライアント ===
+        if async_llm_client:
+            response_obj = await async_llm_client.generate_response_async(messages)
+            response = async_llm_client.extract_output_text(response_obj)
+        # 緊急フォールバック: 既存方式
         else:
             logger.warning("⚠️ LLMプールが利用不可、既存方式を使用")
             response = await asyncio.to_thread(
@@ -155,7 +136,7 @@ ENABLE_LOAD_BALANCER=false
 
 ### Phase 2: 負荷分散有効化（高性能）
 ```env
-ENABLE_LOAD_BALANCER=true
+# 統一版: 非同期LLMクライアントの同時実行数（Semaphore）
 LLM_POOL_SIZE=15
 ```
 
@@ -166,8 +147,8 @@ LLM_POOL_SIZE=15
 
 ### Phase 3: アダプティブ最適化（自動調整）
 ```env
-LOAD_BALANCE_STRATEGY=adaptive
-AUTO_SCALING=true
+# 旧: load_balancer 系は削除/非推奨（2026-01）
+# 将来「多キー/多リージョン/多モデル」要件が出た場合のみ再検討
 ```
 
 ## 🔍 効果測定方法
@@ -180,26 +161,16 @@ AUTO_SCALING=true
 @app.get("/metrics/llm")
 async def get_llm_metrics():
     """LLMシステムのメトリクス取得"""
-    if llm_load_balancer:
-        return await llm_load_balancer.get_status()
-    elif llm_pool:
-        return await llm_pool.get_metrics()
-    else:
-        return {"status": "legacy_mode", "warning": "最適化されていません"}
+    if async_llm_client:
+        return async_llm_client.get_metrics()
+    return {"status": "legacy_mode", "warning": "async_llm_client が初期化されていません"}
 ```
 
 ### 2. ベンチマーク実行
 
 ```bash
-# 移行前後の性能比較
-python backend/performance_comparison.py
-
-# ストレステスト
-python -c "
-import asyncio
-from backend.performance_comparison import stress_test
-asyncio.run(stress_test(concurrent_users=20, duration_seconds=60))
-"
+# NOTE: 旧ベンチマーク（performance_comparison/load_balancer/llm_pool_manager）は削除/非推奨（2026-01）
+# 代替: k6 / locust / artillery 等で /chat を負荷テストし、LLM応答時間とエラー率を見る
 ```
 
 ### 3. モニタリングダッシュボード
@@ -262,7 +233,7 @@ RPS: 1.2 req/s
 CPU使用率: 12%（1コアのみ）
 ```
 
-### After（負荷分散）
+### After（非同期 + Semaphore）
 ```
 平均応答時間: 2.8秒
 成功率: 98%
@@ -305,11 +276,8 @@ INFO: All requests going to single node
 ```
 **解決策:**
 ```python
-# ヘルスチェック設定を確認
-load_balancer = await get_load_balancer(
-    strategy=LoadBalanceStrategy.ROUND_ROBIN,  # シンプルな戦略
-    health_check_interval=10.0  # チェック間隔を短縮
-)
+# 旧: load_balancer は削除/非推奨（2026-01）
+# 代替: LLM_POOL_SIZE（Semaphore）と OpenAI 側のレート制限/429 を見ながら適切な並列数に調整する
 ```
 
 ## 🎯 次のステップ
@@ -320,9 +288,9 @@ load_balancer = await get_load_balancer(
 3. ✅ 段階的ユーザー拡大
 
 ### 中期（1ヶ月）
-1. 🔄 負荷分散器導入
-2. 🔄 アダプティブ戦略有効化
-3. 🔄 自動スケーリング検討
+1. 🔄 コンテキスト管理（トークン削減）の実運用導入
+2. 🔄 DBアクセス/キャッシュ最適化
+3. 🔄 OpenAIレート制限に合わせた並列数の自動調整検討
 
 ### 長期（2-3ヶ月）
 1. 🎯 Redis キャッシュ統合
