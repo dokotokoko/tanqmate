@@ -15,6 +15,14 @@ from async_helpers import (
     rate_limited_openai_call
 )
 
+from prompt.prompt import RESPONSE_STYLE_PROMPTS
+
+# turn_indexバグ修正を一時的に無効化のためコメントアウト
+# from async_helpers_turn_index import (
+#     ChatLogStore,
+#     parallel_save_chat_logs_with_turn_index
+# )
+
 class ChatService(BaseService):
     """チャット・対話管理を担当するサービスクラス"""
     
@@ -68,7 +76,8 @@ class ChatService(BaseService):
             # AsyncDatabaseHelperとAsyncProjectContextBuilderのインスタンスを作成
             from async_helpers import AsyncDatabaseHelper, AsyncProjectContextBuilder
             db_helper = AsyncDatabaseHelper(self.supabase)
-            context_builder = AsyncProjectContextBuilder(self.supabase)
+            # AsyncProjectContextBuilder は AsyncDatabaseHelper を受け取る
+            context_builder = AsyncProjectContextBuilder(db_helper)
             
             # 会話IDを取得または作成
             conversation_id = self.get_or_create_conversation_sync(session_type)
@@ -118,6 +127,7 @@ class ChatService(BaseService):
                 "context_data": context_data
             }
             
+            # 従来の保存処理を使用（turn_indexバグ修正を一時的に無効化）
             user_saved, ai_saved = await parallel_save_chat_logs(
                 db_helper,
                 user_message_data,
@@ -182,7 +192,9 @@ class ChatService(BaseService):
             from module.llm_api import get_async_llm_client
             from .response_styles import ResponseStyleManager
             
-            llm_client = get_async_llm_client()  # awaitは不要
+            # NOTE: get_async_llm_client は初回呼び出しの pool_size（=Semaphore上限）のみ有効
+            pool_size = int(os.environ.get("LLM_POOL_SIZE", "5"))
+            llm_client = get_async_llm_client(pool_size=pool_size)  # awaitは不要
             if not llm_client:
                 raise Exception("Async LLM client not available")
             
@@ -191,7 +203,6 @@ class ChatService(BaseService):
             # 応答スタイルに応じたシステムプロンプトを取得
             if response_style == "custom" and custom_instruction:
                 # カスタムスタイルの場合は、プロンプトテンプレートに指示を埋め込む
-                from prompt import RESPONSE_STYLE_PROMPTS
                 system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
             else:
                 system_prompt = ResponseStyleManager.get_system_prompt(response_style)
@@ -239,7 +250,7 @@ class ChatService(BaseService):
             # 応答スタイルに応じたシステムプロンプトを取得
             if response_style == "custom" and custom_instruction:
                 # カスタムスタイルの場合は、プロンプトテンプレートに指示を埋め込む
-                from prompt import RESPONSE_STYLE_PROMPTS
+                from prompt.prompt import RESPONSE_STYLE_PROMPTS
                 system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
             else:
                 system_prompt = ResponseStyleManager.get_system_prompt(response_style)
@@ -263,7 +274,7 @@ class ChatService(BaseService):
             self.dump_response_events(response_obj)
             
             # Response APIのoutput_textを取得
-            response = llm_client.extract_output_text(response_obj)
+            response = llm_instance.extract_output_text(response_obj)
             
             return {
                 "response": response,
@@ -281,17 +292,31 @@ class ChatService(BaseService):
             limit = min(limit, 100)  # 最大100件
             
             result = self.supabase.table("chat_logs")\
-                .select("message, response, timestamp")\
+                .select("id, message, sender, created_at")\
                 .eq("user_id", user_id)\
-                .order("timestamp", desc=True)\
+                .order("created_at", desc=True)\
                 .limit(limit)\
                 .execute()
             
-            return [{
-                "message": log["message"],
-                "response": log["response"],
-                "timestamp": log["timestamp"]
-            } for log in result.data]
+            # ユーザーメッセージとAI応答をペアにして返す
+            history = []
+            for i, log in enumerate(result.data):
+                if log["sender"] == "user":
+                    # 次のレコードがAI応答かチェック
+                    ai_response = ""
+                    if i + 1 < len(result.data) and result.data[i + 1]["sender"] == "ai":
+                        ai_response = result.data[i + 1]["message"]
+                    
+                    history.append({
+                        "id": log["id"],
+                        "message": log["message"],
+                        "response": ai_response,
+                        "timestamp": log["created_at"],
+                        "sender": log["sender"],
+                        "created_at": log["created_at"]
+                    })
+            
+            return history
             
         except Exception as e:
             error_result = self.handle_error(e, "Get chat history")

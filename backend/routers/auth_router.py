@@ -30,7 +30,7 @@ class UserLogin(BaseModel):
 class UserRegister(BaseModel):
     username: str
     password: str
-    email: str
+    # email: str  # 将来の実装用にコメントアウト
 
 class UserResponse(BaseModel):
     user: dict
@@ -65,8 +65,7 @@ async def register(
     """ユーザー登録"""
     return await auth_service.register_user(
         register_data.username,
-        register_data.password,
-        #register_data.email
+        register_data.password
     )
 
 @router.get("/me")

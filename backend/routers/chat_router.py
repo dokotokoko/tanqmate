@@ -121,7 +121,12 @@ async def get_chat_history(
     current_user_id: int = Depends(get_current_user),
     chat_service: ChatService = Depends(get_chat_service)
 ):
-    """チャット履歴取得"""
+    """
+    チャット履歴取得
+    
+    認証が必要です。リクエストヘッダーにAuthorizationを含めてください:
+    Authorization: Bearer <your_jwt_token>
+    """
     try:
         history = chat_service.get_chat_history(current_user_id, limit)
         return [
