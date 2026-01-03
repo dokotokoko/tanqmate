@@ -161,7 +161,7 @@ function App() {
               <Route 
                 path="/login" 
                 element={
-                  user ? <Navigate to="/chat" replace /> : 
+                  user ? <Navigate to="/dashboard" replace /> : 
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -175,7 +175,7 @@ function App() {
               
               {/* アプリケーション本体（認証必要） */}
               <Route path="/app" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                <Route index element={<Navigate to="/chat" replace />} />
+                <Route index element={<Navigate to="/dashboard" replace />} />
               </Route>
               
               {/* InquiryExplorer - サイドバーなしのフルスクリーン */}

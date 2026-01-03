@@ -147,7 +147,7 @@ const DashboardPage: React.FC = () => {
       }
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/users/${token}/projects`, {
+      const response = await fetch(`${apiBaseUrl}/projects`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

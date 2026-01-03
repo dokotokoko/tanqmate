@@ -204,37 +204,26 @@ const AIChat: React.FC<AIChatProps> = ({
     if (!loadHistoryFromDB || historyLoaded) return;
 
     try {
-      // ユーザーIDを取得
-      let userId = null;
-      const authData = localStorage.getItem('auth-storage');
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.state?.user?.id) {
-            userId = parsed.state.user.id;
-          }
-        } catch (e) {
-          console.error('認証データの解析に失敗:', e);
-        }
-      }
-      if (!userId) return;
+      // 認証トークンを取得
+      const token = localStorage.getItem('auth-token');
+      if (!token) return;
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       // グローバルチャット履歴を取得
       const historyUrl = `${apiBaseUrl}/chat/history`;
       const response = await fetch(historyUrl, {
         headers: {
-          'Authorization': `Bearer ${userId}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
       });
 
       if (response.ok) {
         const history = await response.json();
-        const historyMessages: Message[] = history.map((item: any) => ({
-          id: item.id.toString(),
+        const historyMessages: Message[] = history.map((item: any, index: number) => ({
+          id: item.id ? item.id.toString() : `history-${index}-${Date.now()}`,
           role: item.sender === 'user' ? 'user' : 'assistant',
-          content: item.message,
+          content: item.message || '',
           timestamp: item.created_at ? new Date(item.created_at) : new Date(),
         }));
 
@@ -374,26 +363,14 @@ const AIChat: React.FC<AIChatProps> = ({
         aiResponse = await onMessageSend(messageWithStyle, contextContent);
       } else {
         // データベース対応のチャットAPIを使用
-        // ユーザーIDを取得
-        let userId = null;
-        const authData = localStorage.getItem('auth-storage');
-        if (authData) {
-          try {
-            const parsed = JSON.parse(authData);
-            if (parsed.state?.user?.id) {
-              userId = parsed.state.user.id;
-            }
-          } catch (e) {
-            console.error('認証データの解析に失敗:', e);
-          }
-        }
-        if (userId) {
+        const token = localStorage.getItem('auth-token');
+        if (token) {
           const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
           const response = await fetch(`${apiBaseUrl}/chat`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${userId}`,
+              'Authorization': `Bearer ${token}`,
             },
             credentials: 'include',
             body: JSON.stringify({
@@ -567,22 +544,9 @@ const AIChat: React.FC<AIChatProps> = ({
     try {
       setConversationLoading(true);
       
-      // ユーザーIDを取得
-      let userId: string | null = null;
-      const authData = localStorage.getItem('auth-storage');
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.state?.user?.id) {
-            userId = parsed.state.user.id;
-          }
-        } catch (e) {
-          console.error('認証データの解析に失敗:', e);
-        }
-      }
-      
-      if (!userId) {
-        console.error('ユーザーIDが見つかりません');
+      const token = localStorage.getItem('auth-token');
+      if (!token) {
+        console.error('認証トークンが見つかりません');
         return null;
       }
       
@@ -591,11 +555,11 @@ const AIChat: React.FC<AIChatProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userId}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
         body: JSON.stringify({
-          title: null, // 自動生成
+          title: '', // 空文字列に変更（バックエンドで自動生成）
           metadata: {
             source: 'new_chat_button',
             created_via: 'ai_chat_component'
@@ -607,7 +571,12 @@ const AIChat: React.FC<AIChatProps> = ({
         const result = await response.json();
         return result.id;
       } else {
-        console.error('新しい会話の作成に失敗:', response.status);
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        console.error('新しい会話の作成に失敗:', {
+          status: response.status,
+          error: errorData,
+          detail: errorData.detail || errorData
+        });
         return null;
       }
     } catch (error) {

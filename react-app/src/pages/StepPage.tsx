@@ -343,29 +343,14 @@ const StepPage: React.FC = () => {
   // AI応答の処理
   const handleAIMessage = async (message: string, workContent: string): Promise<string> => {
     try {
-      // ユーザーIDを取得
-      let userId = null;
+      const token = localStorage.getItem('auth-token');
       
-      // auth-storageからユーザーIDを取得
-      const authData = localStorage.getItem('auth-storage');
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.state?.user?.id) {
-            userId = parsed.state.user.id;
-          }
-        } catch (e) {
-          console.error('認証データの解析に失敗:', e);
-        }
-      }
-
-      if (!userId) {
-        throw new Error('ユーザーIDが見つかりません。再ログインしてください。');
+      if (!token) {
+        throw new Error('認証トークンが見つかりません。再ログインしてください。');
       }
 
       // バックエンドAPIに接続
       console.log('API呼び出し開始:', {
-        userId,
         message: message.substring(0, 50) + '...',
         page: `step_${currentStep}`,
         currentStep,
@@ -377,7 +362,7 @@ const StepPage: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userId}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
         body: JSON.stringify({
