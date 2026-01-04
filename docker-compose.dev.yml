@@ -27,7 +27,6 @@ services:
     volumes:
       - ./backend:/app
       - ./backend/module:/app/module
-      - ./prompt:/app/prompt
       - ./schema:/app/schema
     networks:
       - app-network

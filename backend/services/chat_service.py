@@ -250,7 +250,6 @@ class ChatService(BaseService):
             # 応答スタイルに応じたシステムプロンプトを取得
             if response_style == "custom" and custom_instruction:
                 # カスタムスタイルの場合は、プロンプトテンプレートに指示を埋め込む
-                from prompt.prompt import RESPONSE_STYLE_PROMPTS
                 system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
             else:
                 system_prompt = ResponseStyleManager.get_system_prompt(response_style)

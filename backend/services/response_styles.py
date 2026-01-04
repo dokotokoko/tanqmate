@@ -6,7 +6,7 @@ import os
 
 # プロンプトモジュールをインポート
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'prompt'))
-from prompt import RESPONSE_STYLE_PROMPTS
+from prompt.prompt import RESPONSE_STYLE_PROMPTS
 
 class ResponseStyleManager:
     """応答スタイルとプロンプトを繋ぐマネージャー"""

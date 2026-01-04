@@ -74,8 +74,8 @@ services:
     volumes:
       - ./backend:/app
       - ./config:/app/config
-      - ./module:/app/module
-      - ./prompt:/app/prompt
+      - ./backend/module:/app/module
+      #- ./prompt:/app/prompt
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - SUPABASE_URL=${SUPABASE_URL}
