@@ -262,7 +262,7 @@ class learning_plannner():
         Returns:
             output_text
         """
-        resp = self.generate_response_async(input_items, max_tokens=max_tokens)
+        resp = await self.generate_response_async(input_items, max_tokens=max_tokens)
         output_text = self.extract_output_text(resp)
 
         return output_text

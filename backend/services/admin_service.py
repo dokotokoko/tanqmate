@@ -3,6 +3,7 @@
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 import os
+import json
 import logging
 from fastapi import HTTPException, status
 from .base import BaseService
@@ -14,32 +15,9 @@ class AdminService(BaseService):
     
     def __init__(self, supabase_client, user_id: Optional[int] = None):
         super().__init__(supabase_client, user_id)
-        self._check_phase1_system()
     
     def get_service_name(self) -> str:
         return "AdminService"
-    
-    def _check_phase1_system(self) -> None:
-        """Phase 1システム利用可能性チェック"""
-        try:
-            from phase1_llm_system import (
-                get_phase1_manager,
-                log_system_status
-            )
-            self.phase1_available = True
-            self.log_system_status = log_system_status
-            
-            # Phase 1マネージャー取得
-            try:
-                self.phase1_manager = get_phase1_manager()
-            except Exception as e:
-                self.logger.warning(f"Phase 1 manager initialization failed: {e}")
-                self.phase1_manager = None
-                
-        except ImportError:
-            self.phase1_available = False
-            self.phase1_manager = None
-            self.log_system_status = None
     
     async def create_test_user(self, username: str, password: str) -> Dict[str, Any]:
         """負荷テスト用ユーザー作成"""
@@ -113,54 +91,25 @@ class AdminService(BaseService):
             raise HTTPException(status_code=500, detail=error_result["error"])
     
     def get_llm_system_metrics(self) -> Dict[str, Any]:
-        """Phase 1 LLMシステムのメトリクス取得"""
+        """LLMシステムのメトリクス取得（refactored版: module.llm_api中心）"""
         try:
             metrics_data = {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "phase1_system": {},
-                "legacy_system": {}
+                "async_llm": {}
             }
-            
-            # Phase 1システムのメトリクス
-            if self.phase1_available and self.phase1_manager:
-                try:
-                    if hasattr(self.phase1_manager, '_initialized') and self.phase1_manager._initialized:
-                        metrics_data["phase1_system"] = {
-                            "metrics": self.phase1_manager.get_metrics(),
-                            "health": self.phase1_manager.health_check(),
-                            "status": "active"
-                        }
-                    else:
-                        metrics_data["phase1_system"] = {
-                            "status": "not_initialized",
-                            "message": "Phase 1システムが初期化されていません"
-                        }
-                except Exception as e:
-                    metrics_data["phase1_system"] = {
-                        "status": "error",
-                        "error": str(e)
-                    }
-            else:
-                metrics_data["phase1_system"] = {
-                    "status": "not_available",
-                    "message": "Phase 1システムが利用不可です"
-                }
-            
-            # レガシーシステムの状態
+
+            # module.llm_api の非同期クライアントメトリクス
             try:
-                from module.llm_api import llm_client
-                metrics_data["legacy_system"] = {
-                    "available": llm_client is not None,
+                from module.llm_api import get_async_llm_client
+                pool_size = int(os.environ.get("LLM_POOL_SIZE", "5"))
+                client = get_async_llm_client(pool_size=pool_size)
+                metrics_data["async_llm"] = {
                     "status": "active",
-                    "class": llm_client.__class__.__name__ if llm_client else None,
-                    "message": "既存システムのみ動作中"
+                    "pool_size": pool_size,
+                    "metrics": client.get_metrics()
                 }
             except Exception as e:
-                metrics_data["legacy_system"] = {
-                    "available": False,
-                    "status": "error",
-                    "error": str(e)
-                }
+                metrics_data["async_llm"] = {"status": "error", "error": str(e)}
             
             return metrics_data
             
@@ -176,38 +125,23 @@ class AdminService(BaseService):
         try:
             debug_info = {
                 "environment_variables": {
-                    "ENABLE_LLM_POOL": os.environ.get("ENABLE_LLM_POOL", "false"),
                     "LLM_POOL_SIZE": os.environ.get("LLM_POOL_SIZE", "5"),
-                    "LLM_POOL_TIMEOUT": os.environ.get("LLM_POOL_TIMEOUT", "30.0"),
-                    "LLM_AUTO_FALLBACK": os.environ.get("LLM_AUTO_FALLBACK", "true"),
-                    "LLM_POOL_DEBUG": os.environ.get("LLM_POOL_DEBUG", "false")
                 },
                 "system_status": {
-                    "phase1_available": self.phase1_available,
-                    "phase1_manager_exists": self.phase1_manager is not None,
-                    "phase1_initialized": (
-                        hasattr(self.phase1_manager, '_initialized') and 
-                        self.phase1_manager._initialized
-                    ) if self.phase1_manager else False,
                     "current_time": datetime.now(timezone.utc).isoformat()
                 }
             }
             
-            # レガシーシステム状態
+            # module.llm_api の非同期LLM状態
             try:
-                from module.llm_api import llm_client
-                debug_info["system_status"]["legacy_client_exists"] = llm_client is not None
+                from module.llm_api import get_async_llm_client
+                pool_size = int(os.environ.get("LLM_POOL_SIZE", "5"))
+                client = get_async_llm_client(pool_size=pool_size)
+                debug_info["system_status"]["async_llm_available"] = client is not None
+                debug_info["system_status"]["async_llm_pool_size"] = pool_size
+                debug_info["system_status"]["async_llm_metrics"] = client.get_metrics()
             except Exception as e:
-                debug_info["system_status"]["legacy_client_error"] = str(e)
-            
-            # 詳細メトリクス
-            if self.phase1_available and self.phase1_manager:
-                try:
-                    if hasattr(self.phase1_manager, '_initialized') and self.phase1_manager._initialized:
-                        debug_info["detailed_metrics"] = self.phase1_manager.get_metrics()
-                        debug_info["health_check"] = self.phase1_manager.health_check()
-                except Exception as e:
-                    debug_info["metrics_error"] = str(e)
+                debug_info["system_status"]["async_llm_error"] = str(e)
             
             return debug_info
             
@@ -218,20 +152,17 @@ class AdminService(BaseService):
     def log_system_status_to_logger(self) -> Dict[str, Any]:
         """LLMシステムの状態をログに出力"""
         try:
-            if self.phase1_available and self.log_system_status:
-                self.log_system_status()
-                return {
-                    "message": "Phase 1システム状態をログに出力しました",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "status": "success"
-                }
-            else:
-                self.logger.info("📊 LLMシステム状態: Phase 1は利用不可、既存システムのみ動作中")
-                return {
-                    "message": "Phase 1は利用不可、既存システムのみ動作中",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "status": "phase1_unavailable"
-                }
+            from module.llm_api import get_async_llm_client
+            pool_size = int(os.environ.get("LLM_POOL_SIZE", "5"))
+            client = get_async_llm_client(pool_size=pool_size)
+            metrics = client.get_metrics()
+            self.logger.info(f"📊 LLMシステム状態: async_llm active (LLM_POOL_SIZE={pool_size}) metrics={metrics}")
+            return {
+                "message": "LLMシステム状態をログに出力しました",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "status": "success",
+                "metrics": metrics
+            }
                 
         except Exception as e:
             error_result = self.handle_error(e, "Log system status")
@@ -338,18 +269,10 @@ class AdminService(BaseService):
             
             # LLMシステムチェック
             try:
-                if self.phase1_available and self.phase1_manager:
-                    if hasattr(self.phase1_manager, 'health_check'):
-                        phase1_health = self.phase1_manager.health_check()
-                        health_status["components"]["phase1_llm"] = phase1_health
-                    else:
-                        health_status["components"]["phase1_llm"] = "unknown"
-                else:
-                    health_status["components"]["phase1_llm"] = "not_available"
-                
-                # レガシーLLMチェック
-                from module.llm_api import llm_client
-                health_status["components"]["legacy_llm"] = "healthy" if llm_client else "not_available"
+                from module.llm_api import get_async_llm_client
+                pool_size = int(os.environ.get("LLM_POOL_SIZE", "5"))
+                client = get_async_llm_client(pool_size=pool_size)
+                health_status["components"]["async_llm"] = "healthy" if client else "not_available"
                 
             except Exception as e:
                 health_status["components"]["llm_systems"] = f"check_failed: {str(e)}"
@@ -368,3 +291,142 @@ class AdminService(BaseService):
                 "overall_status": "error",
                 "error": str(e)
             }
+    
+    async def get_llm_system_metrics_async(self) -> Dict[str, Any]:
+        """LLMシステムのメトリクス取得（非同期版）"""
+        try:
+            metrics = self.get_llm_system_metrics()
+            
+            # フォーマットを統一
+            llm_metrics = metrics.get("async_llm", {}).get("metrics", {}) or {}
+            return {
+                "status": "active" if metrics.get("async_llm", {}).get("status") == "active" else "degraded",
+                "active_clients": 1 if metrics.get("async_llm", {}).get("status") == "active" else 0,
+                "last_request": None,  # 実装されていない
+                "error_rate": 0.0,  # 現状、OpenAI SDK側のエラー率は集計していない
+                "total_requests": int(llm_metrics.get("total_requests", 0)),
+                "avg_response_time": float(llm_metrics.get("average_response_time", 0.0)),
+                "detailed_metrics": metrics
+            }
+        except Exception as e:
+            error_result = self.handle_error(e, "Get LLM system metrics async")
+            return {
+                "status": "error",
+                "active_clients": 0,
+                "last_request": None,
+                "error_rate": 1.0,
+                "total_requests": 0,
+                "avg_response_time": 0.0,
+                "error": error_result["error"]
+            }
+    
+    async def get_llm_system_debug(self) -> Dict[str, Any]:
+        """LLMシステムのデバッグ情報取得（非同期版）"""
+        try:
+            return self.get_debug_info()
+        except Exception as e:
+            error_result = self.handle_error(e, "Get LLM system debug async")
+            return {"error": error_result["error"]}
+    
+    def check_quest_tables(self) -> Dict[str, Any]:
+        """クエスト関連テーブルの存在確認"""
+        try:
+            table_status = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "tables": {}
+            }
+            
+            # 確認するテーブルのリスト
+            quest_tables = [
+                "quests",
+                "user_quests", 
+                "quest_submissions",
+                "quest_categories"
+            ]
+            
+            all_exist = True
+            
+            for table_name in quest_tables:
+                try:
+                    # テーブルの存在確認（1行だけ取得を試行）
+                    result = self.supabase.table(table_name)\
+                        .select("*")\
+                        .limit(1)\
+                        .execute()
+                    
+                    table_status["tables"][table_name] = {
+                        "exists": True,
+                        "row_count": len(result.data) if result.data else 0
+                    }
+                    
+                except Exception as e:
+                    table_status["tables"][table_name] = {
+                        "exists": False,
+                        "error": str(e)
+                    }
+                    all_exist = False
+            
+            table_status["all_tables_exist"] = all_exist
+            table_status["status"] = "healthy" if all_exist else "missing_tables"
+            
+            return table_status
+            
+        except Exception as e:
+            error_result = self.handle_error(e, "Check quest tables")
+            return {
+                "error": error_result["error"],
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "status": "error"
+            }
+    
+    async def log_llm_system_status(
+        self,
+        timestamp: str,
+        status: str,
+        message: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """LLMシステム状態をログ記録"""
+        try:
+            # ログエントリを作成
+            log_entry = {
+                "timestamp": timestamp,
+                "status": status,
+                "message": message,
+                "metadata": metadata or {},
+                "recorded_at": datetime.now(timezone.utc).isoformat()
+            }
+            
+            # ログをファイルまたはデータベースに記録
+            self.logger.info(f"LLM System Status: {status} - {message}")
+            
+            if metadata:
+                self.logger.debug(f"LLM System Metadata: {metadata}")
+            
+            # 必要に応じてデータベースにも記録
+            try:
+                # システムログテーブルに保存（存在する場合）
+                result = self.supabase.table("system_logs").insert({
+                    "service": "llm_system",
+                    "level": status,
+                    "message": message,
+                    "metadata": json.dumps(metadata) if metadata else None,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }).execute()
+                
+                log_id = result.data[0]["id"] if result.data else None
+                
+            except Exception as db_error:
+                # テーブルが存在しない場合はログのみ
+                self.logger.debug(f"System logs table not available: {db_error}")
+                log_id = None
+            
+            return {
+                "message": "LLMシステム状態をログ記録しました",
+                "log_id": log_id,
+                "timestamp": timestamp
+            }
+            
+        except Exception as e:
+            error_result = self.handle_error(e, "Log LLM system status")
+            raise Exception(error_result["error"])

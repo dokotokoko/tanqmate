@@ -26,12 +26,11 @@ services:
       - ENVIRONMENT=development
     volumes:
       - ./backend:/app
-      - ./module:/app/module
-      - ./prompt:/app/prompt
+      - ./backend/module:/app/module
       - ./schema:/app/schema
     networks:
       - app-network
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 120
+    command: uvicorn main_refactored:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 120
 
   # フロントエンド
   frontend:

@@ -108,7 +108,7 @@ const FocusExploration: React.FC<FocusExplorationProps> = ({
         <LinearProgress 
           variant="determinate" 
           value={progress} 
-          sx={{ mt: 2, height: 8, borderRadius: 4 }} 
+          sx={{ mt: 2, height: 8, borderRadius: 2.8 }} 
         />
       </Paper>
 

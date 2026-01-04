@@ -21,7 +21,7 @@ class AuthService(CacheableService):
     def get_service_name(self) -> str:
         return "AuthService"
     
-    async def register_user(self, username: str, password: str, email: str) -> Dict[str, Any]:
+    async def register_user(self, username: str, password: str) -> Dict[str, Any]:
         """新規ユーザー登録"""
         try:
             # パスワードハッシュ化
@@ -113,9 +113,12 @@ class AuthService(CacheableService):
             cached_user_id = self.get_cached_result(cache_key)
             
             if cached_user_id:
+                # キャッシュヒット時はデバッグレベル
+                self.logger.debug(f"Using cached user_id: {cached_user_id['data']}")
                 return cached_user_id['data']
             
-            # JWTデコード
+            # JWTデコード（初回のみ詳細ログ）
+            self.logger.debug(f"Token verification started. Token length: {len(credentials.credentials) if credentials.credentials else 'None'}")
             payload = jwt.decode(
                 credentials.credentials,
                 self.jwt_secret,
@@ -123,8 +126,11 @@ class AuthService(CacheableService):
             )
             
             user_id = payload.get("user_id")
+            self.logger.debug(f"Extracted user_id from token: {user_id}")
+            
             if not user_id:
-                raise HTTPException(status_code=401, detail="Invalid token")
+                self.logger.warning("No user_id found in token payload")
+                raise HTTPException(status_code=401, detail="Invalid token: missing user_id")
             
             # ユーザー存在確認
             result = self.supabase.table("users")\
@@ -133,21 +139,25 @@ class AuthService(CacheableService):
                 .execute()
             
             if not result.data:
+                self.logger.warning(f"User not found in database: {user_id}")
                 raise HTTPException(status_code=401, detail="User not found")
             
             # キャッシュに保存
             self.set_cached_result(cache_key, user_id, ttl=1800)  # 30分
+            self.logger.debug(f"Token verification successful for user: {user_id}")
             
             return user_id
             
-        except jwt.ExpiredSignatureError:
+        except jwt.ExpiredSignatureError as e:
+            self.logger.warning(f"Token expired: {e}")
             raise HTTPException(status_code=401, detail="Token has expired")
-        except jwt.InvalidTokenError:
-            raise HTTPException(status_code=401, detail="Invalid token")
+        except jwt.InvalidTokenError as e:
+            self.logger.warning(f"Invalid token: {e}")
+            raise HTTPException(status_code=401, detail="Invalid token format")
         except HTTPException:
             raise
         except Exception as e:
-            self.logger.error(f"Token verification failed: {e}")
+            self.logger.error(f"Token verification failed with unexpected error: {e}")
             raise HTTPException(status_code=500, detail="Authentication error")
     
     def get_user_by_id(self, user_id: int) -> Dict[str, Any]:

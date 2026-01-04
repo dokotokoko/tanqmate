@@ -330,7 +330,7 @@ const ProjectPage: React.FC = () => {
               '&:hover': {
                 background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
               },
-              borderRadius: 2,
+              borderRadius: 1.4,
               px: 3,
               py: 1.5,
             }}
@@ -341,7 +341,7 @@ const ProjectPage: React.FC = () => {
 
         {/* プロジェクト情報 */}
         {project && (
-          <Card sx={{ mb: 4, borderRadius: 3 }}>
+          <Card sx={{ mb: 4, borderRadius: 2.1 }}>
             <CardContent sx={{ p: 4 }}>
               <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
                 {project.theme}
@@ -381,7 +381,7 @@ const ProjectPage: React.FC = () => {
                     sx={{
                       p: 2,
                       border: '1px dashed #ddd',
-                      borderRadius: 1,
+                      borderRadius: 0.7,
                       cursor: 'pointer',
                       minHeight: 60,
                       display: 'flex',
@@ -432,7 +432,7 @@ const ProjectPage: React.FC = () => {
                     sx={{
                       p: 2,
                       border: '1px dashed #ddd',
-                      borderRadius: 1,
+                      borderRadius: 0.7,
                       cursor: 'pointer',
                       minHeight: 60,
                       display: 'flex',

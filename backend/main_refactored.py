@@ -16,10 +16,15 @@ from routers.auth_router import router as auth_router
 from routers.chat_router import router as chat_router
 from routers.project_router import router as project_router
 from routers.memo_router import router as memo_router
-from routers.quest_router import router as quest_router
+from routers.quest_router import router as quest_router, user_quest_router
 from routers.admin_router import router as admin_router
 from routers.theme_router import router as theme_router
-from routers.conversation_router import router as conversation_router
+from routers.conversation_agent_router import router as conversation_agent_router
+from routers.conversations_router import router as conversations_router
+from routers.metrics_router import router as metrics_router, debug_router
+
+# LLMクライアントをインポート
+from module.llm_api import get_async_llm_client
 
 # 既存のAPIルーターもインポート（段階移行のため）
 from inquiry_api import router as inquiry_router
@@ -49,7 +54,12 @@ app = FastAPI(
 # CORS設定
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://dev.tanqmates.local.test",
+        "http://dev.tanqmates.local.test"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -61,12 +71,16 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 # ルーター登録
 app.include_router(auth_router)           # 認証関連
 app.include_router(chat_router)           # チャット関連
-app.include_router(conversation_router)   # 会話管理関連
 app.include_router(project_router)        # プロジェクト関連
 app.include_router(memo_router)           # メモ管理関連
 app.include_router(quest_router)          # クエストシステム関連
+app.include_router(user_quest_router)     # ユーザークエスト関連
 app.include_router(admin_router)          # 管理機能関連
 app.include_router(theme_router)          # テーマ探究ツール関連
+app.include_router(conversation_agent_router)  # 会話エージェント関連
+app.include_router(conversations_router)  # 会話管理関連
+app.include_router(metrics_router)        # メトリクス関連
+app.include_router(debug_router)          # デバッグ関連
 app.include_router(inquiry_router)        # 探究学習API（既存）
 
 # 基本エンドポイント
@@ -100,6 +114,16 @@ async def health_check():
 async def startup_event():
     """アプリケーション起動時の初期化"""
     logger.info("🚀 探Qメイト API (リファクタリング版) を起動中...")
+    
+    # LLM同時実行制御の初期化（初回pool_sizeのみ有効なため、起動時に確定させる）
+    try:
+        pool_size = int(os.environ.get("LLM_POOL_SIZE", "5"))
+        get_async_llm_client(pool_size=pool_size)
+        logger.info(f"✅ 非同期LLMクライアント初期化完了（LLM_POOL_SIZE={pool_size}）")
+    except Exception as e:
+        # 起動は継続（チャット処理側でフォールバック/例外処理を行う）
+        logger.warning(f"⚠️ 非同期LLMクライアント初期化に失敗（起動は継続）: {e}")
+    
     logger.info("✅ サービスクラスベース設計で初期化完了")
 
 @app.on_event("shutdown") 

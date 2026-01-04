@@ -77,7 +77,7 @@ async def get_llm_system_metrics(
     current_user_id: int = Depends(get_current_user),
     admin_service: AdminService = Depends(get_admin_service)
 ):
-    """Phase 1 LLMシステムのメトリクス取得"""
+    """LLMシステムのメトリクス取得（module.llm_api ベース）"""
     return admin_service.get_llm_system_metrics()
 
 # デバッグ関連エンドポイント
@@ -86,7 +86,7 @@ async def debug_llm_system(
     current_user_id: int = Depends(get_current_user),
     admin_service: AdminService = Depends(get_admin_service)
 ):
-    """Phase 1 LLMシステムのデバッグ情報"""
+    """LLMシステムのデバッグ情報（module.llm_api ベース）"""
     return admin_service.get_debug_info()
 
 # ルーターを統合

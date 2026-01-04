@@ -68,7 +68,7 @@ export const useAuthStore = create<AuthState>()(
             credentials: 'include',
             body: JSON.stringify({
               username: username,
-              access_code: password,
+              password: password,
             }),
           });
 
@@ -83,12 +83,12 @@ export const useAuthStore = create<AuthState>()(
 
           const data = await response.json();
           
-          // トークンとしてuser_idを保存（バックエンドの簡易認証システムに対応）
-          localStorage.setItem('auth-token', data.id.toString());
+          // JWTトークンを保存
+          localStorage.setItem('auth-token', data.token);
           
           const user: User = {
-            id: data.id.toString(),
-            username: data.username,
+            id: data.user.id.toString(),
+            username: data.user.username,
           };
 
           // ログイン情報を更新

@@ -26,6 +26,7 @@ import SmartNotificationManager, { SmartNotificationManagerRef } from '../SmartN
 import { useChatStore } from '../../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
 import { useAIChatMessages } from '../../hooks/useAIChatMessages';
+import ResponseStyleSelector, { ResponseStyle } from './ResponseStyleSelector';
 
 interface Message {
   id: string;
@@ -95,6 +96,9 @@ const AIChat: React.FC<AIChatProps> = ({
   // 会話管理機能
   const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
   const [conversationLoading, setConversationLoading] = useState(false);
+  
+  // 応答スタイルの状態
+  const [responseStyle, setResponseStyle] = useState<ResponseStyle | null>(null);
   
   // 通知システムのref
   const notificationManagerRef = useRef<SmartNotificationManagerRef>(null);
@@ -200,37 +204,26 @@ const AIChat: React.FC<AIChatProps> = ({
     if (!loadHistoryFromDB || historyLoaded) return;
 
     try {
-      // ユーザーIDを取得
-      let userId = null;
-      const authData = localStorage.getItem('auth-storage');
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.state?.user?.id) {
-            userId = parsed.state.user.id;
-          }
-        } catch (e) {
-          console.error('認証データの解析に失敗:', e);
-        }
-      }
-      if (!userId) return;
+      // 認証トークンを取得
+      const token = localStorage.getItem('auth-token');
+      if (!token) return;
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       // グローバルチャット履歴を取得
       const historyUrl = `${apiBaseUrl}/chat/history`;
       const response = await fetch(historyUrl, {
         headers: {
-          'Authorization': `Bearer ${userId}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
       });
 
       if (response.ok) {
         const history = await response.json();
-        const historyMessages: Message[] = history.map((item: any) => ({
-          id: item.id.toString(),
+        const historyMessages: Message[] = history.map((item: any, index: number) => ({
+          id: item.id ? item.id.toString() : `history-${index}-${Date.now()}`,
           role: item.sender === 'user' ? 'user' : 'assistant',
-          content: item.message,
+          content: item.message || '',
           timestamp: item.created_at ? new Date(item.created_at) : new Date(),
         }));
 
@@ -363,34 +356,28 @@ const AIChat: React.FC<AIChatProps> = ({
       if (onMessageSend) {
         // 継続モードの場合は現在のメモコンテンツを使用、そうでなければ従来通り
         const contextContent = persistentMode ? currentMemoContent : memoContent;
-        aiResponse = await onMessageSend(userMessage.content, contextContent);
+        // 応答スタイルをAPIに渡す
+        const messageWithStyle = responseStyle ? 
+          `[応答スタイル: ${responseStyle.label}]\n${userMessage.content}` : 
+          userMessage.content;
+        aiResponse = await onMessageSend(messageWithStyle, contextContent);
       } else {
         // データベース対応のチャットAPIを使用
-        // ユーザーIDを取得
-        let userId = null;
-        const authData = localStorage.getItem('auth-storage');
-        if (authData) {
-          try {
-            const parsed = JSON.parse(authData);
-            if (parsed.state?.user?.id) {
-              userId = parsed.state.user.id;
-            }
-          } catch (e) {
-            console.error('認証データの解析に失敗:', e);
-          }
-        }
-        if (userId) {
+        const token = localStorage.getItem('auth-token');
+        if (token) {
           const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
           const response = await fetch(`${apiBaseUrl}/chat`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${userId}`,
+              'Authorization': `Bearer ${token}`,
             },
             credentials: 'include',
             body: JSON.stringify({
               message: userMessage.content,
               context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
+              response_style: responseStyle?.id || 'auto',
+              custom_instruction: responseStyle?.customInstruction || undefined,
             }),
           });
 
@@ -557,22 +544,9 @@ const AIChat: React.FC<AIChatProps> = ({
     try {
       setConversationLoading(true);
       
-      // ユーザーIDを取得
-      let userId: string | null = null;
-      const authData = localStorage.getItem('auth-storage');
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.state?.user?.id) {
-            userId = parsed.state.user.id;
-          }
-        } catch (e) {
-          console.error('認証データの解析に失敗:', e);
-        }
-      }
-      
-      if (!userId) {
-        console.error('ユーザーIDが見つかりません');
+      const token = localStorage.getItem('auth-token');
+      if (!token) {
+        console.error('認証トークンが見つかりません');
         return null;
       }
       
@@ -581,11 +555,11 @@ const AIChat: React.FC<AIChatProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userId}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
         body: JSON.stringify({
-          title: null, // 自動生成
+          title: '', // 空文字列に変更（バックエンドで自動生成）
           metadata: {
             source: 'new_chat_button',
             created_via: 'ai_chat_component'
@@ -597,7 +571,12 @@ const AIChat: React.FC<AIChatProps> = ({
         const result = await response.json();
         return result.id;
       } else {
-        console.error('新しい会話の作成に失敗:', response.status);
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        console.error('新しい会話の作成に失敗:', {
+          status: response.status,
+          error: errorData,
+          detail: errorData.detail || errorData
+        });
         return null;
       }
     } catch (error) {
@@ -820,7 +799,7 @@ const AIChat: React.FC<AIChatProps> = ({
                         color: message.role === 'assistant' 
                           ? 'text.primary' 
                           : 'primary.contrastText',
-                        borderRadius: 2,
+                        borderRadius: 1.4,
                       }}
                     >
                       {message.isSplit && message.chunks ? (
@@ -914,7 +893,17 @@ const AIChat: React.FC<AIChatProps> = ({
       <Box sx={{ 
         p: 2, 
         backgroundColor: 'background.default',
+        borderTop: 1,
+        borderColor: 'divider',
       }}>
+        {/* 応答スタイルセレクター */}
+        <Box sx={{ mb: 1.5 }}>
+          <ResponseStyleSelector
+            selectedStyle={responseStyle}
+            onStyleChange={setResponseStyle}
+          />
+        </Box>
+        
         <Stack direction="row" spacing={1} alignItems="flex-end">
           <TextField
             ref={inputRef}
@@ -929,7 +918,7 @@ const AIChat: React.FC<AIChatProps> = ({
             disabled={isLoading}
             sx={{
               '& .MuiOutlinedInput-root': {
-                borderRadius: 2,
+                borderRadius: 1.4,
               },
             }}
           />
@@ -941,7 +930,7 @@ const AIChat: React.FC<AIChatProps> = ({
               minWidth: 'auto',
               px: 2,
               py: 1.5,
-              borderRadius: 2,
+              borderRadius: 1.4,
             }}
           >
             <SendIcon />

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from typing import List, Optional
 from services.project_service import ProjectService
+from services.memo_service import MemoService
 from services.base import ServiceManager
 from routers.auth_router import get_current_user, get_supabase_client
 
@@ -41,10 +42,26 @@ class ProjectResponse(BaseModel):
     created_at: str
     updated_at: str
 
+class MemoCreate(BaseModel):
+    title: Optional[str] = None
+    content: str
+
+class MemoResponse(BaseModel):
+    id: int
+    project_id: int
+    title: Optional[str] = None
+    content: str
+    created_at: str
+    updated_at: str
+
 # 依存関数
 def get_project_service(current_user_id: int = Depends(get_current_user)) -> ProjectService:
     """プロジェクトサービス取得"""
     return service_manager.get_service(ProjectService, current_user_id)
+
+def get_memo_service(current_user_id: int = Depends(get_current_user)) -> MemoService:
+    """メモサービス取得"""
+    return service_manager.get_service(MemoService, current_user_id)
 
 # エンドポイント
 @router.post("", response_model=ProjectResponse)
@@ -159,37 +176,59 @@ async def get_project_context(
         "user_id": current_user_id
     }
 
-# ===============================================
-# レガシーエンドポイント（後方互換性のため維持）
-# ===============================================
-
-@router.get("/users/{user_id}/projects", response_model=List[ProjectResponse], deprecated=True)
-async def get_user_projects_legacy(
-    user_id: int,
+# プロジェクト関連メモエンドポイント
+@router.get("/{project_id}/memos", response_model=List[MemoResponse])
+async def get_project_memos(
+    project_id: int,
     current_user_id: int = Depends(get_current_user),
-    project_service: ProjectService = Depends(get_project_service)
+    memo_service: MemoService = Depends(get_memo_service)
 ):
-    """
-    [非推奨] ユーザーのプロジェクト一覧取得（レガシー版）
-    代わりに GET /projects を使用してください
-    """
-    # 自分のプロジェクトのみアクセス可能
-    if user_id != current_user_id:
-        raise HTTPException(status_code=403, detail="アクセス権限がありません")
-    
-    # 通常の get_user_projects に処理を委譲
-    projects = project_service.get_user_projects(current_user_id)
-    return [
-        ProjectResponse(
-            id=project["id"],
-            theme=project["theme"],
-            question=project["question"],
-            hypothesis=project["hypothesis"],
-            title=project["title"],
-            description=project["description"],
-            tags=project["tags"],
-            created_at=project["created_at"],
-            updated_at=project["updated_at"]
+    """プロジェクトのメモ一覧取得"""
+    try:
+        memos = memo_service.get_project_memos(project_id, current_user_id)
+        return [
+            MemoResponse(
+                id=memo["id"],
+                project_id=memo["project_id"],
+                title=memo["title"],
+                content=memo["content"],
+                created_at=memo["created_at"],
+                updated_at=memo["updated_at"]
+            )
+            for memo in memos
+        ]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get project memos: {str(e)}"
         )
-        for project in projects
-    ]
+
+@router.post("/{project_id}/memos", response_model=MemoResponse)
+async def create_project_memo(
+    project_id: int,
+    memo_data: MemoCreate,
+    current_user_id: int = Depends(get_current_user),
+    memo_service: MemoService = Depends(get_memo_service)
+):
+    """プロジェクトに新しいメモを作成"""
+    try:
+        memo = await memo_service.create_memo(
+            project_id=project_id,
+            user_id=current_user_id,
+            title=memo_data.title,
+            content=memo_data.content
+        )
+        return MemoResponse(
+            id=memo["id"],
+            project_id=memo["project_id"],
+            title=memo["title"],
+            content=memo["content"],
+            created_at=memo["created_at"],
+            updated_at=memo["updated_at"]
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create memo: {str(e)}"
+        )
+

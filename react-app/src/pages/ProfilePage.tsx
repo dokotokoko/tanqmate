@@ -349,7 +349,7 @@ const ProfilePage: React.FC = () => {
                               <LinearProgress 
                                 variant="determinate" 
                                 value={plan.progress} 
-                                sx={{ mt: 1, height: 6, borderRadius: 3 }}
+                                sx={{ mt: 1, height: 6, borderRadius: 2.1 }}
                               />
                             </Box>
                           }

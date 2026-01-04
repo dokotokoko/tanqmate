@@ -238,7 +238,7 @@ const ResultsSection: React.FC = () => {
               sx={{
                 p: { xs: 3, md: 6 },
                 background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
-                borderRadius: 4,
+                borderRadius: 2.8,
               }}
             >
               <Grid container spacing={4}>
@@ -328,28 +328,28 @@ const ResultsSection: React.FC = () => {
                     <Typography variant="body2">問題発見力</Typography>
                     <Typography variant="body2">85%</Typography>
                   </Box>
-                  <LinearProgress variant="determinate" value={85} sx={{ height: 8, borderRadius: 4 }} />
+                  <LinearProgress variant="determinate" value={85} sx={{ height: 8, borderRadius: 2.8 }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                     <Typography variant="body2">情報収集力</Typography>
                     <Typography variant="body2">78%</Typography>
                   </Box>
-                  <LinearProgress variant="determinate" value={78} sx={{ height: 8, borderRadius: 4 }} />
+                  <LinearProgress variant="determinate" value={78} sx={{ height: 8, borderRadius: 2.8 }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                     <Typography variant="body2">論理的思考力</Typography>
                     <Typography variant="body2">92%</Typography>
                   </Box>
-                  <LinearProgress variant="determinate" value={92} sx={{ height: 8, borderRadius: 4 }} />
+                  <LinearProgress variant="determinate" value={92} sx={{ height: 8, borderRadius: 2.8 }} />
                 </Box>
                 <Box sx={{ mb: 2 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                     <Typography variant="body2">創造的思考力</Typography>
                     <Typography variant="body2">88%</Typography>
                   </Box>
-                  <LinearProgress variant="determinate" value={88} sx={{ height: 8, borderRadius: 4 }} />
+                  <LinearProgress variant="determinate" value={88} sx={{ height: 8, borderRadius: 2.8 }} />
                 </Box>
               </Box>
             </Paper>

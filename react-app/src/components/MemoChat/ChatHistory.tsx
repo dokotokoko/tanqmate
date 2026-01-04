@@ -62,23 +62,11 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   const fetchConversations = async () => {
     setLoading(true);
     try {
-      // ユーザーIDを取得
-      let userId: string | null = null;
-      const authData = localStorage.getItem('auth-storage');
+      // JWTトークンを取得
+      const token = localStorage.getItem('auth-token');
       
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.state?.user?.id) {
-            userId = parsed.state.user.id;
-          }
-        } catch (e) {
-          console.error('認証データの解析に失敗:', e);
-        }
-      }
-
-      if (!userId) {
-        console.error('ユーザーIDが見つかりません');
+      if (!token) {
+        console.error('認証トークンが見つかりません');
         return;
       }
 
@@ -86,12 +74,12 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       console.log('🔍 API呼び出し開始:', {
         url: `${apiBaseUrl}/conversations?limit=50&is_active=true`,
-        userId: userId
+        token: token.substring(0, 20) + '...' // ログ用にトークンの一部のみ表示
       });
       
       const response = await fetch(`${apiBaseUrl}/conversations?limit=50&is_active=true`, {
         headers: {
-          'Authorization': `Bearer ${userId}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
       });
@@ -139,28 +127,17 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   // 会話のメッセージを取得
   const fetchConversationMessages = async (conversationId: string): Promise<any[]> => {
     try {
-      let userId: string | null = null;
-      const authData = localStorage.getItem('auth-storage');
+      const token = localStorage.getItem('auth-token');
       
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.state?.user?.id) {
-            userId = parsed.state.user.id;
-          }
-        } catch (e) {
-          console.error('認証データの解析に失敗:', e);
-        }
-      }
-
-      if (!userId) {
+      if (!token) {
+        console.error('認証トークンが見つかりません');
         return [];
       }
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/conversations/${conversationId}/messages?limit=200`, {
         headers: {
-          'Authorization': `Bearer ${userId}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
       });
@@ -181,27 +158,18 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   // 会話削除
   const handleDeleteConversation = async (conversationId: string) => {
     try {
-      let userId: string | null = null;
-      const authData = localStorage.getItem('auth-storage');
+      const token = localStorage.getItem('auth-token');
       
-      if (authData) {
-        try {
-          const parsed = JSON.parse(authData);
-          if (parsed.state?.user?.id) {
-            userId = parsed.state.user.id;
-          }
-        } catch (e) {
-          console.error('認証データの解析に失敗:', e);
-        }
+      if (!token) {
+        console.error('認証トークンが見つかりません');
+        return;
       }
-
-      if (!userId) return;
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/conversations/${conversationId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${userId}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
       });

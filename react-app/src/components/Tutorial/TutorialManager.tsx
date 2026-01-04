@@ -299,7 +299,7 @@ const TutorialManager: React.FC<TutorialManagerProps> = ({ children }) => {
             buttonNext: {
               backgroundColor: theme.palette.primary.main,
               color: theme.palette.primary.contrastText,
-              borderRadius: '8px',
+              borderRadius: '5.6px',
               padding: '8px 16px',
               fontSize: '14px',
               fontWeight: 600,
@@ -311,7 +311,7 @@ const TutorialManager: React.FC<TutorialManagerProps> = ({ children }) => {
               color: theme.palette.text.secondary,
               backgroundColor: 'transparent',
               border: `1px solid ${theme.palette.divider}`,
-              borderRadius: '8px',
+              borderRadius: '5.6px',
               padding: '8px 16px',
               fontSize: '14px',
               fontWeight: 600,
@@ -353,7 +353,7 @@ const TutorialManager: React.FC<TutorialManagerProps> = ({ children }) => {
               width: '50%',
             },
             spotlight: {
-              borderRadius: '8px',
+              borderRadius: '5.6px',
             },
             overlay: {
               mixBlendMode: 'hard-light',

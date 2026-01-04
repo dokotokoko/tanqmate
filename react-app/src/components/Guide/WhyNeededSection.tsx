@@ -80,7 +80,7 @@ const WhyNeededSection: React.FC = () => {
                 maxWidth: { xs: 600, sm: 700, md: 800 },
                 height: 'auto',
                 mt: 3,
-                borderRadius: 2,
+                borderRadius: 0,
                 boxShadow: 2,
               }}
             />

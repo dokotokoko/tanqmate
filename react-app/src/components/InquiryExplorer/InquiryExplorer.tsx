@@ -775,7 +775,7 @@ const InquiryExplorer: React.FC = () => {
                 }}
                 sx={{
                   '& .MuiInputBase-root': {
-                    borderRadius: 8,
+                    borderRadius: 5.6,
                     backgroundColor: 'rgba(0, 0, 0, 0.03)',
                   },
                 }}

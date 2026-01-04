@@ -29,6 +29,8 @@ class ChatMessage(BaseModel):
     session_type: str = "general"
     max_tokens: Optional[int] = 4096
     temperature: Optional[float] = 0.7
+    response_style: Optional[str] = "auto"  # 応答スタイルパラメータ追加
+    custom_instruction: Optional[str] = None  # カスタムスタイル用の指示
 
 class ChatResponse(BaseModel):
     response: str
@@ -94,7 +96,9 @@ async def chat_with_ai(
             message=chat_data.message,
             user_id=current_user_id,
             project_id=chat_data.project_id,
-            session_type=chat_data.session_type
+            session_type=chat_data.session_type,
+            response_style=chat_data.response_style,  # 応答スタイルを渡す
+            custom_instruction=chat_data.custom_instruction  # カスタム指示を渡す
         )
         
         return ChatResponse(
@@ -117,7 +121,12 @@ async def get_chat_history(
     current_user_id: int = Depends(get_current_user),
     chat_service: ChatService = Depends(get_chat_service)
 ):
-    """チャット履歴取得"""
+    """
+    チャット履歴取得
+    
+    認証が必要です。リクエストヘッダーにAuthorizationを含めてください:
+    Authorization: Bearer <your_jwt_token>
+    """
     try:
         history = chat_service.get_chat_history(current_user_id, limit)
         return [

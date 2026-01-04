@@ -205,7 +205,7 @@ const Layout: React.FC = () => {
                 if (isMobile) setMobileOpen(false);
               }}
               sx={{
-                borderRadius: 2,
+                borderRadius: 1.4,
                 '&.Mui-selected': {
                   background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
                   color: 'white',
@@ -308,7 +308,7 @@ const Layout: React.FC = () => {
                 }
               }}
               sx={{
-                borderRadius: 2,
+                borderRadius: 1.4,
                 justifyContent: 'center',
                 minHeight: 48,
                 '&.Mui-selected': {
