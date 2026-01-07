@@ -92,16 +92,9 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
         }
       }
       
-      // 代替認証: auth-tokenも試す
-      if (!userId && authToken) {
-        userId = authToken;
-        console.log('⚠️ auth-storageからuser_id取得失敗、auth-tokenを使用:', userId);
-      }
-
-      console.log('🆔 最終user_id:', userId);
-
-      if (!userId) {
-        console.error('ユーザーIDが見つかりません');
+      const token = localStorage.getItem('auth-token');
+      if (!token) {
+        console.error('認証トークンが見つかりません');
         return;
       }
 
@@ -110,7 +103,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/chat/history?limit=200`, {
         headers: {
-          'Authorization': `Bearer ${userId}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
       });
@@ -339,22 +332,14 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   // セッションクリア
   const handleClearSession = async (pageId: string) => {
     try {
-      let userId = null;
-      const authData = localStorage.getItem('auth-storage');
-      if (authData) {
-        const parsed = JSON.parse(authData);
-        if (parsed.state?.user?.id) {
-          userId = parsed.state.user.id;
-        }
-      }
-
-      if (!userId) return;
+      const token = localStorage.getItem('auth-token');
+      if (!token) return;
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/chat/history?page=${pageId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${userId}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
       });

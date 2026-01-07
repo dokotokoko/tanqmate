@@ -352,7 +352,7 @@ const MemoChat: React.FC<MemoChatProps> = ({
               width: '4px',
               height: '40px',
               backgroundColor: 'background.paper',
-              borderRadius: '2px',
+              borderRadius: '1.4px',
             }} />
           </PanelResizeHandle>
 
@@ -426,7 +426,7 @@ const MemoChat: React.FC<MemoChatProps> = ({
                             color: message.role === 'user'
                               ? 'primary.contrastText'
                               : 'text.primary',
-                            borderRadius: 2,
+                            borderRadius: 1.4,
                             position: 'relative',
                             boxShadow: 'none',
                             '&:hover .message-actions': {
@@ -492,7 +492,7 @@ const MemoChat: React.FC<MemoChatProps> = ({
                     variant="outlined"
                     sx={{
                       '& .MuiOutlinedInput-root': {
-                        borderRadius: 3,
+                        borderRadius: 2.1,
                       },
                     }}
                   />
@@ -682,7 +682,7 @@ const MemoChat: React.FC<MemoChatProps> = ({
                       color: message.role === 'user'
                         ? 'primary.contrastText'
                         : 'text.primary',
-                      borderRadius: 2,
+                      borderRadius: 1.4,
                       position: 'relative',
                       boxShadow: 'none',
                       '&:hover .message-actions': {
@@ -748,7 +748,7 @@ const MemoChat: React.FC<MemoChatProps> = ({
               variant="outlined"
               sx={{
                 '& .MuiOutlinedInput-root': {
-                  borderRadius: 3,
+                  borderRadius: 2.1,
                 },
               }}
             />
@@ -796,7 +796,7 @@ const TypingIndicator: React.FC = () => {
           p: 2,
           maxWidth: '80%',
           backgroundColor: 'background.paper',
-          borderRadius: 2,
+          borderRadius: 1.4,
         }}
       >
         <Box sx={{ display: 'flex', gap: 1 }}>

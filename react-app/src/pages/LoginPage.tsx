@@ -64,7 +64,7 @@ const FeatureCard = ({ icon, title, description, delay }: {
         textAlign: 'center',
         height: '100%',
         background: 'linear-gradient(145deg, rgba(255,152,0,0.05) 0%, rgba(255,193,7,0.05) 100%)',
-        borderRadius: 3,
+        borderRadius: 2.1,
         transition: 'all 0.3s ease',
         '&:hover': {
           transform: 'translateY(-8px)',
@@ -190,7 +190,7 @@ const LoginPage = () => {
           <Paper
             elevation={24}
             sx={{
-              borderRadius: 4,
+              borderRadius: 1.96,
               overflow: 'hidden',
               background: 'rgba(255,255,255,0.95)',
               backdropFilter: 'blur(20px)',

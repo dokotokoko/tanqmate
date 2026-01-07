@@ -32,14 +32,20 @@ class LLMSystemMetrics:
 class Phase1LLMManager:
     """
     Phase 1 LLMマネージャー
-    既存システムとの完全互換性を保ちながら、プール機能を段階的に導入
+    既存システムとの互換性を保ちながら段階導入するためのラッパー。
+    
+    方針（2026-01以降）:
+    - **LLM同時実行の制御は `backend/module/llm_api.py` のセマフォに統一**
+    - このクラスは「有効/無効フラグ」「メトリクス」「ヘルスチェック」「フォールバック」などの
+      付加価値に寄せる（独自の“クライアント複製プール”は作らない）
     """
     
     def __init__(self):
         # 設定値（環境変数から取得、デフォルトは安全な値）
+        # NOTE: 変数名は互換性のため残すが、"pool" は内部クライアント複製ではなく
+        #       `module.llm_api` の非同期クライアント利用を意味する。
         self.pool_enabled = os.environ.get("ENABLE_LLM_POOL", "false").lower() == "true"
-        self.pool_size = int(os.environ.get("LLM_POOL_SIZE", "5"))  # 控えめな初期値
-        self.pool_timeout = float(os.environ.get("LLM_POOL_TIMEOUT", "30.0"))
+        self.request_timeout = float(os.environ.get("LLM_POOL_TIMEOUT", "30.0"))
         
         # フォールバック設定
         self.auto_fallback = os.environ.get("LLM_AUTO_FALLBACK", "true").lower() == "true"
@@ -57,17 +63,15 @@ class Phase1LLMManager:
         # 既存のレガシークライアント（必須・常に利用可能）
         self.legacy_client: Optional[learning_plannner] = None
         
-        # プール関連（オプション）
-        self._pool_clients: List[learning_plannner] = []
-        self._pool_semaphore: Optional[asyncio.Semaphore] = None
-        self._current_pool_index = 0
+        # 非同期クライアント（`module.llm_api` のシングルトン）
+        self._async_client: Optional[Any] = None
         
         # メトリクス
         self.metrics = LLMSystemMetrics()
         
         logger.info(f"🔧 Phase1LLMManager初期化")
         logger.info(f"   プール有効: {self.pool_enabled}")
-        logger.info(f"   プールサイズ: {self.pool_size}")
+        logger.info(f"   プールサイズ: {int(os.environ.get('LLM_POOL_SIZE', '5'))} (module.llm_api semaphore)")
         logger.info(f"   自動フォールバック: {self.auto_fallback}")
     
     async def initialize(self, existing_legacy_client: Optional[learning_plannner] = None):
@@ -90,9 +94,12 @@ class Phase1LLMManager:
                 self.legacy_client = learning_plannner()
                 logger.info("✅ 新しいlegacy_clientを作成")
             
-            # プール機能の初期化（オプション）
             if self.pool_enabled:
-                await self._initialize_pool()
+                # `module.llm_api` の非同期クライアントを用意（同時実行制御はそこで統一）
+                from module.llm_api import get_async_llm_client
+                pool_size = int(os.environ.get("LLM_POOL_SIZE", "5"))
+                self._async_client = get_async_llm_client(pool_size=pool_size)
+                logger.info("✅ module.llm_api 非同期クライアントを使用（独自プールは作成しません）")
             else:
                 logger.info("ℹ️ プール機能は無効です（従来システムのみ使用）")
             
@@ -109,35 +116,6 @@ class Phase1LLMManager:
             else:
                 raise
     
-    async def _initialize_pool(self):
-        """プール機能の初期化"""
-        try:
-            logger.info(f"🏊 プール初期化開始 (サイズ: {self.pool_size})")
-            
-            # セマフォ初期化
-            self._pool_semaphore = asyncio.Semaphore(self.pool_size)
-            
-            # プールクライアント作成
-            for i in range(self.pool_size):
-                try:
-                    client = learning_plannner()
-                    self._pool_clients.append(client)
-                    logger.debug(f"   プールクライアント {i+1}/{self.pool_size} 作成完了")
-                except Exception as e:
-                    logger.warning(f"   プールクライアント {i+1} 作成失敗: {e}")
-                    # 一部失敗してもプール全体は利用可能
-            
-            if len(self._pool_clients) == 0:
-                logger.warning("⚠️ プールクライアントを1つも作成できませんでした")
-                self.pool_enabled = False
-            else:
-                logger.info(f"✅ プール初期化完了 ({len(self._pool_clients)}/{self.pool_size}個のクライアント)")
-                
-        except Exception as e:
-            logger.error(f"❌ プール初期化エラー: {e}")
-            self.pool_enabled = False
-            raise
-    
     def should_use_pool(self) -> bool:
         """
         プールを使用すべきかを判定
@@ -153,7 +131,7 @@ class Phase1LLMManager:
                 logger.debug("🔄 プールが不健全なためlegacy_clientを使用")
             return False
         
-        if len(self._pool_clients) == 0:
+        if self._async_client is None:
             return False
         
         return True
@@ -249,36 +227,24 @@ class Phase1LLMManager:
                                                  (1 - alpha) * self.metrics.avg_response_time)
     
     async def _generate_with_pool(self, messages: List[Dict[str, str]]) -> str:
-        """プールシステムでの応答生成"""
-        if not self._pool_semaphore or len(self._pool_clients) == 0:
-            raise Exception("プールが初期化されていません")
-        
-        # セマフォで同時実行数を制御
-        async with self._pool_semaphore:
-            # ラウンドロビンでクライアントを選択
-            client_index = self._current_pool_index % len(self._pool_clients)
-            self._current_pool_index += 1
-            
-            client = self._pool_clients[client_index]
-            
-            # 非同期実行
-            response = await asyncio.wait_for(
-                asyncio.to_thread(client.generate_response, messages),
-                timeout=self.pool_timeout
-            )
-            
-            return response
+        """互換のため残すが、内部プールは廃止。`module.llm_api` の非同期クライアントで処理する。"""
+        if self._async_client is None:
+            raise Exception("非同期クライアントが初期化されていません")
+
+        resp = await asyncio.wait_for(
+            self._async_client.generate_response_async(messages),
+            timeout=self.request_timeout
+        )
+        return self._async_client.extract_output_text(resp)
     
     async def _generate_with_legacy(self, messages: List[Dict[str, str]]) -> str:
         """レガシーシステムでの応答生成（既存と完全同一）"""
         if self.legacy_client is None:
             raise Exception("legacy_clientが初期化されていません")
         
-        # 既存のコードと完全に同じ処理
-        return await asyncio.to_thread(
-            self.legacy_client.generate_response,
-            messages
-        )
+        # 同期SDK呼び出しを event loop から切り離し、最後にテキストを抽出して返す
+        resp = await asyncio.to_thread(self.legacy_client.generate_response, messages)
+        return self.legacy_client.extract_output_text(resp)
     
     def get_metrics(self) -> Dict[str, Any]:
         """メトリクス情報を取得"""

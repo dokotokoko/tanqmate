@@ -147,7 +147,7 @@ const DashboardPage: React.FC = () => {
       }
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/users/${token}/projects`, {
+      const response = await fetch(`${apiBaseUrl}/projects`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -382,7 +382,7 @@ const DashboardPage: React.FC = () => {
                 '&:hover': {
                   background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
                 },
-                borderRadius: 2,
+                borderRadius: 1.4,
                 px: { xs: 2, sm: 3 },
                 py: 1.5,
                 fontSize: { xs: '0.875rem', sm: '1rem' },
@@ -483,7 +483,7 @@ const DashboardPage: React.FC = () => {
                   '&:hover': {
                     background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
                   },
-                  borderRadius: 2,
+                  borderRadius: 1.4,
                   px: { xs: 3, sm: 4 },
                   py: { xs: 1.5, sm: 2 },
                   fontSize: { xs: '0.875rem', sm: '1rem' },

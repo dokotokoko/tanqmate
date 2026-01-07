@@ -496,7 +496,7 @@ const QuestBoardPage: React.FC = () => {
                           <LinearProgress 
                             variant="determinate" 
                             value={quest.progress} 
-                            sx={{ height: 8, borderRadius: 4 }}
+                            sx={{ height: 8, borderRadius: 2.8 }}
                           />
                         </Box>
                       )}
@@ -595,7 +595,7 @@ const QuestBoardPage: React.FC = () => {
                       <LinearProgress 
                         variant="determinate" 
                         value={selectedQuest.progress} 
-                        sx={{ height: 10, borderRadius: 5 }}
+                        sx={{ height: 10, borderRadius: 3.5 }}
                       />
                     </Box>
                   )}

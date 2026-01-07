@@ -6,6 +6,7 @@ from typing import List, Optional, Dict, Any
 from uuid import UUID
 import json
 import logging
+import asyncio
 
 from fastapi import HTTPException, Depends, status
 from pydantic import BaseModel, Field
@@ -97,7 +98,10 @@ class ConversationManager:
             if title:
                 conversation_data["title"] = title
             
-            result = self.supabase.table("chat_conversations").insert(conversation_data).execute()
+            # 同期的なSupabase呼び出しを非同期ラップ
+            result = await asyncio.to_thread(
+                lambda: self.supabase.table("chat_conversations").insert(conversation_data).execute()
+            )
             
             if result.data:
                 return result.data[0]["id"]
@@ -107,6 +111,8 @@ class ConversationManager:
                     detail="会話の作成に失敗しました"
                 )
                 
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"会話作成エラー: {e}")
             raise HTTPException(
@@ -126,31 +132,37 @@ class ConversationManager:
             ConversationResponse or None
         """
         try:
-            # 会話情報を取得
-            result = self.supabase.table("chat_conversations")\
-                .select("*")\
-                .eq("id", conversation_id)\
-                .eq("user_id", user_id)\
+            # 会話情報を取得（非同期ラップ）
+            result = await asyncio.to_thread(
+                lambda: self.supabase.table("chat_conversations")
+                .select("*")
+                .eq("id", conversation_id)
+                .eq("user_id", user_id)
                 .execute()
+            )
             
             if not result.data:
                 return None
             
             conversation = result.data[0]
             
-            # メッセージ数と最新メッセージを取得
-            messages_result = self.supabase.table("chat_logs")\
-                .select("id, message, created_at")\
-                .eq("conversation_id", conversation_id)\
-                .order("created_at", desc=True)\
-                .limit(1)\
+            # メッセージ数と最新メッセージを取得（非同期ラップ）
+            messages_result = await asyncio.to_thread(
+                lambda: self.supabase.table("chat_logs")
+                .select("id, message, created_at")
+                .eq("conversation_id", conversation_id)
+                .order("created_at", desc=True)
+                .limit(1)
                 .execute()
+            )
             
             # メッセージカウントを取得（別クエリで実行）
-            count_result = self.supabase.table("chat_logs")\
-                .select("id", count="exact")\
-                .eq("conversation_id", conversation_id)\
+            count_result = await asyncio.to_thread(
+                lambda: self.supabase.table("chat_logs")
+                .select("id", count="exact")
+                .eq("conversation_id", conversation_id)
                 .execute()
+            )
             
             message_count = count_result.count if count_result else 0
             last_message = None
@@ -422,4 +434,41 @@ class ConversationManager:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"メッセージの取得に失敗しました: {str(e)}"
+            )
+    
+    async def get_or_create_global_session(self, user_id: int) -> str:
+        """
+        ユーザーのグローバルチャットセッションを取得または作成
+        
+        Args:
+            user_id: ユーザーID
+        
+        Returns:
+            conversation_id: 会話ID
+        """
+        try:
+            # 最新のアクティブな会話を取得
+            result = await self.list_conversations(
+                user_id=user_id,
+                limit=1,
+                offset=0,
+                is_active=True
+            )
+            
+            if result.conversations:
+                # 既存の会話がある場合はそれを返す
+                return result.conversations[0].id
+            else:
+                # 新しい会話を作成
+                return await self.create_conversation(
+                    user_id=user_id,
+                    title="AIチャットセッション",
+                    metadata={"session_type": "global_chat", "auto_created": True}
+                )
+                
+        except Exception as e:
+            logger.error(f"グローバルセッション取得/作成エラー: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"グローバルセッションの取得に失敗しました: {str(e)}"
             )

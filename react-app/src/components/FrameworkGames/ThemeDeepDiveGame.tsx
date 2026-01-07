@@ -364,7 +364,7 @@ const ThemeDeepDiveGame: React.FC = () => {
 
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Paper elevation={3} sx={{ p: 4, borderRadius: 3 }}>
+      <Paper elevation={3} sx={{ p: 4, borderRadius: 2.1 }}>
         <Typography variant="h4" component="h1" gutterBottom align="center">
           探究テーマ深掘りツリー
         </Typography>
@@ -523,7 +523,7 @@ const ThemeDeepDiveGame: React.FC = () => {
                         elevation={8}
                         sx={{
                           p: 3,
-                          borderRadius: 2,
+                          borderRadius: 1.4,
                           minWidth: 250,
                           maxWidth: 400,
                           display: 'flex',
@@ -748,7 +748,7 @@ const ThemeDeepDiveGame: React.FC = () => {
 
                   {/* プロフィールベースのヒント */}
                   {userProfile.interests.length > 0 && (
-                    <Box sx={{ mt: 4, p: 2, bgcolor: 'info.light', borderRadius: 2 }}>
+                    <Box sx={{ mt: 4, p: 2, bgcolor: 'info.light', borderRadius: 1.4 }}>
                       <Typography variant="body2" color="info.dark">
                         💡 ヒント: あなたの興味（{userProfile.interests.slice(0, 3).join('、')}）
                         に関連する視点も考慮されています
@@ -790,7 +790,7 @@ const ThemeDeepDiveGame: React.FC = () => {
             </Box>
 
             {/* 探究の深さ表示 */}
-            <Box sx={{ mt: 4, p: 2, bgcolor: 'background.default', borderRadius: 2 }}>
+            <Box sx={{ mt: 4, p: 2, bgcolor: 'background.default', borderRadius: 1.4 }}>
               <Typography variant="body2" color="text.secondary" align="center">
                 現在の探究の深さ: {path.length} / 推奨: 5〜7層
               </Typography>

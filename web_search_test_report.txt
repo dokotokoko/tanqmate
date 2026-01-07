@@ -1,0 +1,61 @@
+
+================================================================================
+OpenAI Responses API Web検索機能 テストレポート
+================================================================================
+
+📊 テスト結果サマリー:
+  総テスト数: 6
+  成功: 6
+  失敗: 0
+  成功率: 100.0%
+
+📋 詳細結果:
+
+✅ basic_web_search: PASS
+  詳細:
+    search_executed: True
+    execution_time: 83.97
+    output_text: 以下は**今月（2025年12月）**の主なAI技術ニュースの整理です（日本語で読める一次情報も混ぜています）。
+
+## 1) OpenAI：GPT-5.2／GPT-5.2-Codex を公開（12/11・12/18）
+- **12月11日**：OpenAIが **GPT‑5.2** を発表。推論性能や信頼性の改善に加え、段階的な提供・APIでのモデル名（`gpt-5.2` など）も案内されています。 ([openai.com](https://openai.com/index/introducing-gpt-5-2/?utm_source=openai))  
+- **12月18日**：エージェント型コーディング向けの **GPT‑5.2‑Codex** を発表。長期タスク、リファクタ/移行、Windows環境、（防御寄りの）サイバー用途での強化をうたっています。 ([openai.com](https://openai.com/index/introducing-gpt-5-2-codex/?utm_source=openai))  
+- 同日付で安全面の更新（System Car...
+
+✅ user_location: PASS
+  詳細:
+    japanese_content_ratio: 0.373
+    response_preview: **2025年12月28日（日）時点の「今日のニュース」ハイライト**（日本時間想定）
+
+## 日本（国内）
+- **関越道で多重事故の影響続く**：群馬県みなかみ町付近で多数の車が絡む事故が発生し、復旧作業が続き、一部区間で通行止めが続いていると報じられています。 ([datazoo.jp](https://datazoo.jp/tv/NHK%E3%83%8B%E3%83%A5%E3%83%BC%E3%82%B9%2B%E3%81%8A%E3%81%AF%E3%82%88%E3%81%86%E6%97%A5%E6%9C%AC/1838717?utm_source=openai))  
+- *...
+
+✅ forced_tool_use: PASS
+  詳細:
+    search_forced: True
+    response: 2025年**12月（今月）**のAI技術ニュース（主に「モデル」「半導体」「規制」）を、Web検索ベースで重要どころをまとめます。※今日は **2025年12月28日** です。
+
+## 1) OpenAIが GPT‑5.2 を発表（12/11）
+OpenAIが **GPT‑5.2** を公開。長いマルチステップ作業や「長時間動くエージェント」用途を強く意識したアップデートで、推論（Thinki...
+
+✅ output_structure: PASS
+  詳細:
+    output_items: [{'type': 'web_search_call', 'id': 'ws_0df46ecc49d19340006950a556c2c8819aba47aa79e4f6bafc', 'status': 'completed'}, {'type': 'web_search_call', 'id': 'ws_0df46ecc49d19340006950a559ba38819ab7b63814245e370b', 'status': 'completed'}, {'type': 'web_search_call', 'id': 'ws_0df46ecc49d19340006950a55e7324819abd4c5346402e4ca0', 'status': 'completed'}, {'type': 'message', 'id': 'msg_0df46ecc49d19340006950a5613120819ab871cccbd96cc0e9', 'role': 'assistant'}]
+    has_web_search_call: True
+    has_message: True
+    output_text_length: 1695
+
+✅ annotation_fields: PASS
+  詳細:
+    citations_found: 5
+    valid_citations: 5
+    citation_details: [{'index': 0, 'url': 'https://openai.com/index/introducing-gpt-5-2/?utm_source=openai', 'title': 'Introducing GPT-5.2 | OpenAI...', 'start_index': 200, 'end_index': 279, 'is_valid': True, 'errors': []}, {'index': 1, 'url': 'https://openai.com/bn-BD/index/gpt-5-system-card-update-gpt-5-2/?utm_source=openai', 'title': 'Update to GPT-5 System Card: GPT-5.2 | OpenAI...', 'start_index': 334, 'end_index': 432, 'is_valid': True, 'errors': []}, {'index': 2, 'url': 'https://openai.com/index/introducing-gpt-5-2-codex/?utm_source=openai', 'title': 'Introducing GPT-5.2-Codex | OpenAI...', 'start_index': 588, 'end_index': 673, 'is_valid': True, 'errors': []}, {'index': 3, 'url': 'https://blog.google/products/search/google-ai-mode-update-gemini-3-flash?utm_source=openai', 'title': 'AI Mode update: Gemini 3 Flash, Nano Banana Pro...', 'start_index': 832, 'end_index': 939, 'is_valid': True, 'errors': []}, {'index': 4, 'url': 'https://www.reuters.com/business/nvidia-buy-ai-chip-startup-groq-about-20-billion-cnbc-reports-2025-12-24/?utm_source=openai', 'title': 'Nvidia, joining Big Tech deal spree, to license Groq technology, hire executives...', 'start_index': 1161, 'end_index': 1302, 'is_valid': True, 'errors': []}]
+
+✅ citation_text_mapping: PASS
+  詳細:
+    debug_info: [詳細データ省略]
+    output_text_length: 2647
+    citations_found: 9
+    citations_mapped: 9
+    mapping_results: [{'citation_index': 0, 'url': 'https://aaif.io/news/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation-aaif-anchored-by-new-project-contributions-including-model-context-protocol-mcp-goose-and-agents-md/?utm_source=openai', 'title': 'Linux Foundation Announces the Formation of the Ag...', 'cited_text': '([aaif.io](https://aaif.io/news/linux-foundation-announces-the-formation-of-the-agentic-ai-foundatio...', 'text_length': 222, 'is_valid_mapping': True, 'source': 'unknown'}, {'citation_index': 1, 'url': 'https://openai.com/index/introducing-gpt-5-2-codex/?utm_source=openai', 'title': 'Introducing GPT-5.2-Codex | OpenAI', 'cited_text': '([openai.com](https://openai.com/index/introducing-gpt-5-2-codex/?utm_source=openai))', 'text_length': 85, 'is_valid_mapping': True, 'source': 'unknown'}, {'citation_index': 2, 'url': 'https://openai.com/index/gpt-5-2-codex-system-card/?utm_source=openai', 'title': 'Addendum to GPT-5.2 System Card: GPT-5.2-Codex | O...', 'cited_text': '([openai.com](https://openai.com/index/gpt-5-2-codex-system-card/?utm_source=openai))', 'text_length': 85, 'is_valid_mapping': True, 'source': 'unknown'}]

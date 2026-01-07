@@ -267,7 +267,7 @@ export const MemoEditor: React.FC<MemoEditorProps> = ({
             minHeight: '300px',
             padding: '16px',
             border: '1px solid #ccc',
-            borderRadius: '4px',
+            borderRadius: '2.8px',
             fontFamily: 'monospace',
             fontSize: '14px',
             lineHeight: '1.6',

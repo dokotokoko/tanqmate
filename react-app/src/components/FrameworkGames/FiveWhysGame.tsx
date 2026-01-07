@@ -30,7 +30,7 @@ const FiveWhysGame: React.FC = () => {
 
   return (
     <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-      <Paper elevation={3} sx={{ p: 4, borderRadius: 3 }}>
+      <Paper elevation={3} sx={{ p: 4, borderRadius: 2.1 }}>
         <Typography variant="h4" component="h1" gutterBottom align="center">
           5-Whys ゲーム
         </Typography>

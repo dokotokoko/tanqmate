@@ -181,7 +181,7 @@ const QuestSuggestion: React.FC = () => {
   if (loading) {
     return (
       <Box sx={{ p: 2 }}>
-        <Card sx={{ bgcolor: 'rgba(5, 155, 255, 0.05)', borderRadius: 2 }}>
+        <Card sx={{ bgcolor: 'rgba(5, 155, 255, 0.05)', borderRadius: 1.4 }}>
           <CardContent sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <EmojiEvents color="primary" sx={{ fontSize: 20 }} />
@@ -201,7 +201,7 @@ const QuestSuggestion: React.FC = () => {
   if (error) {
     return (
       <Box sx={{ p: 2 }}>
-        <Card sx={{ bgcolor: 'rgba(255, 193, 7, 0.05)', borderRadius: 2, border: '1px solid rgba(255, 193, 7, 0.2)' }}>
+        <Card sx={{ bgcolor: 'rgba(255, 193, 7, 0.05)', borderRadius: 1.4, border: '1px solid rgba(255, 193, 7, 0.2)' }}>
           <CardContent sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <EmojiEvents color="warning" sx={{ fontSize: 20 }} />
@@ -231,7 +231,7 @@ const QuestSuggestion: React.FC = () => {
       <Card 
         sx={{ 
           bgcolor: 'rgba(5, 155, 255, 0.05)',
-          borderRadius: 2,
+          borderRadius: 1.4,
           border: '1px solid rgba(5, 155, 255, 0.2)',
         }}
       >
@@ -342,7 +342,7 @@ const QuestSuggestion: React.FC = () => {
                             <LinearProgress 
                               variant="determinate" 
                               value={quest.progress} 
-                              sx={{ height: 4, borderRadius: 2, mt: 0.5 }}
+                              sx={{ height: 4, borderRadius: 1.4, mt: 0.5 }}
                             />
                           )}
                         </>

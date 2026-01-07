@@ -130,7 +130,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onGetStarted, onLearnMore }) 
                       py: 2,
                       fontSize: '1.1rem',
                       fontWeight: 700,
-                      borderRadius: 25,
+                      borderRadius: 17.5,
                       transition: 'all 0.3s ease',
                     }}
                   >
@@ -153,7 +153,7 @@ const HeroSection: React.FC<HeroSectionProps> = ({ onGetStarted, onLearnMore }) 
                       py: 2,
                       fontSize: '1.1rem',
                       fontWeight: 600,
-                      borderRadius: 25,
+                      borderRadius: 17.5,
                       transition: 'all 0.3s ease',
                     }}
                   >

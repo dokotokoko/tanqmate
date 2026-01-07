@@ -87,14 +87,14 @@ function App() {
       },
     },
     shape: {
-      borderRadius: 20,
+      borderRadius: 14,
     },
     components: {
       MuiButton: {
         styleOverrides: {
           root: {
             textTransform: 'none',
-            borderRadius: 20,
+            borderRadius: 14,
             fontWeight: 600,
             padding: '10px 24px',
             transition: 'all 0.3s ease',
@@ -109,7 +109,7 @@ function App() {
         styleOverrides: {
           root: {
             boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-            borderRadius: 24,
+            borderRadius: 16.8,
           },
         },
       },
@@ -117,7 +117,7 @@ function App() {
         styleOverrides: {
           root: {
             '& .MuiOutlinedInput-root': {
-              borderRadius: 20,
+              borderRadius: 14,
               transition: 'all 0.3s ease',
               '&:hover': {
                 '& .MuiOutlinedInput-notchedOutline': {
@@ -161,7 +161,7 @@ function App() {
               <Route 
                 path="/login" 
                 element={
-                  user ? <Navigate to="/chat" replace /> : 
+                  user ? <Navigate to="/dashboard" replace /> : 
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -175,7 +175,7 @@ function App() {
               
               {/* アプリケーション本体（認証必要） */}
               <Route path="/app" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                <Route index element={<Navigate to="/chat" replace />} />
+                <Route index element={<Navigate to="/dashboard" replace />} />
               </Route>
               
               {/* InquiryExplorer - サイドバーなしのフルスクリーン */}

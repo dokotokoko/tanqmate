@@ -74,7 +74,7 @@ const ImpactFeasibilityGame: React.FC = () => {
 
   return (
     <Container maxWidth="md" sx={{ mt: 4, mb: 4 }}>
-      <Paper elevation={3} sx={{ p: 4, borderRadius: 3 }}>
+      <Paper elevation={3} sx={{ p: 4, borderRadius: 2.1 }}>
         <Typography variant="h4" component="h1" gutterBottom align="center">
           インパクト × 実現可能性マトリクス
         </Typography>
@@ -84,7 +84,7 @@ const ImpactFeasibilityGame: React.FC = () => {
 
         <Grid container spacing={4}>
           <Grid item xs={12} md={4}>
-            <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 2 }}>
+            <Box sx={{ p: 2, border: '1px solid #e0e0e0', borderRadius: 1.4 }}>
               <Typography variant="h6" gutterBottom>
                 アイデアを追加
               </Typography>
@@ -132,7 +132,7 @@ const ImpactFeasibilityGame: React.FC = () => {
               </Button>
 
               {selectedIdea && (
-                <Box sx={{ mt: 3, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                <Box sx={{ mt: 3, p: 2, bgcolor: 'background.default', borderRadius: 0.7 }}>
                   <Typography variant="subtitle1" gutterBottom>
                     選択中のアイデア:
                   </Typography>
@@ -194,7 +194,7 @@ const ImpactFeasibilityGame: React.FC = () => {
                 width: '100%',
                 height: 400,
                 border: '1px solid #ccc',
-                borderRadius: 1,
+                borderRadius: 0.7,
                 overflow: 'hidden',
               }}
             >

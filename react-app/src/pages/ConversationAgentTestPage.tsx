@@ -61,9 +61,9 @@ const ConversationAgentTestPage: React.FC = () => {
       console.log('================== 対話エージェント処理開始 ==================');
       console.log('📝 ユーザーメッセージ:', message);
       
-      const userId = user?.id;
-      if (!userId) {
-        throw new Error('ユーザーIDが見つかりません');
+      const token = localStorage.getItem('auth-token');
+      if (!token) {
+        throw new Error('認証トークンが見つかりません');
       }
 
       console.log('📋 プロジェクト情報:', {
@@ -79,7 +79,7 @@ const ConversationAgentTestPage: React.FC = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${userId}`,
+          'Authorization': `Bearer ${token}`,
         },
         credentials: 'include',
         body: JSON.stringify({
