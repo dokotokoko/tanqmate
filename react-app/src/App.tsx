@@ -26,6 +26,8 @@ const NotificationDemoPage = lazy(() => import('./pages/NotificationDemoPage'));
 const ThemeDeepDiveGame = lazy(() => import('./components/FrameworkGames/ThemeDeepDiveGame'));
 const ConversationAgentTestPage = lazy(() => import('./pages/ConversationAgentTestPage'));
 const InquiryExplorer = lazy(() => import('./components/InquiryExplorer/InquiryExplorer'));
+const VibesTanqOnboarding = lazy(() => import('./pages/VibesTanqOnboarding'));
+const VibesTanqDashboard = lazy(() => import('./pages/VibesTanqDashboard'));
 
 // import QuestBoardPage from './pages/QuestBoardPage'; // 一時的に非表示
 
@@ -209,6 +211,8 @@ function App() {
                 <Route path="framework-games/theme-deep-dive" element={<LazyWrapper><ThemeDeepDiveGame /></LazyWrapper>} />
                 <Route path="conversation-agent-test" element={<LazyWrapper><ConversationAgentTestPage /></LazyWrapper>} />
                 <Route path="notification-demo" element={<LazyWrapper><NotificationDemoPage /></LazyWrapper>} />
+                <Route path="vibes-tanq/onboarding" element={<LazyWrapper><VibesTanqOnboarding /></LazyWrapper>} />
+                <Route path="vibes-tanq/dashboard" element={<LazyWrapper><VibesTanqDashboard /></LazyWrapper>} />
               </Route>
               
               {/* 未定義ルートのフォールバック */}
