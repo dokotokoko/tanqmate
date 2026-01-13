@@ -27,6 +27,14 @@ import { useChatStore } from '../../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
 import { useAIChatMessages } from '../../hooks/useAIChatMessages';
 import ResponseStyleSelector, { ResponseStyle } from './ResponseStyleSelector';
+import QuestCards from './QuestCards';
+
+interface QuestCard {
+  id: string;
+  label: string;
+  emoji: string;
+  color: 'teal' | 'yellow' | 'purple' | 'pink' | 'green';
+}
 
 interface Message {
   id: string;
@@ -37,6 +45,8 @@ interface Message {
   chunks?: string[];
   isSplit?: boolean;
   originalLength?: number;
+  // クエストカード
+  questCards?: QuestCard[];
 }
 
 interface AIChatProps {
@@ -113,6 +123,42 @@ const AIChat: React.FC<AIChatProps> = ({
   // デフォルトの初期メッセージを返す関数
   const getDefaultInitialMessage = (): string => {
     return AI_INITIAL_MESSAGE;
+  };
+
+  // デフォルトのクエストカードを返す関数
+  const getDefaultQuestCards = (): QuestCard[] => {
+    return [
+      {
+        id: 'organize-thoughts',
+        label: '自分の考えを整理する',
+        emoji: '💭',
+        color: 'yellow',
+      },
+      {
+        id: 'research-info',
+        label: '情報を調べる',
+        emoji: '🔍',
+        color: 'teal',
+      },
+      {
+        id: 'ask-people',
+        label: '人に聞いてみる',
+        emoji: '🎤',
+        color: 'purple',
+      },
+      {
+        id: 'make-hypothesis',
+        label: '仮説を立ててみる',
+        emoji: '📝',
+        color: 'pink',
+      },
+      {
+        id: 'find-data',
+        label: 'データを探す',
+        emoji: '📊',
+        color: 'green',
+      },
+    ];
   };
 
   // スクロール位置の監視
@@ -235,6 +281,7 @@ const AIChat: React.FC<AIChatProps> = ({
             role: 'assistant',
             content: getDefaultInitialMessage(),
             timestamp: new Date(),
+            questCards: getDefaultQuestCards(),
           };
           setMessages([initialMessage]);
         } else {
@@ -285,6 +332,7 @@ const AIChat: React.FC<AIChatProps> = ({
         role: 'assistant',
         content: getDefaultInitialMessage(),
         timestamp: new Date(),
+        questCards: getDefaultQuestCards(),
       });
     }
     
@@ -309,6 +357,12 @@ const AIChat: React.FC<AIChatProps> = ({
   }, [messages, isUserScrolling, shouldAutoScroll, setManagedTimeout]);
 
 
+
+  // クエストカードクリック処理
+  const handleQuestCardClick = (cardId: string, cardLabel: string) => {
+    setInputValue(cardLabel);
+    // 自動送信は行わず、ユーザーが送信ボタンを押すかEnterキーを押すまで待機
+  };
 
   // メッセージ送信処理（二重送信防止付き）
   const isSendingRef = useRef(false);
@@ -607,6 +661,7 @@ const AIChat: React.FC<AIChatProps> = ({
       role: 'assistant',
       content: messageContent,
       timestamp: new Date(),
+      questCards: getDefaultQuestCards(),
     };
     addMessage(initialMsg);
   };
@@ -649,6 +704,25 @@ const AIChat: React.FC<AIChatProps> = ({
     }
   }, [messages, scrollToBottomIfNeeded]);
   
+  // カスタムイベントリスナーの設定
+  useEffect(() => {
+    const handleNewChatRequest = () => {
+      handleNewChat();
+    };
+
+    const handleHistoryOpenRequest = () => {
+      setIsHistoryOpen(true);
+    };
+
+    window.addEventListener('newChatRequest', handleNewChatRequest);
+    window.addEventListener('historyOpenRequest', handleHistoryOpenRequest);
+
+    return () => {
+      window.removeEventListener('newChatRequest', handleNewChatRequest);
+      window.removeEventListener('historyOpenRequest', handleHistoryOpenRequest);
+    };
+  }, [handleNewChat]);
+
   // コンポーネントアンマウント時のクリーンアップ
   useEffect(() => {
     return () => {
@@ -668,51 +742,8 @@ const AIChat: React.FC<AIChatProps> = ({
       height: '100%', 
       display: 'flex', 
       flexDirection: 'column',
-      backgroundColor: 'background.default',
+      backgroundColor: '#FFFAED', // Soft butter background from mockup
     }}>
-      {/* ヘッダー */}
-      <Box sx={{ 
-        p: 1, 
-        backgroundColor: 'background.default',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <IconButton 
-            onClick={() => setIsHistoryOpen(true)} 
-            size="small" 
-            title="対話履歴を表示"
-            sx={{ color: 'primary.main' }}
-          >
-            <HistoryIcon />
-          </IconButton>
-          <IconButton 
-            onClick={handleNewChat} 
-            size="small" 
-            title="新しいチャットを開始"
-            sx={{ color: 'primary.main' }}
-          >
-            <AddIcon />
-          </IconButton>
-          {persistentMode && (
-            <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-            </Typography>
-          )}
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {showMemoButton && !hideMemoButton && onOpenMemo && (
-            <IconButton onClick={onOpenMemo} size="small" title="メモ帳を開く">
-              <MemoIcon />
-            </IconButton>
-          )}
-          {onClose && (
-            <IconButton onClick={onClose} size="small">
-              <CloseIcon />
-            </IconButton>
-          )}
-        </Box>
-      </Box>
 
       {/* メッセージリスト */}
       <Box 
@@ -720,7 +751,14 @@ const AIChat: React.FC<AIChatProps> = ({
         sx={{ 
           flex: 1, 
           overflow: 'auto',
-          p: 1,
+          p: '32px 24px',
+          paddingBottom: '140px', // フローティング入力島のためのスペース
+          // スクロールバーを非表示
+          '&::-webkit-scrollbar': {
+            display: 'none',
+          },
+          '-ms-overflow-style': 'none',
+          'scrollbar-width': 'none',
         }}
       >
         <List sx={{ py: 0 }}>
@@ -760,27 +798,45 @@ const AIChat: React.FC<AIChatProps> = ({
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: 2,
-                    py: 2,
-                    px: 1,
+                    py: 0,
+                    px: 0,
+                    flexDirection: message.role === 'user' ? 'row-reverse' : 'row',
                   }}
                 >
                   <Avatar
                     sx={{
-                      bgcolor: message.role === 'assistant' ? 'primary.main' : 'secondary.main',
+                      background: message.role === 'assistant' 
+                        ? 'linear-gradient(135deg, #FF8C5A, #FFD166)' 
+                        : '#D8D4CE',
                       width: 36,
                       height: 36,
+                      boxShadow: message.role === 'assistant' 
+                        ? '0 2px 8px rgba(255, 140, 90, 0.3)'
+                        : 'none',
+                      borderRadius: '12px',
+                      fontSize: '16px',
                     }}
                   >
-                    {message.role === 'assistant' ? <AIIcon /> : <PersonIcon />}
+                    {message.role === 'assistant' ? '🔥' : '👤'}
                   </Avatar>
                   
-                  <Box sx={{ flex: 1 }}>
+                  <Box sx={{ 
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: message.role === 'user' ? 'flex-end' : 'flex-start',
+                  }}>
                     <Typography
                       variant="body2"
                       color="text.secondary"
-                      sx={{ mb: 0.5 }}
+                      sx={{ 
+                        mb: 0.5,
+                        textAlign: message.role === 'user' ? 'right' : 'left',
+                        fontSize: '11px',
+                        color: '#9E9891',
+                      }}
                     >
-                      {message.role === 'assistant' ? 'AI アシスタント' : 'あなた'} • {(() => {
+                      {message.role === 'assistant' ? '探Qメイト' : 'あなた'} • {(() => {
                         try {
                           return formatTime(message.timestamp);
                         } catch (error) {
@@ -792,14 +848,25 @@ const AIChat: React.FC<AIChatProps> = ({
                     
                     <Box
                       sx={{
-                        p: 2,
-                        backgroundColor: message.role === 'assistant' 
-                          ? 'background.paper' 
-                          : 'primary.light',
+                        p: '16px 20px',
+                        background: message.role === 'assistant' 
+                          ? 'linear-gradient(135deg, #FFFBF5, #FFF6E8)' 
+                          : '#FFFDF7',
+                        border: message.role === 'assistant'
+                          ? '1px solid #FFE4C8'
+                          : '1px solid #F0E8D8',
                         color: message.role === 'assistant' 
-                          ? 'text.primary' 
-                          : 'primary.contrastText',
-                        borderRadius: 1.4,
+                          ? '#2D2A26' 
+                          : '#6B6560',
+                        borderRadius: '16px',
+                        borderBottomLeftRadius: message.role === 'assistant' ? '8px' : '16px',
+                        borderBottomRightRadius: message.role === 'user' ? '8px' : '16px',
+                        boxShadow: message.role === 'assistant' 
+                          ? '0 4px 16px rgba(255, 140, 90, 0.12)'
+                          : '0 2px 8px rgba(0, 0, 0, 0.04)',
+                        maxWidth: '600px',
+                        fontSize: '14px',
+                        lineHeight: 1.7,
                       }}
                     >
                       {message.isSplit && message.chunks ? (
@@ -854,12 +921,20 @@ const AIChat: React.FC<AIChatProps> = ({
                           {message.content}
                         </Typography>
                       )}
+                      
+                      {/* クエストカード表示 */}
+                      {message.questCards && message.questCards.length > 0 && (
+                        <QuestCards
+                          cards={message.questCards}
+                          onCardClick={handleQuestCardClick}
+                        />
+                      )}
                     </Box>
                   </Box>
                 </ListItem>
                 
                 {message !== messages[messages.length - 1] && (
-                  <Box sx={{ height: 16 }} />
+                  <Box sx={{ height: 24 }} />
                 )}
               </motion.div>
             ))}
@@ -872,13 +947,20 @@ const AIChat: React.FC<AIChatProps> = ({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <ListItem sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
-                <Avatar sx={{ bgcolor: 'primary.main', width: 36, height: 36 }}>
-                  <AIIcon />
+              <ListItem sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 0, px: 0 }}>
+                <Avatar sx={{ 
+                  background: 'linear-gradient(135deg, #FF8C5A, #FFD166)', 
+                  width: 36, 
+                  height: 36,
+                  boxShadow: '0 2px 8px rgba(255, 140, 90, 0.3)',
+                  borderRadius: '12px',
+                  fontSize: '16px',
+                }}>
+                  🔥
                 </Avatar>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <CircularProgress size={20} />
-                  <Typography variant="body2" color="text.secondary">
+                  <CircularProgress size={20} sx={{ color: '#FF8C5A' }} />
+                  <Typography variant="body2" sx={{ color: '#6B6560' }}>
                     AI が考えています...
                   </Typography>
                 </Box>
@@ -889,53 +971,100 @@ const AIChat: React.FC<AIChatProps> = ({
         <div ref={messagesEndRef} />
       </Box>
 
-      {/* 入力エリア */}
+      {/* フローティング入力島 */}
       <Box sx={{ 
-        p: 2, 
-        backgroundColor: 'background.default',
-        borderTop: 1,
-        borderColor: 'divider',
+        position: 'fixed',
+        bottom: 24,
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: 'calc(100% - 48px)',
+        maxWidth: '652px', // アイコンの外側の線に合わせる
+        zIndex: 100,
       }}>
-        {/* 応答スタイルセレクター */}
-        <Box sx={{ mb: 1.5 }}>
-          <ResponseStyleSelector
-            selectedStyle={responseStyle}
-            onStyleChange={setResponseStyle}
-          />
-        </Box>
-        
-        <Stack direction="row" spacing={1} alignItems="flex-end">
-          <TextField
-            ref={inputRef}
-            multiline
-            maxRows={3}
-            fullWidth
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="メッセージを入力してください..."
-            variant="outlined"
-            disabled={isLoading}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: 1.4,
-              },
-            }}
-          />
+        <Box sx={{
+          background: '#FFFDF7',
+          borderRadius: '20px',
+          boxShadow: '0 8px 32px rgba(45, 42, 38, 0.08)',
+          padding: '16px',
+          border: '1px solid #F0E8D8',
+        }}>
+          {/* 応答スタイルセレクター */}
+          <Box sx={{ 
+            mb: 1.5,
+            pb: 1.5, 
+            borderBottom: '1px solid #F0E8D8'
+          }}>
+            <ResponseStyleSelector
+              selectedStyle={responseStyle}
+              onStyleChange={setResponseStyle}
+            />
+          </Box>
+          
+          <Stack direction="row" spacing={1.5} alignItems="center">
+            <TextField
+              ref={inputRef}
+              multiline
+              maxRows={3}
+              fullWidth
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="メッセージを入力してください..."
+              variant="outlined"
+              disabled={isLoading}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '12px',
+                  backgroundColor: '#FFF6E0',
+                  border: 'none',
+                  fontSize: '14px',
+                  '&:hover': {
+                    backgroundColor: '#FFFDF7',
+                  },
+                  '&.Mui-focused': {
+                    backgroundColor: '#FFFDF7',
+                    boxShadow: '0 0 0 2px #FF8C5A',
+                  },
+                },
+                '& .MuiOutlinedInput-notchedOutline': {
+                  border: 'none',
+                },
+                '& .MuiInputBase-input::placeholder': {
+                  color: '#9E9891',
+                },
+              }}
+            />
           <Button
             variant="contained"
             onClick={handleSendMessage}
             disabled={!inputValue.trim() || isLoading}
             sx={{ 
               minWidth: 'auto',
-              px: 2,
-              py: 1.5,
-              borderRadius: 1.4,
+              width: 44,
+              height: 44,
+              background: 'linear-gradient(135deg, #FF8C5A, #FF7A42)',
+              color: 'white',
+              borderRadius: '12px',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #FF7A42, #FF6B35)',
+                transform: 'translateY(-2px) scale(1.05)',
+                boxShadow: '0 6px 16px rgba(255, 140, 90, 0.4)',
+              },
+              '&:active': {
+                transform: 'translateY(0) scale(0.98)',
+              },
+              '&:disabled': {
+                background: '#E5E7EB',
+                color: '#9CA3AF',
+                transform: 'none',
+              },
+              transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
             }}
           >
-            <SendIcon />
-          </Button>
-        </Stack>
+              <SendIcon />
+            </Button>
+          </Stack>
+        </Box>
       </Box>
 
       {/* チャット履歴パネル */}
