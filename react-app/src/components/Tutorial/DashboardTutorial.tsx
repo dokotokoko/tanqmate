@@ -94,9 +94,9 @@ export const createDashboardTutorial = (): TutorialConfig => ({
       }
     ),
     createTutorialStep(
-      '[data-tutorial="ai-chat-section"]',
-      'AIアシスタントがあなたの探究学習をサポートします。\n\n💬 疑問があればいつでも相談\n📝 メモと連携した対話\n🎯 学習の方向性をアドバイス',
-      'AIアシスタント',
+      '[data-tutorial="ai-chat-button"]',
+      '左サイドバーの「AIチャット」からAIアシスタントがあなたの探究学習をサポートします。\n\n💬 疑問があればいつでも相談\n📝 メモと連携した対話\n🎯 学習の方向性をアドバイス',
+      'AIチャット',
       {
         placement: 'right',
         spotlightPadding: 15,
@@ -158,9 +158,9 @@ export const simpleSteps = [
     placement: 'right' as const,
   },
   {
-    target: '[data-tutorial="ai-chat-section"]',
-    title: 'AIアシスタント',
-    content: 'AIアシスタントと対話して学習をサポートしてもらいましょう。質問したり、アイデアを整理したり、学習の方向性について相談できます。',
+    target: '[data-tutorial="ai-chat-button"]',
+    title: 'AIチャット',
+    content: '左サイドバーの「AIチャット」ボタンからAIアシスタントと対話できます。質問したり、アイデアを整理したり、学習の方向性について相談しましょう。',
     placement: 'right' as const,
   },
   {
@@ -233,7 +233,7 @@ const DashboardTutorial: React.FC<DashboardTutorialProps> = ({ autoStart = false
         '[data-tutorial="create-project-button"]',
         '[data-tutorial="project-list"]',
         '[data-tutorial="navigation-menu"]',
-        '[data-tutorial="ai-chat-section"]'
+        '[data-tutorial="ai-chat-button"]'
       ];
 
       // DOM要素が存在するまで待ってからチュートリアル開始

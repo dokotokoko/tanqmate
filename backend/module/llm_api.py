@@ -29,7 +29,7 @@ class learning_plannner():
             pool_size: 非同期処理用のセマフォプールサイズ
         """
         load_dotenv()
-        self.model = "gpt-5.2"
+        self.model = "gpt-4.1"
         self.api_key = os.getenv("OPENAI_API_KEY")
         
         if not self.api_key:

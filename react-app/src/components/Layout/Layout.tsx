@@ -154,10 +154,11 @@ const Layout: React.FC = () => {
     icon: React.ReactNode;
     path: string;
     action?: () => void;
+    tutorialId?: string;
   }
 
   const mainListItems: MenuItem[] = useMemo(() => [
-    { text: 'AIチャット', icon: <ChatIcon />, path: '/chat' },
+    { text: 'AIチャット', icon: <ChatIcon />, path: '/chat', tutorialId: 'ai-chat-button' },
     //{ text: '探究テーマを見つける・探す', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
     { text: 'ダッシュボード', icon: <DashboardIcon />, path: '#', action: handleDashboardSidebarToggle },
     //{ text: '対話エージェント検証', icon: <Psychology />, path: '/conversation-agent-test' },
@@ -204,6 +205,7 @@ const Layout: React.FC = () => {
                 }
                 if (isMobile) setMobileOpen(false);
               }}
+              {...(item.tutorialId && { 'data-tutorial': item.tutorialId })}
               sx={{
                 borderRadius: 1.4,
                 '&.Mui-selected': {
@@ -307,6 +309,7 @@ const Layout: React.FC = () => {
                   navigate(item.path);
                 }
               }}
+              {...(item.tutorialId && { 'data-tutorial': item.tutorialId })}
               sx={{
                 borderRadius: 1.4,
                 justifyContent: 'center',

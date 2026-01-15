@@ -31,7 +31,6 @@ import {
   Delete as DeleteIcon,
   FolderOpen as FolderIcon,
   Assignment as AssignmentIcon,
-  Psychology as PsychologyIcon,
   Description as DescriptionIcon,
   CalendarToday as CalendarIcon,
 } from '@mui/icons-material';
@@ -63,7 +62,7 @@ const DashboardPage: React.FC = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { user, isNewUser } = useAuthStore();
-  const { isChatOpen, toggleChat, clearCurrentMemo } = useChatStore();
+  const { clearCurrentMemo } = useChatStore();
   
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -75,15 +74,6 @@ const DashboardPage: React.FC = () => {
   
   // SimpleTutorial用の状態管理
   const [showTutorial, setShowTutorial] = useState(false);
-  
-  // ユーザーが手動でチャットを操作したかどうかのフラグ
-  const [hasUserToggledChat, setHasUserToggledChat] = useState(false);
-
-  // ユーザーが手動でチャットをトグルする関数
-  const handleUserToggleChat = () => {
-    setHasUserToggledChat(true);
-    toggleChat();
-  };
 
   // ユーザーID取得の共通関数
   const getUserId = (): string | null => {
@@ -128,12 +118,7 @@ const DashboardPage: React.FC = () => {
         setTutorialShownFlag(); // フラグを設定
       }, 1000);
     }
-    
-    // ログイン後はAIチャットを確実に開く（ユーザーが手動で操作していない場合のみ）
-    if (user && !isChatOpen && !hasUserToggledChat) {
-      setTimeout(() => toggleChat(), 500);
-    }
-  }, [user, isChatOpen, toggleChat, hasUserToggledChat, clearCurrentMemo]);
+  }, [clearCurrentMemo]);
 
   // プロジェクト一覧の取得
   const fetchProjects = async () => {
@@ -347,15 +332,8 @@ const DashboardPage: React.FC = () => {
           transition={{ duration: 0.6 }}
         >
 
-        {/* タイトルとボタン群 */}
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: { xs: 'flex-start', sm: 'center' },
-          flexDirection: { xs: 'column', sm: 'row' },
-          gap: { xs: 2, sm: 0 },
-          mb: 4 
-        }}>
+        {/* タイトル */}
+        <Box sx={{ mb: 4 }}>
           <Typography 
             variant="h4" 
             sx={{ 
@@ -365,37 +343,9 @@ const DashboardPage: React.FC = () => {
           >
             ダッシュボード
           </Typography>
-          <Box sx={{ 
-            display: 'flex', 
-            gap: { xs: 1, sm: 2 },
-            width: { xs: '100%', sm: 'auto' },
-            justifyContent: { xs: 'flex-end', sm: 'flex-start' }
-          }}>
-            <Button
-              variant="contained"
-              startIcon={<PsychologyIcon />}
-              onClick={handleUserToggleChat}
-              data-tutorial="ai-chat-section"
-              sx={{
-                background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
-                color: 'white',
-                '&:hover': {
-                  background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
-                },
-                borderRadius: 1.4,
-                px: { xs: 2, sm: 3 },
-                py: 1.5,
-                fontSize: { xs: '0.875rem', sm: '1rem' },
-                minWidth: { xs: 'auto', sm: 'auto' }
-              }}
-            >
-              <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>AIアシスタント</Box>
-              <Box sx={{ display: { xs: 'inline', sm: 'none' } }}>AI</Box>
-            </Button>
-          </Box>
         </Box>
 
-        {/* 既存のコンテンツ（以下は変更なし） */}
+        {/* プロジェクトセクション */}
         <Box sx={{ 
           display: 'flex', 
           justifyContent: 'space-between', 
@@ -658,12 +608,6 @@ const DashboardPage: React.FC = () => {
         onComplete={() => {
           setShowTutorial(false);
           setTutorialShownFlag(); // チュートリアル完了時もフラグを設定
-        }}
-        onStepChange={(stepIndex) => {
-          // AIアシスタントのステップ（index 5）の場合、チャットを開く
-          if (stepIndex === 5 && !isChatOpen) {
-            toggleChat(); // チュートリアル中は自動開閉なのでフラグは設定しない
-          }
         }}
       />
     </>
