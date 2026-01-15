@@ -212,7 +212,7 @@ class ChatService(BaseService):
                 llm_client.text("system", system_prompt),
                 llm_client.text("user", f"{context_data}\n\n{message}")
             ]
-            response_obj = await llm_client.generate_response_async(input_items)
+            response_obj = await llm_client.generate_response_async(input_items, status_callback=None)
 
             # Web検索実行確認のログ出力（Responseオブジェクトに対して行う）
             self.dump_response_events(response_obj)
@@ -220,70 +220,22 @@ class ChatService(BaseService):
             # Response APIのoutput_textを取得
             response = llm_client.extract_output_text(response_obj)
             
+            # フォールバック使用の確認
+            fallback_used = getattr(response_obj, 'fallback_used', False)
+            fallback_model = getattr(response_obj, 'fallback_model', None)
+            
             return {
                 "response": response,
                 "agent_used": False,
-                "fallback_used": False
+                "fallback_used": fallback_used,
+                "fallback_model": fallback_model
             }
             
         except Exception as e:
             self.logger.error(f"Async LLM error: {e}")
             raise
     
-    async def _process_with_sync_llm(
-        self,
-        message: str,
-        project_context: str,
-        conversation_history: List[Dict],
-        response_style: Optional[str] = "auto",
-        custom_instruction: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """同期LLMクライアントによる処理（最終フォールバック）"""
-        try:
-            import sys
-            #sys.path.append('C:\\Users\\kouta\\learning-assistant')
-            from module.llm_api import learning_plannner
-            from .response_styles import ResponseStyleManager
-            
-            context_data = self._build_context_data(project_context, conversation_history)
-            
-            # 応答スタイルに応じたシステムプロンプトを取得
-            if response_style == "custom" and custom_instruction:
-                # カスタムスタイルの場合は、プロンプトテンプレートに指示を埋め込む
-                system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
-            else:
-                system_prompt = ResponseStyleManager.get_system_prompt(response_style)
-            
-            # learning_plannnerクラスのインスタンスを作成
-            llm_instance = learning_plannner()
-            
-            # 同期処理を非同期コンテキストで実行
-            input_items = [
-                llm_instance.text("system", system_prompt),
-                llm_instance.text("user", f"{context_data}\n\n{message}")
-            ]
-            
-            response_obj = await asyncio.get_event_loop().run_in_executor(
-                None,
-                llm_instance.generate_response,
-                input_items
-            )
-
-            # Web検索実行確認のログ出力（Responseオブジェクトに対して行う）
-            self.dump_response_events(response_obj)
-            
-            # Response APIのoutput_textを取得
-            response = llm_instance.extract_output_text(response_obj)
-            
-            return {
-                "response": response,
-                "agent_used": False,
-                "fallback_used": True
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Sync LLM error: {e}")
-            raise Exception("All LLM processing methods failed")
+    # 同期フォールバック処理は削除 - 軽量モデル非同期フォールバックに統合済み
     
     def get_chat_history(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
         """チャット履歴取得"""
