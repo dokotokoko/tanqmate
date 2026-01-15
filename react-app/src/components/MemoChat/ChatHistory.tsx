@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { tokenManager } from '../../utils/tokenManager';
 import {
   Box,
   Typography,
@@ -47,7 +48,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
     setLoading(true);
     try {
       // JWTトークンを取得
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       
       if (!token) {
         console.error('認証トークンが見つかりません');
@@ -111,7 +112,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   // 会話のメッセージを取得
   const fetchConversationMessages = async (conversationId: string): Promise<any[]> => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       
       if (!token) {
         console.error('認証トークンが見つかりません');
@@ -142,7 +143,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   // 会話削除
   const handleDeleteConversation = async (conversationId: string) => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       
       if (!token) {
         console.error('認証トークンが見つかりません');

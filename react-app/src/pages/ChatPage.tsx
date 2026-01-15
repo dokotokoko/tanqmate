@@ -3,6 +3,7 @@ import { Box, Typography } from '@mui/material';
 import { AIChat, type ChatAPIRequest, type ChatAPIResponse } from '../components/MemoChat';
 import { useChatStore } from '../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../constants/aiMessages';
+import { tokenManager } from '../utils/tokenManager';
 
 const ChatPage: React.FC = () => {
   const { clearCurrentMemo } = useChatStore();
@@ -15,7 +16,7 @@ const ChatPage: React.FC = () => {
   // AI応答の処理
   const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       
       if (!token) {
         throw new Error('認証トークンが見つかりません。再ログインしてください。');

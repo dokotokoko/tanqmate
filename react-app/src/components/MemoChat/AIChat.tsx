@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
+import { tokenManager } from '../../utils/tokenManager';
 import {
   Box,
   CircularProgress,
@@ -84,10 +85,6 @@ const AIChat: React.FC<AIChatProps> = ({
   // Custom hooks for side effects
   const scrollBehavior = useScrollBehavior({ messageListRef });
   const timerManager = useTimerManager();
-  const eventManager = useEventManager({
-    onNewChat: handleNewChat,
-    onHistoryOpen: () => setHistoryOpen(true),
-  });
 
   // デフォルトの初期メッセージを返す関数
   const getDefaultInitialMessage = (): string => {
@@ -154,6 +151,12 @@ const AIChat: React.FC<AIChatProps> = ({
     addMessage(initialMsg);
   }, [clearMessages, setHistoryOpen, setConversationId, addMessage, initialMessage]);
 
+  // Initialize event manager after handleNewChat is defined
+  const eventManager = useEventManager({
+    onNewChat: handleNewChat,
+    onHistoryOpen: () => setHistoryOpen(true),
+  });
+
   // メッセージクリア関数（イベント駆動）
   const clearMessagesIfNeeded = useCallback(() => {
     if (forceRefresh) {
@@ -184,7 +187,7 @@ const AIChat: React.FC<AIChatProps> = ({
 
     try {
       // 認証トークンを取得
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       if (!token) return;
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
@@ -276,7 +279,7 @@ const AIChat: React.FC<AIChatProps> = ({
     try {
       setLoading(true);
       
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       if (!token) {
         console.error('認証トークンが見つかりません');
         return null;
@@ -374,7 +377,7 @@ const AIChat: React.FC<AIChatProps> = ({
         aiResponse = await onMessageSend(messageWithStyle, contextContent);
       } else {
         // データベース対応のチャットAPIを使用
-        const token = localStorage.getItem('auth-token');
+        const token = tokenManager.getAccessToken();
         if (token) {
           setProcessingStatus('AIが考え中です...');
           const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
