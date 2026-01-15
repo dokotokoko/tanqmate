@@ -1,78 +1,52 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import {
   Box,
-  TextField,
-  Button,
-  Typography,
-  List,
-  ListItem,
-  Avatar,
-  Stack,
   CircularProgress,
-  IconButton,
 } from '@mui/material';
-import {
-  Send as SendIcon,
-  SmartToy as AIIcon,
-  Person as PersonIcon,
-  Close as CloseIcon,
-  NoteAdd as MemoIcon,
-  History as HistoryIcon,
-  Add as AddIcon,
-} from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
-import ChatHistory from './ChatHistory';
-import SmartNotificationManager, { SmartNotificationManagerRef } from '../SmartNotificationManager';
-import { useChatStore } from '../../stores/chatStore';
+import { AnimatePresence } from 'framer-motion';
+import { 
+  useChatStore,
+  selectMessages,
+  selectMessageActions,
+  selectConversation,
+  selectConversationActions,
+  selectUIActions,
+  type Message
+} from '../../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
-import { useAIChatMessages } from '../../hooks/useAIChatMessages';
-import ResponseStyleSelector, { ResponseStyle } from './ResponseStyleSelector';
-import QuestCards from './QuestCards';
+import { useScrollBehavior } from '../../hooks/useScrollBehavior';
+import { useTimerManager } from '../../hooks/useTimerManager';
+import { useEventManager } from '../../hooks/useEventManager';
 
-interface QuestCard {
-  id: string;
-  label: string;
-  emoji: string;
-  color: 'teal' | 'yellow' | 'purple' | 'pink' | 'green';
-}
+// Lazy load components for better performance with error boundaries
+const ChatHeader = lazy(() => import('./ChatHeader').catch(err => {
+  console.error('Failed to load ChatHeader:', err);
+  return { default: () => <div>ヘッダーの読み込みに失敗しました</div> };
+}));
+const ChatMessageList = lazy(() => import('./ChatMessageList').catch(err => {
+  console.error('Failed to load ChatMessageList:', err);
+  return { default: () => <div>メッセージリストの読み込みに失敗しました</div> };
+}));
+const ChatInputArea = lazy(() => import('./ChatInputArea').catch(err => {
+  console.error('Failed to load ChatInputArea:', err);
+  return { default: () => <div>入力エリアの読み込みに失敗しました</div> };
+}));
+const ChatHistory = lazy(() => import('./ChatHistory').catch(err => {
+  console.error('Failed to load ChatHistory:', err);
+  return { default: () => <div>履歴パネルの読み込みに失敗しました</div> };
+}));
 
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date | string | undefined | null;
-  // 分割表示用フィールド
-  chunks?: string[];
-  isSplit?: boolean;
-  originalLength?: number;
-  // クエストカード
-  questCards?: QuestCard[];
-}
-
-interface AIChatProps {
-  isDashboard?: boolean;  // ダッシュボードかどうかのフラグ
-  title: string;
-  initialMessage?: string;
-  initialAIResponse?: string;
-  memoContent?: string; // 使用しないが、既存コンポーネントとの互換性のため残す
-  currentMemoContent?: string; // 現在のメモコンテンツ（動的更新用）
-  currentMemoTitle?: string; // 現在のメモタイトル（動的更新用）
-  onMessageSend?: (message: string, memoContent: string) => Promise<string>;
-  onClose?: () => void;
-  autoStart?: boolean; // 自動開始フラグ
-  onOpenMemo?: () => void; // メモ帳を開く（Step2用）
-  showMemoButton?: boolean; // メモ帳ボタンを表示するか
-  hideMemoButton?: boolean; // メモ帳ボタンを隠すか（メモ帳が開いているときなど）
-  forceRefresh?: boolean; // 強制的にメッセージをクリアして再初期化
-  loadHistoryFromDB?: boolean; // データベースから履歴を読み込むか
-  isInitializing?: boolean; // 初期化中かどうか（外部から制御）
-  enableSmartNotifications?: boolean; // スマート通知機能を有効にするか
-  onActivityRecord?: (message: string, sender: 'user' | 'ai') => void; // 学習活動記録
-  persistentMode?: boolean; // 継続モード（メモ切り替えでリセットしない）
-}
+// Import types from shared types file
+import type { 
+  QuestCard,
+  ResponseStyle, 
+  AIChatProps,
+  LoadingFallbackProps 
+} from './types';
 
 const AIChat: React.FC<AIChatProps> = ({
   isDashboard = false,
+  title,
   initialMessage,
   initialAIResponse,
   memoContent = '',
@@ -87,38 +61,33 @@ const AIChat: React.FC<AIChatProps> = ({
   forceRefresh = false,
   loadHistoryFromDB = true,
   isInitializing = false,
-  enableSmartNotifications = true,
-  onActivityRecord,
   persistentMode = false,
 }) => {
-  // 統一されたメッセージ管理フックを使用
-  const { messages, addMessage, setMessages, clearMessages } = useAIChatMessages();
+  // Zustand store selectors and actions
+  const messages = selectMessages();
+  const { addMessage, setMessages, clearMessages } = selectMessageActions();
+  const conversation = selectConversation();
+  const { setConversationId, setLoading, setProcessingStatus, setFallbackInfo } = selectConversationActions();
+  const { setHistoryOpen } = selectUIActions();
+  const isHistoryOpen = useChatStore((state) => state.isHistoryOpen);
+  
+  // Local UI state
   const [inputValue, setInputValue] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const messageListRef = useRef<HTMLDivElement>(null);
-  const [isUserScrolling, setIsUserScrolling] = useState(false);
-  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  
-  // 会話管理機能
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const [conversationLoading, setConversationLoading] = useState(false);
-  
-  // 応答スタイルの状態
   const [responseStyle, setResponseStyle] = useState<ResponseStyle | null>(null);
-  
-  // 通知システムのref
-  const notificationManagerRef = useRef<SmartNotificationManagerRef>(null);
-
-  // 初期化管理用のref
   const initializationKeyRef = useRef('initialized');
   
-  // タイマー管理用
-  const timersRef = useRef<Set<NodeJS.Timeout>>(new Set());
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // Refs
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const isSendingRef = useRef(false);
+  
+  // Custom hooks for side effects
+  const scrollBehavior = useScrollBehavior({ messageListRef });
+  const timerManager = useTimerManager();
+  const eventManager = useEventManager({
+    onNewChat: handleNewChat,
+    onHistoryOpen: () => setHistoryOpen(true),
+  });
 
   // デフォルトの初期メッセージを返す関数
   const getDefaultInitialMessage = (): string => {
@@ -161,81 +130,45 @@ const AIChat: React.FC<AIChatProps> = ({
     ];
   };
 
-  // スクロール位置の監視
-  const checkScrollPosition = () => {
-    const container = messageListRef.current;
-    if (!container) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+  // Define handleNewChat before using it in eventManager
+  const handleNewChat = useCallback(async () => {
+    clearMessages();
+    setHistoryOpen(false);
     
-    // スクロール位置が90%以上の場合は最下部近くと判定
-    setShouldAutoScroll(scrollPercentage > 0.9);
-  };
-
-  // スクロールイベントハンドラ（イベント駆動）
-  const scrollTimeoutRef = useRef<number>();
-
-  const setupScrollHandling = useCallback(() => {
-    const container = messageListRef.current;
-    if (!container) return null;
-
-    const handleScroll = () => {
-      setIsUserScrolling(true);
-      checkScrollPosition();
-      
-      // スクロール停止後、少し待ってからユーザースクロールフラグをリセット
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-      scrollTimeoutRef.current = window.setTimeout(() => {
-        setIsUserScrolling(false);
-      }, 150);
-    };
-
-    container.addEventListener('scroll', handleScroll, { passive: true });
+    // Create new conversation
+    const newConversationId = await createNewConversation();
+    if (newConversationId) {
+      setConversationId(newConversationId);
+      console.log('🆕 新しい会話を作成しました:', newConversationId);
+    }
     
-    return () => {
-      container.removeEventListener('scroll', handleScroll);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
+    // Set initial message
+    const messageContent = initialMessage || getDefaultInitialMessage();
+    const initialMsg: Message = {
+      id: `initial-${Date.now()}`,
+      role: 'assistant',
+      content: messageContent,
+      timestamp: new Date(),
+      questCards: getDefaultQuestCards(),
     };
-  }, []);
+    addMessage(initialMsg);
+  }, [clearMessages, setHistoryOpen, setConversationId, addMessage, initialMessage]);
 
   // メッセージクリア関数（イベント駆動）
   const clearMessagesIfNeeded = useCallback(() => {
     if (forceRefresh) {
       clearMessages();
       setHistoryLoaded(false);
-      setShouldAutoScroll(true);
-      setIsUserScrolling(false);
       initializationKeyRef.current = 'initialized';
       return true; // クリアが実行されたことを示す
     }
     return false;
   }, [forceRefresh, clearMessages]);
 
-  // ストア同期関数（カスタムフックで管理されるため不要）
-  const syncMessagesFromStore = useCallback(() => {
-    // カスタムフックが自動的に同期するため、ここでは何もしない
-  }, []);
-
-  // タイマー管理ヘルパー
-  const setManagedTimeout = useCallback((callback: () => void, delay: number) => {
-    const timer = setTimeout(() => {
-      timersRef.current.delete(timer);
-      callback();
-    }, delay);
-    timersRef.current.add(timer);
-    return timer;
-  }, []);
 
   // 対話履歴読み込み関数（イベント駆動）
   const loadChatHistory = useCallback(async () => {
     // ページリロードの検出
-    // performance.navigation.type === 1 はリロード
-    // performance.getEntriesByType('navigation')でも判定可能
     const isPageReload = performance.navigation?.type === 1 || 
                         (performance.getEntriesByType?.('navigation')[0] as any)?.type === 'reload';
     
@@ -290,11 +223,6 @@ const AIChat: React.FC<AIChatProps> = ({
         }
         
         setHistoryLoaded(true);
-        
-        // 履歴読み込み後に最下部にスクロール
-        setManagedTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-        }, 100);
       }
     } catch (error) {
       console.error('対話履歴の読み込みエラー:', error);
@@ -341,262 +269,12 @@ const AIChat: React.FC<AIChatProps> = ({
       // 初期化完了を記録
       initializationKeyRef.current = 'initialized';
     }
-  }, [initialMessage, initialAIResponse, isDashboard, loadHistoryFromDB, historyLoaded, messages.length, autoStart]);
-
-  // 自動スクロール処理（イベント駆動）
-  const previousMessageCountRef = useRef(0);
-  
-  const scrollToBottomIfNeeded = useCallback(() => {
-    // メッセージが新しく追加された場合かつ、ユーザーがスクロール中でない、かつ自動スクロールが有効な場合のみ実行
-    if (messages.length > previousMessageCountRef.current && !isUserScrolling && shouldAutoScroll) {
-      setManagedTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
-    }
-    previousMessageCountRef.current = messages.length;
-  }, [messages, isUserScrolling, shouldAutoScroll, setManagedTimeout]);
-
-
-
-  // クエストカードクリック処理
-  const handleQuestCardClick = (cardId: string, cardLabel: string) => {
-    setInputValue(cardLabel);
-    // 自動送信は行わず、ユーザーが送信ボタンを押すかEnterキーを押すまで待機
-  };
-
-  // メッセージ送信処理（二重送信防止付き）
-  const isSendingRef = useRef(false);
-  const handleSendMessage = async () => {
-    if (!inputValue.trim() || isLoading || isSendingRef.current) return;
-    
-    // 二重送信防止フラグ
-    isSendingRef.current = true;
-
-    // 会話IDが存在しない場合は新しい会話を作成
-    let conversationId = currentConversationId;
-    if (!conversationId) {
-      conversationId = await createNewConversation();
-      if (conversationId) {
-        setCurrentConversationId(conversationId);
-        console.log('🆕 メッセージ送信前に新しい会話を作成:', conversationId);
-      }
-    }
-
-    const userMessage: Message = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: inputValue.trim(),
-      timestamp: new Date(),
-    };
-
-    // 統一されたフックでメッセージ追加
-    addMessage(userMessage);
-    setInputValue('');
-    setIsLoading(true);
-    
-    // 学習活動記録
-    if (onActivityRecord) {
-      onActivityRecord(userMessage.content, 'user');
-    }
-    // 通知システムにも記録
-    notificationManagerRef.current?.recordActivity(userMessage.content, 'user');
-    
-    // メッセージ送信時は条件付きで最下部にスクロール
-    scrollToBottomIfNeeded();
-
-    try {
-      let aiResponse = '';
-      
-      if (onMessageSend) {
-        // 継続モードの場合は現在のメモコンテンツを使用、そうでなければ従来通り
-        const contextContent = persistentMode ? currentMemoContent : memoContent;
-        // 応答スタイルをAPIに渡す
-        const messageWithStyle = responseStyle ? 
-          `[応答スタイル: ${responseStyle.label}]\n${userMessage.content}` : 
-          userMessage.content;
-        aiResponse = await onMessageSend(messageWithStyle, contextContent);
-      } else {
-        // データベース対応のチャットAPIを使用
-        const token = localStorage.getItem('auth-token');
-        if (token) {
-          const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-          const response = await fetch(`${apiBaseUrl}/chat`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            credentials: 'include',
-            body: JSON.stringify({
-              message: userMessage.content,
-              context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
-              response_style: responseStyle?.id || 'auto',
-              custom_instruction: responseStyle?.customInstruction || undefined,
-            }),
-          });
-
-          if (response.ok) {
-            const result = await response.json();
-            
-            // 分割情報がある場合は対応
-            if (result.is_split && result.response_chunks) {
-              // 分割されたレスポンスを保存
-              const assistantMessage: Message = {
-                id: `assistant-${Date.now()}`,
-                role: 'assistant',
-                content: result.response, // 最初のチャンク
-                chunks: result.response_chunks,
-                isSplit: true,
-                originalLength: result.original_length,
-                timestamp: new Date(),
-              };
-              
-              // 統一されたフックでAI応答を追加
-              addMessage(assistantMessage);
-              
-              // 学習活動記録（AI応答）
-              if (onActivityRecord) {
-                onActivityRecord(result.response_chunks.join(''), 'ai');
-              }
-              // 通知システムにも記録
-              notificationManagerRef.current?.recordActivity(result.response_chunks.join(''), 'ai');
-              
-              // AI応答完了時も条件付きで最下部にスクロール
-              setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
-              
-              setIsLoading(false);
-              isSendingRef.current = false;
-              inputRef.current?.focus();
-              return; // 早期リターン
-            } else {
-              aiResponse = result.response;
-            }
-          } else {
-            throw new Error('API応答エラー');
-          }
-        } else {
-          // フォールバック処理
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          aiResponse = `「${userMessage.content}」について理解しました。さらに詳しく教えてください。`;
-        }
-      }
-
-      const assistantMessage: Message = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: aiResponse,
-        timestamp: new Date(),  
-      };
-
-      // 統一されたフックでAI応答を追加
-      addMessage(assistantMessage);
-      
-      // 学習活動記録（AI応答）
-      if (onActivityRecord) {
-        onActivityRecord(assistantMessage.content, 'ai');
-      }
-      // 通知システムにも記録
-      notificationManagerRef.current?.recordActivity(assistantMessage.content, 'ai');
-      
-      // AI応答完了時も条件付きで最下部にスクロール
-      setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
-    } catch (error) {
-      console.error('AI応答エラー:', error);
-      const errorMessage: Message = {
-        id: `error-${Date.now()}`,
-        role: 'assistant',
-        content: '申し訳ございません。応答の生成中にエラーが発生しました。もう一度お試しください。',
-        timestamp: new Date(),
-      };
-      // 統一されたフックでエラーメッセージを追加
-      addMessage(errorMessage);
-      
-      // エラーメッセージ表示時も条件付きで最下部にスクロール
-      setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
-    } finally {
-      setIsLoading(false);
-      isSendingRef.current = false; // 二重送信防止フラグをリセット
-      inputRef.current?.focus();
-    }
-  };
-
-  // Enterキーでメッセージ送信
-  const handleKeyPress = (event: React.KeyboardEvent) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      handleSendMessage();
-    }
-  };
-
-  const formatTime = (timestamp: Date | string | undefined | null) => {
-    try {
-      // timestampがnullまたはundefinedの場合は現在時刻を使用
-      if (!timestamp) {
-        return new Date().toLocaleTimeString('ja-JP', {
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-      }
-
-      // 文字列の場合はDateオブジェクトに変換
-      let date: Date;
-      if (typeof timestamp === 'string') {
-        date = new Date(timestamp);
-      } else if (timestamp instanceof Date) {
-        date = timestamp;
-      } else {
-        // その他の型の場合は現在時刻を使用
-        date = new Date();
-      }
-      
-      // 無効な日付の場合は現在時刻を使用
-      if (isNaN(date.getTime())) {
-        date = new Date();
-      }
-      
-      return date.toLocaleTimeString('ja-JP', {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch (error) {
-      console.error('formatTime error:', error, 'timestamp:', timestamp);
-      // エラーが発生した場合は現在時刻を返す
-      return new Date().toLocaleTimeString('ja-JP', {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    }
-  };
-
-  // 履歴セッション選択時の処理
-  const handleSessionSelect = (session: any) => {
-    const historyMessages: Message[] = session.messages.map((item: any) => ({
-      id: item.id.toString(),
-      role: item.sender === 'user' ? 'user' : 'assistant',
-      content: item.message,
-      timestamp: item.created_at ? new Date(item.created_at) : new Date(),
-    }));
-    
-    // 会話IDを設定（sessionに含まれている場合）
-    if (session.conversation_id) {
-      setCurrentConversationId(session.conversation_id);
-      console.log('📋 会話を切り替えました:', session.conversation_id);
-    }
-    
-    setMessages(historyMessages);
-    setIsHistoryOpen(false);
-    setShouldAutoScroll(true);
-    
-    // 最下部にスクロール
-    setManagedTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
-  };
+  }, [initialMessage, initialAIResponse, isDashboard, loadHistoryFromDB, historyLoaded, messages.length, autoStart, setMessages]);
 
   // 新しい会話を作成
   const createNewConversation = async (): Promise<string | null> => {
     try {
-      setConversationLoading(true);
+      setLoading(true);
       
       const token = localStorage.getItem('auth-token');
       if (!token) {
@@ -637,33 +315,155 @@ const AIChat: React.FC<AIChatProps> = ({
       console.error('新しい会話の作成エラー:', error);
       return null;
     } finally {
-      setConversationLoading(false);
+      setLoading(false);
     }
   };
 
-  // 新しいチャット開始
-  const handleNewChat = async () => {
-    clearMessages();
-    setIsHistoryOpen(false);
-    setShouldAutoScroll(true);
+
+  // 履歴を開く
+  const handleOpenHistory = () => {
+    setHistoryOpen(true);
+  };
+
+  // クエストカードクリック処理
+  const handleQuestCardClick = (cardId: string, cardLabel: string) => {
+    setInputValue(cardLabel);
+    // 自動送信は行わず、ユーザーが送信ボタンを押すかEnterキーを押すまで待機
+  };
+
+  // メッセージ送信処理（二重送信防止付き）
+  const handleSendMessage = async () => {
+    if (!inputValue.trim() || conversation.isLoading || isSendingRef.current) return;
     
-    // 新しい会話を作成
-    const newConversationId = await createNewConversation();
-    if (newConversationId) {
-      setCurrentConversationId(newConversationId);
-      console.log('🆕 新しい会話を作成しました:', newConversationId);
+    // 二重送信防止フラグ
+    isSendingRef.current = true;
+
+    // 会話IDが存在しない場合は新しい会話を作成
+    let conversationId = conversation.conversationId;
+    if (!conversationId) {
+      conversationId = await createNewConversation();
+      if (conversationId) {
+        setConversationId(conversationId);
+        console.log('🆕 メッセージ送信前に新しい会話を作成:', conversationId);
+      }
+    }
+
+    const userMessage: Message = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: inputValue.trim(),
+      timestamp: new Date(),
+    };
+
+    // メッセージ追加
+    addMessage(userMessage);
+    setInputValue('');
+    setLoading(true);
+    setProcessingStatus('AI処理を開始しています...');
+
+    try {
+      let aiResponse = '';
+      
+      if (onMessageSend) {
+        // 継続モードの場合は現在のメモコンテンツを使用、そうでなければ従来通り
+        const contextContent = persistentMode ? currentMemoContent : memoContent;
+        // 応答スタイルをAPIに渡す
+        const messageWithStyle = responseStyle ? 
+          `[応答スタイル: ${responseStyle.label}]\n${userMessage.content}` : 
+          userMessage.content;
+        aiResponse = await onMessageSend(messageWithStyle, contextContent);
+      } else {
+        // データベース対応のチャットAPIを使用
+        const token = localStorage.getItem('auth-token');
+        if (token) {
+          setProcessingStatus('AIが考え中です...');
+          const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+          const response = await fetch(`${apiBaseUrl}/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`,
+            },
+            credentials: 'include',
+            body: JSON.stringify({
+              message: userMessage.content,
+              context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
+              response_style: responseStyle?.id || 'auto',
+              custom_instruction: responseStyle?.customInstruction || undefined,
+            }),
+          });
+
+          if (response.ok) {
+            const result = await response.json();
+            aiResponse = result.response;
+            
+            // フォールバック情報を確認
+            if (result.fallback_used && result.fallback_model) {
+              setFallbackInfo(true, result.fallback_model);
+              setProcessingStatus(`軽量モード (${result.fallback_model}) で処理中...`);
+            }
+          } else {
+            throw new Error('API応答エラー');
+          }
+        } else {
+          // フォールバック処理
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          aiResponse = `「${userMessage.content}」について理解しました。さらに詳しく教えてください。`;
+        }
+      }
+
+      const assistantMessage: Message = {
+        id: `assistant-${Date.now()}`,
+        role: 'assistant',
+        content: aiResponse,
+        timestamp: new Date(),  
+      };
+
+      // AI応答を追加
+      addMessage(assistantMessage);
+    } catch (error) {
+      console.error('AI応答エラー:', error);
+      const errorMessage: Message = {
+        id: `error-${Date.now()}`,
+        role: 'assistant',
+        content: '申し訳ございません。応答の生成中にエラーが発生しました。もう一度お試しください。',
+        timestamp: new Date(),
+      };
+      // エラーメッセージを追加
+      addMessage(errorMessage);
+    } finally {
+      setLoading(false);
+      setProcessingStatus(null);
+      setFallbackInfo(false, null);
+      isSendingRef.current = false; // 二重送信防止フラグをリセット
+    }
+  };
+
+  // Enterキーでメッセージ送信
+  const handleKeyPress = (event: React.KeyboardEvent) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      handleSendMessage();
+    }
+  };
+
+  // 履歴セッション選択時の処理
+  const handleSessionSelect = (session: any) => {
+    const historyMessages: Message[] = session.messages.map((item: any) => ({
+      id: item.id.toString(),
+      role: item.sender === 'user' ? 'user' : 'assistant',
+      content: item.message,
+      timestamp: item.created_at ? new Date(item.created_at) : new Date(),
+    }));
+    
+    // 会話IDを設定（sessionに含まれている場合）
+    if (session.conversation_id) {
+      setConversationId(session.conversation_id);
+      console.log('📋 会話を切り替えました:', session.conversation_id);
     }
     
-    // 初期メッセージがある場合は設定、なければデフォルトメッセージを使用
-    const messageContent = initialMessage || getDefaultInitialMessage();
-    const initialMsg: Message = {
-      id: `initial-${Date.now()}`,
-      role: 'assistant',
-      content: messageContent,
-      timestamp: new Date(),
-      questCards: getDefaultQuestCards(),
-    };
-    addMessage(initialMsg);
+    setMessages(historyMessages);
+    setHistoryOpen(false);
   };
 
   // コンポーネントマウント時のリセット処理
@@ -681,61 +481,36 @@ const AIChat: React.FC<AIChatProps> = ({
   useEffect(() => {
     const wasCleared = clearMessagesIfNeeded();
     if (!wasCleared) {
-      syncMessagesFromStore();
       if (!historyLoaded && loadHistoryFromDB) {
         loadChatHistory();
       } else if (!loadHistoryFromDB || historyLoaded) {
         loadInitialMessages();
       }
     }
-  }, [forceRefresh, clearMessagesIfNeeded, syncMessagesFromStore, loadChatHistory, loadInitialMessages, loadHistoryFromDB, historyLoaded]);
-
-  // スクロール処理の設定
-  useEffect(() => {
-    const cleanup = setupScrollHandling();
-    return cleanup;
-  }, [setupScrollHandling]);
+  }, [forceRefresh, clearMessagesIfNeeded, loadChatHistory, loadInitialMessages, loadHistoryFromDB, historyLoaded]);
   
-  // メッセージ変更時のスクロール
-  useEffect(() => {
-    if (messages.length > previousMessageCountRef.current) {
-      scrollToBottomIfNeeded();
-      previousMessageCountRef.current = messages.length;
-    }
-  }, [messages, scrollToBottomIfNeeded]);
-  
-  // カスタムイベントリスナーの設定
-  useEffect(() => {
-    const handleNewChatRequest = () => {
-      handleNewChat();
-    };
+  // Event listeners are managed by useEventManager hook
 
-    const handleHistoryOpenRequest = () => {
-      setIsHistoryOpen(true);
-    };
+  // Cleanup is managed by custom hooks
 
-    window.addEventListener('newChatRequest', handleNewChatRequest);
-    window.addEventListener('historyOpenRequest', handleHistoryOpenRequest);
-
-    return () => {
-      window.removeEventListener('newChatRequest', handleNewChatRequest);
-      window.removeEventListener('historyOpenRequest', handleHistoryOpenRequest);
-    };
-  }, [handleNewChat]);
-
-  // コンポーネントアンマウント時のクリーンアップ
-  useEffect(() => {
-    return () => {
-      // 全タイマーのクリア
-      timersRef.current.forEach(timer => clearTimeout(timer));
-      timersRef.current.clear();
-      
-      // 非同期処理のキャンセル
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
+  // Enhanced loading fallback component with better UX
+  const LoadingFallback: React.FC<LoadingFallbackProps> = ({ text = "読み込み中...", height = 'auto' }) => (
+    <Box sx={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      p: 2,
+      gap: 1,
+      height,
+      minHeight: height === 'auto' ? '60px' : height,
+      backgroundColor: 'rgba(255, 250, 237, 0.5)',
+      borderRadius: '8px',
+      border: '1px solid rgba(240, 232, 216, 0.5)'
+    }}>
+      <CircularProgress size={20} sx={{ color: '#FF8C5A' }} />
+      <span style={{ color: '#6B6560', fontSize: '14px' }}>{text}</span>
+    </Box>
+  );
 
   return (
     <Box sx={{ 
@@ -744,348 +519,67 @@ const AIChat: React.FC<AIChatProps> = ({
       flexDirection: 'column',
       backgroundColor: '#FFFAED', // Soft butter background from mockup
     }}>
+      {/* Chat Header - Optional */}
+      {(title || onClose || showMemoButton || !hideMemoButton) && (
+        <Suspense fallback={<LoadingFallback text="ヘッダーを読み込み中..." height="60px" />}>
+          <ChatHeader
+            title={title}
+            onClose={onClose}
+            onOpenMemo={onOpenMemo}
+            onNewChat={handleNewChat}
+            onOpenHistory={handleOpenHistory}
+            showMemoButton={showMemoButton}
+            hideMemoButton={hideMemoButton}
+            showCloseButton={!!onClose}
+            showHistoryButton={!isDashboard}
+            showNewChatButton={!isDashboard}
+          />
+        </Suspense>
+      )}
 
       {/* メッセージリスト */}
-      <Box 
-        ref={messageListRef}
-        sx={{ 
-          flex: 1, 
-          overflow: 'auto',
-          p: '32px 24px',
-          paddingBottom: '140px', // フローティング入力島のためのスペース
-          // スクロールバーを非表示
-          '&::-webkit-scrollbar': {
-            display: 'none',
-          },
-          '-ms-overflow-style': 'none',
-          'scrollbar-width': 'none',
-        }}
-      >
-        <List sx={{ py: 0 }}>
-          {/* 初期化中の特別なローディング表示 */}
-          {isInitializing && messages.length === 0 && (
-            <Box sx={{ 
-              display: 'flex', 
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              minHeight: '300px',
-              p: 3
-            }}>
-              <CircularProgress size={40} sx={{ mb: 2 }} />
-              <Typography variant="h6" gutterBottom>
-                ・・・・・
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
-                あなたの探究テーマを前に進めるための一歩を、<br/>
-                AIが一緒に考えています。
-              </Typography>
-            </Box>
-          )}
-          
-          <AnimatePresence>
-            {messages.map((message) => (
-              <motion.div
-                key={message.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-              >
-                <ListItem
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 2,
-                    py: 0,
-                    px: 0,
-                    flexDirection: message.role === 'user' ? 'row-reverse' : 'row',
-                  }}
-                >
-                  <Avatar
-                    sx={{
-                      background: message.role === 'assistant' 
-                        ? 'linear-gradient(135deg, #FF8C5A, #FFD166)' 
-                        : '#D8D4CE',
-                      width: 36,
-                      height: 36,
-                      boxShadow: message.role === 'assistant' 
-                        ? '0 2px 8px rgba(255, 140, 90, 0.3)'
-                        : 'none',
-                      borderRadius: '12px',
-                      fontSize: '16px',
-                    }}
-                  >
-                    {message.role === 'assistant' ? '🔥' : '👤'}
-                  </Avatar>
-                  
-                  <Box sx={{ 
-                    flex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: message.role === 'user' ? 'flex-end' : 'flex-start',
-                  }}>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ 
-                        mb: 0.5,
-                        textAlign: message.role === 'user' ? 'right' : 'left',
-                        fontSize: '11px',
-                        color: '#9E9891',
-                      }}
-                    >
-                      {message.role === 'assistant' ? '探Qメイト' : 'あなた'} • {(() => {
-                        try {
-                          return formatTime(message.timestamp);
-                        } catch (error) {
-                          console.error('Timestamp formatting error:', error, 'message:', message);
-                          return '時刻不明';
-                        }
-                      })()}
-                    </Typography>
-                    
-                    <Box
-                      sx={{
-                        p: '16px 20px',
-                        background: message.role === 'assistant' 
-                          ? 'linear-gradient(135deg, #FFFBF5, #FFF6E8)' 
-                          : '#FFFDF7',
-                        border: message.role === 'assistant'
-                          ? '1px solid #FFE4C8'
-                          : '1px solid #F0E8D8',
-                        color: message.role === 'assistant' 
-                          ? '#2D2A26' 
-                          : '#6B6560',
-                        borderRadius: '16px',
-                        borderBottomLeftRadius: message.role === 'assistant' ? '8px' : '16px',
-                        borderBottomRightRadius: message.role === 'user' ? '8px' : '16px',
-                        boxShadow: message.role === 'assistant' 
-                          ? '0 4px 16px rgba(255, 140, 90, 0.12)'
-                          : '0 2px 8px rgba(0, 0, 0, 0.04)',
-                        maxWidth: '600px',
-                        fontSize: '14px',
-                        lineHeight: 1.7,
-                      }}
-                    >
-                      {message.isSplit && message.chunks ? (
-                        <Box>
-                          {message.chunks.map((chunk, index) => (
-                            <motion.div
-                              key={index}
-                              initial={{ opacity: 0, x: -10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              transition={{ 
-                                delay: index * 0.5,
-                                duration: 0.3 
-                              }}
-                            >
-                              <Typography 
-                                variant="body1" 
-                                sx={{ 
-                                  whiteSpace: 'pre-wrap',
-                                  lineHeight: 1.6,
-                                  mb: index < message.chunks!.length - 1 ? 2 : 0,
-                                  pb: index < message.chunks!.length - 1 ? 2 : 0,
-                                  borderBottom: index < message.chunks!.length - 1 
-                                    ? '1px solid rgba(0,0,0,0.1)' 
-                                    : 'none',
-                                }}
-                              >
-                                {chunk}
-                              </Typography>
-                            </motion.div>
-                          ))}
-                          {message.originalLength && message.originalLength > 300 && (
-                            <Typography 
-                              variant="caption" 
-                              sx={{ 
-                                mt: 1,
-                                color: 'text.secondary',
-                                fontStyle: 'italic',
-                              }}
-                            >
-                              （元の文字数: {message.originalLength}文字）
-                            </Typography>
-                          )}
-                        </Box>
-                      ) : (
-                        <Typography 
-                          variant="body1" 
-                          sx={{ 
-                            whiteSpace: 'pre-wrap',
-                            lineHeight: 1.6,
-                          }}
-                        >
-                          {message.content}
-                        </Typography>
-                      )}
-                      
-                      {/* クエストカード表示 */}
-                      {message.questCards && message.questCards.length > 0 && (
-                        <QuestCards
-                          cards={message.questCards}
-                          onCardClick={handleQuestCardClick}
-                        />
-                      )}
-                    </Box>
-                  </Box>
-                </ListItem>
-                
-                {message !== messages[messages.length - 1] && (
-                  <Box sx={{ height: 24 }} />
-                )}
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          
-          {/* ローディング表示 */}
-          {isLoading && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <ListItem sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 0, px: 0 }}>
-                <Avatar sx={{ 
-                  background: 'linear-gradient(135deg, #FF8C5A, #FFD166)', 
-                  width: 36, 
-                  height: 36,
-                  boxShadow: '0 2px 8px rgba(255, 140, 90, 0.3)',
-                  borderRadius: '12px',
-                  fontSize: '16px',
-                }}>
-                  🔥
-                </Avatar>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <CircularProgress size={20} sx={{ color: '#FF8C5A' }} />
-                  <Typography variant="body2" sx={{ color: '#6B6560' }}>
-                    AI が考えています...
-                  </Typography>
-                </Box>
-              </ListItem>
-            </motion.div>
-          )}
-        </List>
-        <div ref={messagesEndRef} />
-      </Box>
+      <Suspense fallback={<LoadingFallback text="メッセージリストを読み込み中..." height="200px" />}>
+        <ChatMessageList
+          ref={messageListRef}
+          messages={messages}
+          isLoading={conversation.isLoading}
+          isInitializing={isInitializing}
+          isUserScrolling={scrollBehavior.isUserScrolling}
+          shouldAutoScroll={scrollBehavior.shouldAutoScroll}
+          onQuestCardClick={handleQuestCardClick}
+          onScroll={scrollBehavior.handleScroll}
+        />
+      </Suspense>
 
       {/* フローティング入力島 */}
-      <Box sx={{ 
-        position: 'fixed',
-        bottom: 24,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: 'calc(100% - 48px)',
-        maxWidth: '652px', // アイコンの外側の線に合わせる
-        zIndex: 100,
-      }}>
-        <Box sx={{
-          background: '#FFFDF7',
-          borderRadius: '20px',
-          boxShadow: '0 8px 32px rgba(45, 42, 38, 0.08)',
-          padding: '16px',
-          border: '1px solid #F0E8D8',
-        }}>
-          {/* 応答スタイルセレクター */}
-          <Box sx={{ 
-            mb: 1.5,
-            pb: 1.5, 
-            borderBottom: '1px solid #F0E8D8'
-          }}>
-            <ResponseStyleSelector
-              selectedStyle={responseStyle}
-              onStyleChange={setResponseStyle}
-            />
-          </Box>
-          
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <TextField
-              ref={inputRef}
-              multiline
-              maxRows={3}
-              fullWidth
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="メッセージを入力してください..."
-              variant="outlined"
-              disabled={isLoading}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: '12px',
-                  backgroundColor: '#FFF6E0',
-                  border: 'none',
-                  fontSize: '14px',
-                  '&:hover': {
-                    backgroundColor: '#FFFDF7',
-                  },
-                  '&.Mui-focused': {
-                    backgroundColor: '#FFFDF7',
-                    boxShadow: '0 0 0 2px #FF8C5A',
-                  },
-                },
-                '& .MuiOutlinedInput-notchedOutline': {
-                  border: 'none',
-                },
-                '& .MuiInputBase-input::placeholder': {
-                  color: '#9E9891',
-                },
-              }}
-            />
-          <Button
-            variant="contained"
-            onClick={handleSendMessage}
-            disabled={!inputValue.trim() || isLoading}
-            sx={{ 
-              minWidth: 'auto',
-              width: 44,
-              height: 44,
-              background: 'linear-gradient(135deg, #FF8C5A, #FF7A42)',
-              color: 'white',
-              borderRadius: '12px',
-              '&:hover': {
-                background: 'linear-gradient(135deg, #FF7A42, #FF6B35)',
-                transform: 'translateY(-2px) scale(1.05)',
-                boxShadow: '0 6px 16px rgba(255, 140, 90, 0.4)',
-              },
-              '&:active': {
-                transform: 'translateY(0) scale(0.98)',
-              },
-              '&:disabled': {
-                background: '#E5E7EB',
-                color: '#9CA3AF',
-                transform: 'none',
-              },
-              transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
-            }}
-          >
-              <SendIcon />
-            </Button>
-          </Stack>
-        </Box>
-      </Box>
+      <Suspense fallback={<LoadingFallback text="入力エリアを読み込み中..." height="120px" />}>
+        <ChatInputArea
+          inputValue={inputValue}
+          isLoading={conversation.isLoading}
+          responseStyle={responseStyle}
+          processingStatus={conversation.processingStatus}
+          fallbackUsed={conversation.fallbackUsed}
+          fallbackModel={conversation.fallbackModel}
+          onInputChange={setInputValue}
+          onSendMessage={handleSendMessage}
+          onKeyPress={handleKeyPress}
+          onStyleChange={setResponseStyle}
+        />
+      </Suspense>
 
       {/* チャット履歴パネル */}
       <AnimatePresence>
         {isHistoryOpen && (
-          <ChatHistory
-            isOpen={isHistoryOpen}
-            onClose={() => setIsHistoryOpen(false)}
-            onSessionSelect={handleSessionSelect}
-            currentPageId="general"
-          />
+          <Suspense fallback={<LoadingFallback text="チャット履歴を読み込み中..." height="300px" />}>
+            <ChatHistory
+              isOpen={isHistoryOpen}
+              onClose={() => setHistoryOpen(false)}
+              onSessionSelect={handleSessionSelect}
+              currentPageId="general"
+            />
+          </Suspense>
         )}
       </AnimatePresence>
-
-      {/* スマート通知システム */}
-      {enableSmartNotifications && (
-        <SmartNotificationManager 
-          ref={notificationManagerRef}
-          pageId="general"
-        />
-      )}
     </Box>
   );
 };

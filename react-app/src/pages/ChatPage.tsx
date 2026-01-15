@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
-import AIChat from '../components/MemoChat/AIChat';
+import { AIChat, type ChatAPIRequest, type ChatAPIResponse } from '../components/MemoChat';
 import { useChatStore } from '../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../constants/aiMessages';
 

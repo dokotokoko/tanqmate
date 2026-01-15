@@ -2,17 +2,8 @@ import React from 'react';
 import { Box, Button } from '@mui/material';
 import { motion } from 'framer-motion';
 
-interface QuestCard {
-  id: string;
-  label: string;
-  emoji: string;
-  color: 'teal' | 'yellow' | 'purple' | 'pink' | 'green';
-}
-
-interface QuestCardsProps {
-  cards: QuestCard[];
-  onCardClick: (cardId: string, cardLabel: string) => void;
-}
+// Import types from shared types file
+import type { QuestCard, QuestCardsProps } from './types';
 
 const colorStyles = {
   teal: {

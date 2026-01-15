@@ -27,24 +27,8 @@ import {
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 
-// 会話データの型定義
-interface ConversationData {
-  id: string;
-  title: string | null;
-  message_count: number;
-  last_message: string | null;
-  created_at: string;
-  updated_at: string;
-  metadata: Record<string, any>;
-  is_active: boolean;
-}
-
-interface ChatHistoryProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSessionSelect: (session: ConversationData & { messages: any[] }) => void;
-  currentPageId?: string;
-}
+// Import types from shared types file
+import type { ConversationData, ChatHistoryProps } from './types';
 
 const ChatHistory: React.FC<ChatHistoryProps> = ({
   isOpen,
