@@ -31,6 +31,14 @@ class ChatMessage(BaseModel):
     temperature: Optional[float] = 0.7
     response_style: Optional[str] = "auto"  # 応答スタイルパラメータ追加
     custom_instruction: Optional[str] = None  # カスタムスタイル用の指示
+    context: Optional[str] = None  # メモやコンテキスト情報（フロントエンドから送信）
+    memo_content: Optional[str] = None  # 後方互換性のため保持（非推奨）
+
+class QuestCard(BaseModel):
+    id: str
+    label: str
+    emoji: str
+    color: str
 
 class ChatResponse(BaseModel):
     response: str
@@ -38,6 +46,7 @@ class ChatResponse(BaseModel):
     metrics: Optional[dict] = None
     agent_used: Optional[bool] = False
     fallback_used: Optional[bool] = False
+    quest_cards: List[QuestCard] = []
 
 class ChatHistoryResponse(BaseModel):
     message: str
@@ -101,12 +110,19 @@ async def chat_with_ai(
             custom_instruction=chat_data.custom_instruction  # カスタム指示を渡す
         )
         
+        # デバッグ: クエストカードの内容を確認
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Result quest_cards: {result.get('quest_cards', [])}")
+        logger.info(f"Result quest_cards count: {len(result.get('quest_cards', []))}")
+        
         return ChatResponse(
             response=result["response"],
             project_id=result.get("project_id"),
             metrics=result.get("metrics"),
             agent_used=result.get("agent_used", False),
-            fallback_used=result.get("fallback_used", False)
+            fallback_used=result.get("fallback_used", False),
+            quest_cards=result.get("quest_cards", [])
         )
         
     except Exception as e:

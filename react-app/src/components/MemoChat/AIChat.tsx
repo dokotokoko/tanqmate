@@ -239,12 +239,28 @@ const AIChat: React.FC<AIChatProps> = ({
     const isPageReload = performance.navigation?.type === 1 || 
                         (performance.getEntriesByType?.('navigation')[0] as any)?.type === 'reload';
     
-    // リロード時は履歴読み込みフラグをリセットして最新データを取得
-    if (isPageReload && historyLoaded) {
-      setHistoryLoaded(false);
-      // リロード時は既存のメッセージをクリアして最新を取得
+    // リロード時は新規チャットを表示
+    if (isPageReload) {
+      // 既存のメッセージをクリア
       clearMessages();
-      return; // 次のレンダリングサイクルで再度呼ばれる
+      // 初期メッセージを設定
+      const initialMsg: Message = {
+        id: `initial-${Date.now()}`,
+        role: 'assistant',
+        content: getDefaultInitialMessage(),
+        timestamp: new Date(),
+        questCards: getDefaultQuestCards(),
+      };
+      setMessages([initialMsg]);
+      setHistoryLoaded(true);
+      
+      // 新しい会話を作成
+      const newConversationId = await createNewConversation();
+      if (newConversationId) {
+        setCurrentConversationId(newConversationId);
+        console.log('🆕 リロード時に新しい会話を作成:', newConversationId);
+      }
+      return;
     }
     
     if (!loadHistoryFromDB || historyLoaded) return;
@@ -367,6 +383,7 @@ const AIChat: React.FC<AIChatProps> = ({
   // メッセージ送信処理（二重送信防止付き）
   const isSendingRef = useRef(false);
   const handleSendMessage = async () => {
+    console.log('📢 handleSendMessage called'); // デバッグログ
     if (!inputValue.trim() || isLoading || isSendingRef.current) return;
     
     // 二重送信防止フラグ
@@ -437,6 +454,16 @@ const AIChat: React.FC<AIChatProps> = ({
 
           if (response.ok) {
             const result = await response.json();
+            console.log('🔍 API Response:', result); // デバッグログ追加
+            console.log('🎯 Quest Cards:', result.quest_cards); // クエストカードのデバッグログ
+            console.log('📊 Quest Cards Count:', result.quest_cards?.length || 0); // カード数
+            
+            // デバッグ用: クエストカードが存在する場合、アラート表示
+            if (result.quest_cards && result.quest_cards.length > 0) {
+              console.warn('🎉 Quest cards found!', result.quest_cards);
+              // アラート表示（本番環境では削除）
+              // alert(`Quest cards received: ${result.quest_cards.length} cards`);
+            }
             
             // 分割情報がある場合は対応
             if (result.is_split && result.response_chunks) {
@@ -449,6 +476,7 @@ const AIChat: React.FC<AIChatProps> = ({
                 isSplit: true,
                 originalLength: result.original_length,
                 timestamp: new Date(),
+                questCards: result.quest_cards || [],
               };
               
               // 統一されたフックでAI応答を追加
@@ -470,6 +498,41 @@ const AIChat: React.FC<AIChatProps> = ({
               return; // 早期リターン
             } else {
               aiResponse = result.response;
+              // quest_cardsも保存
+              const questCards = result.quest_cards || [];
+              
+              // デバッグ: questCardsの内容を確認
+              console.log('📦 Quest cards before creating message:', questCards);
+              console.log('📦 Quest cards type:', typeof questCards);
+              console.log('📦 Is Array:', Array.isArray(questCards));
+              
+              const assistantMessage: Message = {
+                id: `assistant-${Date.now()}`,
+                role: 'assistant',
+                content: aiResponse,
+                timestamp: new Date(),
+                questCards: questCards,
+              };
+              
+              console.log('💬 Assistant message with quest cards:', assistantMessage);
+
+              // 統一されたフックでAI応答を追加
+              addMessage(assistantMessage);
+              
+              // 学習活動記録（AI応答）
+              if (onActivityRecord) {
+                onActivityRecord(assistantMessage.content, 'ai');
+              }
+              // 通知システムにも記録
+              notificationManagerRef.current?.recordActivity(assistantMessage.content, 'ai');
+              
+              // AI応答完了時も条件付きで最下部にスクロール
+              setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
+              
+              setIsLoading(false);
+              isSendingRef.current = false;
+              inputRef.current?.focus();
+              return; // 早期リターン
             }
           } else {
             throw new Error('API応答エラー');
@@ -478,28 +541,33 @@ const AIChat: React.FC<AIChatProps> = ({
           // フォールバック処理
           await new Promise(resolve => setTimeout(resolve, 1000));
           aiResponse = `「${userMessage.content}」について理解しました。さらに詳しく教えてください。`;
+          
+          const assistantMessage: Message = {
+            id: `assistant-${Date.now()}`,
+            role: 'assistant',
+            content: aiResponse,
+            timestamp: new Date(),
+          };
+
+          // 統一されたフックでAI応答を追加
+          addMessage(assistantMessage);
+          
+          // 学習活動記録（AI応答）
+          if (onActivityRecord) {
+            onActivityRecord(assistantMessage.content, 'ai');
+          }
+          // 通知システムにも記録
+          notificationManagerRef.current?.recordActivity(assistantMessage.content, 'ai');
+          
+          // AI応答完了時も条件付きで最下部にスクロール
+          setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
+          
+          setIsLoading(false);
+          isSendingRef.current = false;
+          inputRef.current?.focus();
+          return; // 早期リターン
         }
       }
-
-      const assistantMessage: Message = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: aiResponse,
-        timestamp: new Date(),  
-      };
-
-      // 統一されたフックでAI応答を追加
-      addMessage(assistantMessage);
-      
-      // 学習活動記録（AI応答）
-      if (onActivityRecord) {
-        onActivityRecord(assistantMessage.content, 'ai');
-      }
-      // 通知システムにも記録
-      notificationManagerRef.current?.recordActivity(assistantMessage.content, 'ai');
-      
-      // AI応答完了時も条件付きで最下部にスクロール
-      setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
     } catch (error) {
       console.error('AI応答エラー:', error);
       const errorMessage: Message = {
@@ -757,8 +825,8 @@ const AIChat: React.FC<AIChatProps> = ({
           '&::-webkit-scrollbar': {
             display: 'none',
           },
-          '-ms-overflow-style': 'none',
-          'scrollbar-width': 'none',
+          msOverflowStyle: 'none',
+          scrollbarWidth: 'none',
         }}
       >
         <List sx={{ py: 0 }}>
@@ -924,10 +992,13 @@ const AIChat: React.FC<AIChatProps> = ({
                       
                       {/* クエストカード表示 */}
                       {message.questCards && message.questCards.length > 0 && (
-                        <QuestCards
-                          cards={message.questCards}
-                          onCardClick={handleQuestCardClick}
-                        />
+                        <>
+                          {console.log('🎨 Rendering quest cards for message:', message.id, message.questCards)}
+                          <QuestCards
+                            cards={message.questCards}
+                            onCardClick={handleQuestCardClick}
+                          />
+                        </>
                       )}
                     </Box>
                   </Box>

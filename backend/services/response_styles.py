@@ -22,7 +22,8 @@ class ResponseStyleManager:
         Returns:
             対応するシステムプロンプト
         """
-        if not style or style not in RESPONSE_STYLE_PROMPTS:
+        # "auto" の場合もデフォルトのorganizeスタイルを使用
+        if not style or style == "auto" or style not in RESPONSE_STYLE_PROMPTS:
             # デフォルトは "organize" スタイル
             return RESPONSE_STYLE_PROMPTS.get("organize", list(RESPONSE_STYLE_PROMPTS.values())[0])
         

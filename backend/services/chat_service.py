@@ -8,6 +8,7 @@ import os
 import json
 import uuid
 import logging
+import re
 from .base import BaseService
 from async_helpers import (
     parallel_fetch_context_and_history,
@@ -141,12 +142,21 @@ class ChatService(BaseService):
             
             metrics["total_time"] = time.time() - start_time
             
+            # AI応答からカード情報を抽出
+            self.logger.info(f"Raw AI response length: {len(ai_response['response'])}")
+            self.logger.debug(f"Raw AI response (first 500 chars): {ai_response['response'][:500]}")
+            response_text, quest_cards = self._extract_quest_cards(ai_response["response"])
+            self.logger.info(f"After extraction - Response text length: {len(response_text)}, Quest cards count: {len(quest_cards)}")
+            if quest_cards:
+                self.logger.info(f"Quest cards details: {quest_cards}")
+            
             return {
-                "response": ai_response["response"],
+                "response": response_text,
                 "project_id": project_id,
                 "metrics": metrics,
                 "agent_used": ai_response.get("agent_used", False),
-                "fallback_used": ai_response.get("fallback_used", False)
+                "fallback_used": ai_response.get("fallback_used", False),
+                "quest_cards": quest_cards
             }
             
         except Exception as e:
@@ -387,4 +397,52 @@ class ChatService(BaseService):
                 .execute()
         except Exception as e:
             self.logger.warning(f"Conversation timestamp update failed: {e}")
+    
+    def _extract_quest_cards(self, response_text: str) -> tuple[str, list]:
+        """LLM応答からクエストカード情報を抽出"""
+        try:
+            # JSONブロックを検索
+            json_pattern = r'```json\s*(\{[^`]*\})\s*```'
+            match = re.search(json_pattern, response_text, re.DOTALL)
+            
+            if not match:
+                self.logger.debug("No JSON block found in response")
+                return response_text, []
+            
+            json_str = match.group(1)
+            self.logger.debug(f"Found JSON block: {json_str[:200]}...")
+            
+            # JSONをパース
+            try:
+                quest_data = json.loads(json_str)
+                quest_cards = quest_data.get("quest_cards", [])
+                self.logger.info(f"Extracted {len(quest_cards)} quest cards from response")
+                
+                # カードデータを検証
+                validated_cards = []
+                valid_colors = {"teal", "yellow", "purple", "pink", "green"}
+                
+                for card in quest_cards[:5]:  # 最大5つ
+                    if all(key in card for key in ["id", "label", "emoji", "color"]):
+                        if card["color"] in valid_colors:
+                            validated_cards.append({
+                                "id": str(card["id"]),
+                                "label": str(card["label"]),
+                                "emoji": str(card["emoji"]),
+                                "color": str(card["color"])
+                            })
+                            self.logger.debug(f"Added card: {card['id']} - {card['label']}")
+                
+                # JSONブロックを応答テキストから削除
+                clean_response = re.sub(json_pattern, '', response_text, flags=re.DOTALL).strip()
+                
+                return clean_response, validated_cards
+                
+            except json.JSONDecodeError as e:
+                self.logger.warning(f"Failed to parse quest cards JSON: {e}")
+                return response_text, []
+                
+        except Exception as e:
+            self.logger.error(f"Error extracting quest cards: {e}")
+            return response_text, []
     
