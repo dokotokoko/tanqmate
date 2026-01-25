@@ -6,6 +6,11 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+
+  // 質問明確化機能用フィールド
+  is_clarification?: boolean;
+  clarification_questions?: string[];
+  suggestion_options?: string[];
 }
 
 interface ChatState {

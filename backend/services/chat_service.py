@@ -164,8 +164,26 @@ class ChatService(BaseService):
         response_style: Optional[str] = "auto",
         custom_instruction: Optional[str] = None
     ) -> Dict[str, Any]:
-        """AI応答生成（シンプル版）"""
-        
+        """AI応答生成（質問明確化機能付き）"""
+
+        # 環境変数で機能のON/OFFを制御
+        enable_clarification = os.environ.get("ENABLE_CLARIFICATION", "true").lower() == "true"
+
+        # 長考モードでない場合のみ質問の抽象度を判定
+        is_deep_thinking = response_style in ["research", "deepen"]
+
+        if enable_clarification and not is_deep_thinking:
+            intent = await self._classify_question_intent(message)
+
+            # 抽象的な質問の場合は明確化質問を生成
+            if intent == "abstract":
+                try:
+                    return await self._generate_clarification_questions(message)
+                except Exception as e:
+                    self.logger.warning(f"Clarification failed, falling back to normal response: {e}")
+                    # 明確化失敗時は通常の応答にフォールバック
+
+        # 通常の応答生成
         # 非同期LLMクライアントを優先的に使用
         try:
             return await self._process_with_async_llm(
@@ -406,4 +424,123 @@ class ChatService(BaseService):
                 .execute()
         except Exception as e:
             self.logger.warning(f"Conversation timestamp update failed: {e}")
-    
+
+    async def _classify_question_intent(self, message: str) -> str:
+        """
+        質問の抽象度を判定
+
+        Args:
+            message: ユーザーの質問メッセージ
+
+        Returns:
+            "abstract" | "specific"
+        """
+        # 簡易判定ロジック（キーワードベース）
+        abstract_keywords = [
+            "について", "とは", "どう", "なぜ", "なに", "何",
+            "歴史", "全体", "基本", "概要", "教えて", "知りたい"
+        ]
+        specific_keywords = [
+            "どのように", "手順", "方法", "やり方", "具体的",
+            "いつ", "どこで", "ステップ", "実装", "コード"
+        ]
+
+        message_lower = message.lower()
+        abstract_count = sum(1 for kw in abstract_keywords if kw in message_lower)
+        specific_count = sum(1 for kw in specific_keywords if kw in message_lower)
+
+        message_length = len(message)
+
+        # 判定ロジック
+        # 1. 文字数が短く（50文字未満）、抽象的なキーワードが多い
+        if message_length < 50 and abstract_count > specific_count:
+            return "abstract"
+
+        # 2. 非常に短い質問（30文字未満）で抽象的なキーワードが1つ以上
+        if message_length < 30 and abstract_count > 0:
+            return "abstract"
+
+        return "specific"
+
+    async def _generate_clarification_questions(self, message: str) -> Dict[str, Any]:
+        """
+        抽象的な質問に対する3つの明確化質問と選択肢を生成
+
+        Args:
+            message: ユーザーの抽象的な質問
+
+        Returns:
+            フォーマット済みの明確化質問を含む応答
+        """
+        from module.llm_api import get_async_llm_client
+        from prompt.prompt import CLARIFICATION_PROMPT
+
+        llm_client = get_async_llm_client()
+
+        # 明確化質問生成プロンプトを実行
+        prompt_text = CLARIFICATION_PROMPT.replace("{user_message}", message)
+        input_items = [
+            llm_client.text("system", prompt_text),
+            llm_client.text("user", message)
+        ]
+
+        # 質問生成は高速化のためmax_tokens制限
+        response_obj = await llm_client.generate_response_async(input_items, max_tokens=500)
+        response_text = llm_client.extract_output_text(response_obj)
+
+        # JSONパース（フォールバック処理付き）
+        try:
+            # JSON部分を抽出
+            json_start = response_text.find('{')
+            json_end = response_text.rfind('}') + 1
+            if json_start != -1 and json_end > json_start:
+                json_text = response_text[json_start:json_end]
+                parsed = json.loads(json_text)
+            else:
+                raise ValueError("JSON not found in response")
+
+            # フォーマット済みの応答テキストを作成
+            formatted_response = f"{parsed['summary']}\n\n"
+            formatted_response += "以下の点について、詳しく教えてもらえますか？\n\n"
+
+            # 質問リストをテキスト化
+            questions_list = []
+            all_options = []
+
+            for i, q_data in enumerate(parsed['clarification_questions'], 1):
+                question_text = q_data['question']
+                options = q_data.get('options', [])
+
+                formatted_response += f"{i}. {question_text}\n"
+                if options:
+                    formatted_response += f"   （例: {', '.join(options[:3])}）\n"
+
+                questions_list.append(question_text)
+                all_options.extend(options)
+
+            # quick_optionsも追加
+            quick_opts = parsed.get('quick_options', [])
+            all_options.extend(quick_opts)
+
+            formatted_response += "\n💡 細かく希望がなければ、上記の選択肢から選んでください。"
+
+            return {
+                "response": formatted_response,
+                "agent_used": False,
+                "fallback_used": False,
+                "is_clarification": True,
+                "clarification_questions": questions_list,
+                "suggestion_options": all_options  # クリック可能な全選択肢
+            }
+
+        except Exception as parse_error:
+            self.logger.warning(f"JSON parse failed for clarification: {parse_error}")
+
+            # パース失敗時は通常応答へフォールバック
+            return {
+                "response": f"「{message}」について、もう少し詳しく教えてもらえますか？\n\n例えば、知りたい範囲や目的、具体的な関心事項などを教えてください。",
+                "agent_used": False,
+                "fallback_used": True,
+                "is_clarification": False
+            }
+

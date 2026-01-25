@@ -27,6 +27,7 @@ import { useChatStore } from '../../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
 import { useAIChatMessages } from '../../hooks/useAIChatMessages';
 import ResponseStyleSelector, { ResponseStyle } from './ResponseStyleSelector';
+import { SuggestionChips } from './SuggestionChips';
 
 interface Message {
   id: string;
@@ -37,6 +38,10 @@ interface Message {
   chunks?: string[];
   isSplit?: boolean;
   originalLength?: number;
+  // 質問明確化機能用フィールド
+  is_clarification?: boolean;
+  clarification_questions?: string[];
+  suggestion_options?: string[];
 }
 
 interface AIChatProps {
@@ -310,6 +315,160 @@ const AIChat: React.FC<AIChatProps> = ({
 
 
 
+  // 選択肢クリック時のハンドラー
+  const handleSuggestionClick = async (option: string) => {
+    if (isLoading || isSendingRef.current) return;
+
+    // 選択肢をinputValueにセットしてからメッセージ送信
+    setInputValue(option);
+
+    // わずかに遅延させてから送信（UIフィードバックのため）
+    setTimeout(async () => {
+      // handleSendMessageと同じロジックを実行
+      if (!option.trim() || isLoading || isSendingRef.current) return;
+
+      // 二重送信防止フラグ
+      isSendingRef.current = true;
+
+      // 会話IDが存在しない場合は新しい会話を作成
+      let conversationId = currentConversationId;
+      if (!conversationId) {
+        conversationId = await createNewConversation();
+        if (conversationId) {
+          setCurrentConversationId(conversationId);
+          console.log('🆕 メッセージ送信前に新しい会話を作成:', conversationId);
+        }
+      }
+
+      const userMessage: Message = {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: option,
+        timestamp: new Date(),
+      };
+
+      // 統一されたフックでメッセージ追加
+      addMessage(userMessage);
+      setInputValue('');
+      setIsLoading(true);
+
+      // 学習活動記録
+      if (onActivityRecord) {
+        onActivityRecord(userMessage.content, 'user');
+      }
+      // 通知システムにも記録
+      notificationManagerRef.current?.recordActivity(userMessage.content, 'user');
+
+      // メッセージ送信時は条件付きで最下部にスクロール
+      scrollToBottomIfNeeded();
+
+      try {
+        let aiResponse = '';
+
+        if (onMessageSend) {
+          // 継続モードの場合は現在のメモコンテンツを使用、そうでなければ従来通り
+          const contextContent = persistentMode ? currentMemoContent : memoContent;
+          // 応答スタイルをAPIに渡す
+          const messageWithStyle = responseStyle ?
+            `[応答スタイル: ${responseStyle.label}]\n${userMessage.content}` :
+            userMessage.content;
+          aiResponse = await onMessageSend(messageWithStyle, contextContent);
+        } else {
+          // データベース対応のチャットAPIを使用
+          const token = localStorage.getItem('auth-token');
+          if (token) {
+            const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+            const response = await fetch(`${apiBaseUrl}/chat`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              credentials: 'include',
+              body: JSON.stringify({
+                message: userMessage.content,
+                context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
+                response_style: responseStyle?.id || 'auto',
+                custom_instruction: responseStyle?.customInstruction || undefined,
+              }),
+            });
+
+            if (response.ok) {
+              const result = await response.json();
+
+              // 質問明確化機能用フィールドを保存
+              const assistantMessage: Message = {
+                id: `assistant-${Date.now()}`,
+                role: 'assistant',
+                content: result.response,
+                timestamp: new Date(),
+                is_clarification: result.is_clarification || false,
+                clarification_questions: result.clarification_questions || [],
+                suggestion_options: result.suggestion_options || [],
+              };
+              addMessage(assistantMessage);
+
+              // 学習活動記録（AI応答）
+              if (onActivityRecord) {
+                onActivityRecord(assistantMessage.content, 'ai');
+              }
+              // 通知システムにも記録
+              notificationManagerRef.current?.recordActivity(assistantMessage.content, 'ai');
+
+              // AI応答完了時も条件付きで最下部にスクロール
+              setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
+
+              setIsLoading(false);
+              isSendingRef.current = false;
+              inputRef.current?.focus();
+              return; // 早期リターン
+            } else {
+              throw new Error('API応答エラー');
+            }
+          } else {
+            // フォールバック処理
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            aiResponse = `「${userMessage.content}」について理解しました。さらに詳しく教えてください。`;
+          }
+        }
+
+        const assistantMessage: Message = {
+          id: `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: aiResponse,
+          timestamp: new Date(),
+        };
+
+        // 統一されたフックでAI応答を追加
+        addMessage(assistantMessage);
+
+        // 学習活動記録（AI応答）
+        if (onActivityRecord) {
+          onActivityRecord(assistantMessage.content, 'ai');
+        }
+        // 通知システムにも記録
+        notificationManagerRef.current?.recordActivity(assistantMessage.content, 'ai');
+
+        // AI応答完了時も条件付きで最下部にスクロール
+        setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
+      } catch (error) {
+        console.error('AI応答エラー:', error);
+        const errorMessage: Message = {
+          id: `error-${Date.now()}`,
+          role: 'assistant',
+          content: '申し訳ございません。応答の生成中にエラーが発生しました。もう一度お試しください。',
+          timestamp: new Date(),
+        };
+        // 統一されたフックでエラーメッセージを追加
+        addMessage(errorMessage);
+      } finally {
+        setIsLoading(false);
+        isSendingRef.current = false;
+        inputRef.current?.focus();
+      }
+    }, 100);
+  };
+
   // メッセージ送信処理（二重送信防止付き）
   const isSendingRef = useRef(false);
   const handleSendMessage = async () => {
@@ -383,7 +542,7 @@ const AIChat: React.FC<AIChatProps> = ({
 
           if (response.ok) {
             const result = await response.json();
-            
+
             // 分割情報がある場合は対応
             if (result.is_split && result.response_chunks) {
               // 分割されたレスポンスを保存
@@ -395,27 +554,57 @@ const AIChat: React.FC<AIChatProps> = ({
                 isSplit: true,
                 originalLength: result.original_length,
                 timestamp: new Date(),
+                // 質問明確化機能用フィールド
+                is_clarification: result.is_clarification || false,
+                clarification_questions: result.clarification_questions || [],
+                suggestion_options: result.suggestion_options || [],
               };
-              
+
               // 統一されたフックでAI応答を追加
               addMessage(assistantMessage);
-              
+
               // 学習活動記録（AI応答）
               if (onActivityRecord) {
                 onActivityRecord(result.response_chunks.join(''), 'ai');
               }
               // 通知システムにも記録
               notificationManagerRef.current?.recordActivity(result.response_chunks.join(''), 'ai');
-              
+
               // AI応答完了時も条件付きで最下部にスクロール
               setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
-              
+
               setIsLoading(false);
               isSendingRef.current = false;
               inputRef.current?.focus();
               return; // 早期リターン
             } else {
               aiResponse = result.response;
+              // 質問明確化機能用フィールドを保存（通常応答の場合）
+              const assistantMessage: Message = {
+                id: `assistant-${Date.now()}`,
+                role: 'assistant',
+                content: aiResponse,
+                timestamp: new Date(),
+                is_clarification: result.is_clarification || false,
+                clarification_questions: result.clarification_questions || [],
+                suggestion_options: result.suggestion_options || [],
+              };
+              addMessage(assistantMessage);
+
+              // 学習活動記録（AI応答）
+              if (onActivityRecord) {
+                onActivityRecord(assistantMessage.content, 'ai');
+              }
+              // 通知システムにも記録
+              notificationManagerRef.current?.recordActivity(assistantMessage.content, 'ai');
+
+              // AI応答完了時も条件付きで最下部にスクロール
+              setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
+
+              setIsLoading(false);
+              isSendingRef.current = false;
+              inputRef.current?.focus();
+              return; // 早期リターン
             }
           } else {
             throw new Error('API応答エラー');
@@ -844,15 +1033,24 @@ const AIChat: React.FC<AIChatProps> = ({
                           )}
                         </Box>
                       ) : (
-                        <Typography 
-                          variant="body1" 
-                          sx={{ 
+                        <Typography
+                          variant="body1"
+                          sx={{
                             whiteSpace: 'pre-wrap',
                             lineHeight: 1.6,
                           }}
                         >
                           {message.content}
                         </Typography>
+                      )}
+
+                      {/* 選択肢チップの表示（AIメッセージかつsuggestion_optionsがある場合） */}
+                      {message.role === 'assistant' && message.suggestion_options && message.suggestion_options.length > 0 && (
+                        <SuggestionChips
+                          options={message.suggestion_options}
+                          onSelect={handleSuggestionClick}
+                          disabled={isLoading}
+                        />
                       )}
                     </Box>
                   </Box>

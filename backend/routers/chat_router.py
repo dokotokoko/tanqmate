@@ -39,6 +39,11 @@ class ChatResponse(BaseModel):
     agent_used: Optional[bool] = False
     fallback_used: Optional[bool] = False
 
+    # 質問明確化機能用フィールド
+    is_clarification: Optional[bool] = False  # 明確化質問かどうか
+    clarification_questions: Optional[List[str]] = None  # 構造化された質問リスト
+    suggestion_options: Optional[List[str]] = None  # クリック可能な選択肢
+
 class ChatHistoryResponse(BaseModel):
     message: str
     response: str
@@ -106,7 +111,10 @@ async def chat_with_ai(
             project_id=result.get("project_id"),
             metrics=result.get("metrics"),
             agent_used=result.get("agent_used", False),
-            fallback_used=result.get("fallback_used", False)
+            fallback_used=result.get("fallback_used", False),
+            is_clarification=result.get("is_clarification", False),
+            clarification_questions=result.get("clarification_questions"),
+            suggestion_options=result.get("suggestion_options")
         )
         
     except Exception as e:
