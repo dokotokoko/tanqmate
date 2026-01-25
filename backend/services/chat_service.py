@@ -191,28 +191,34 @@ class ChatService(BaseService):
         try:
             from module.llm_api import get_async_llm_client
             from .response_styles import ResponseStyleManager
-            
+
             # NOTE: get_async_llm_client は初回呼び出しの pool_size（=Semaphore上限）のみ有効
             pool_size = int(os.environ.get("LLM_POOL_SIZE", "5"))
             llm_client = get_async_llm_client(pool_size=pool_size)  # awaitは不要
             if not llm_client:
                 raise Exception("Async LLM client not available")
-            
+
             context_data = self._build_context_data(project_context, conversation_history)
-            
+
             # 応答スタイルに応じたシステムプロンプトを取得
             if response_style == "custom" and custom_instruction:
                 # カスタムスタイルの場合は、プロンプトテンプレートに指示を埋め込む
                 system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
             else:
                 system_prompt = ResponseStyleManager.get_system_prompt(response_style)
-            
+
+            # 応答スタイルに応じたトークン数制限を設定
+            # 長考モード: research, deepen → 制限なし（従来通り）
+            # 通常モード: organize, expand, ideas → 300トークン（約400文字）
+            is_deep_thinking = response_style in ["research", "deepen"]
+            max_tokens = None if is_deep_thinking else int(os.environ.get("DEFAULT_MAX_TOKENS", "300"))
+
             # llm_clientのgenerate_response_asyncメソッドを呼び出す
             input_items = [
                 llm_client.text("system", system_prompt),
                 llm_client.text("user", f"{context_data}\n\n{message}")
             ]
-            response_obj = await llm_client.generate_response_async(input_items)
+            response_obj = await llm_client.generate_response_async(input_items, max_tokens=max_tokens)
 
             # Web検索実行確認のログ出力（Responseオブジェクトに対して行う）
             self.dump_response_events(response_obj)
@@ -244,30 +250,43 @@ class ChatService(BaseService):
             #sys.path.append('C:\\Users\\kouta\\learning-assistant')
             from module.llm_api import learning_plannner
             from .response_styles import ResponseStyleManager
-            
+
             context_data = self._build_context_data(project_context, conversation_history)
-            
+
             # 応答スタイルに応じたシステムプロンプトを取得
             if response_style == "custom" and custom_instruction:
                 # カスタムスタイルの場合は、プロンプトテンプレートに指示を埋め込む
                 system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
             else:
                 system_prompt = ResponseStyleManager.get_system_prompt(response_style)
-            
+
+            # 応答スタイルに応じたトークン数制限を設定
+            # 長考モード: research, deepen → 制限なし（従来通り）
+            # 通常モード: organize, expand, ideas → 300トークン（約400文字）
+            is_deep_thinking = response_style in ["research", "deepen"]
+            max_tokens = None if is_deep_thinking else int(os.environ.get("DEFAULT_MAX_TOKENS", "300"))
+
             # learning_plannnerクラスのインスタンスを作成
             llm_instance = learning_plannner()
-            
+
             # 同期処理を非同期コンテキストで実行
             input_items = [
                 llm_instance.text("system", system_prompt),
                 llm_instance.text("user", f"{context_data}\n\n{message}")
             ]
-            
-            response_obj = await asyncio.get_event_loop().run_in_executor(
-                None,
-                llm_instance.generate_response,
-                input_items
-            )
+
+            # max_tokensを引数として渡す
+            if max_tokens:
+                response_obj = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: llm_instance.generate_response(input_items, max_tokens)
+                )
+            else:
+                response_obj = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    llm_instance.generate_response,
+                    input_items
+                )
 
             # Web検索実行確認のログ出力（Responseオブジェクトに対して行う）
             self.dump_response_events(response_obj)
