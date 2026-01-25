@@ -1,78 +1,53 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
+import { tokenManager } from '../../utils/tokenManager';
 import {
   Box,
-  TextField,
-  Button,
-  Typography,
-  List,
-  ListItem,
-  Avatar,
-  Stack,
   CircularProgress,
-  IconButton,
 } from '@mui/material';
-import {
-  Send as SendIcon,
-  SmartToy as AIIcon,
-  Person as PersonIcon,
-  Close as CloseIcon,
-  NoteAdd as MemoIcon,
-  History as HistoryIcon,
-  Add as AddIcon,
-} from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
-import ChatHistory from './ChatHistory';
-import SmartNotificationManager, { SmartNotificationManagerRef } from '../SmartNotificationManager';
-import { useChatStore } from '../../stores/chatStore';
+import { AnimatePresence } from 'framer-motion';
+import { 
+  useChatStore,
+  selectMessages,
+  selectMessageActions,
+  selectConversation,
+  selectConversationActions,
+  selectUIActions,
+  type Message
+} from '../../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
-import { useAIChatMessages } from '../../hooks/useAIChatMessages';
-import ResponseStyleSelector, { ResponseStyle } from './ResponseStyleSelector';
-import QuestCards from './QuestCards';
+import { useScrollBehavior } from '../../hooks/useScrollBehavior';
+import { useTimerManager } from '../../hooks/useTimerManager';
+import { useEventManager } from '../../hooks/useEventManager';
 
-interface QuestCard {
-  id: string;
-  label: string;
-  emoji: string;
-  color: 'teal' | 'yellow' | 'purple' | 'pink' | 'green';
-}
+// Lazy load components for better performance with error boundaries
+const ChatHeader = lazy(() => import('./ChatHeader').catch(err => {
+  console.error('Failed to load ChatHeader:', err);
+  return { default: () => <div>ヘッダーの読み込みに失敗しました</div> };
+}));
+const ChatMessageList = lazy(() => import('./ChatMessageList').catch(err => {
+  console.error('Failed to load ChatMessageList:', err);
+  return { default: () => <div>メッセージリストの読み込みに失敗しました</div> };
+}));
+const ChatInputArea = lazy(() => import('./ChatInputArea').catch(err => {
+  console.error('Failed to load ChatInputArea:', err);
+  return { default: () => <div>入力エリアの読み込みに失敗しました</div> };
+}));
+const ChatHistory = lazy(() => import('./ChatHistory').catch(err => {
+  console.error('Failed to load ChatHistory:', err);
+  return { default: () => <div>履歴パネルの読み込みに失敗しました</div> };
+}));
 
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date | string | undefined | null;
-  // 分割表示用フィールド
-  chunks?: string[];
-  isSplit?: boolean;
-  originalLength?: number;
-  // クエストカード
-  questCards?: QuestCard[];
-}
-
-interface AIChatProps {
-  isDashboard?: boolean;  // ダッシュボードかどうかのフラグ
-  title: string;
-  initialMessage?: string;
-  initialAIResponse?: string;
-  memoContent?: string; // 使用しないが、既存コンポーネントとの互換性のため残す
-  currentMemoContent?: string; // 現在のメモコンテンツ（動的更新用）
-  currentMemoTitle?: string; // 現在のメモタイトル（動的更新用）
-  onMessageSend?: (message: string, memoContent: string) => Promise<string>;
-  onClose?: () => void;
-  autoStart?: boolean; // 自動開始フラグ
-  onOpenMemo?: () => void; // メモ帳を開く（Step2用）
-  showMemoButton?: boolean; // メモ帳ボタンを表示するか
-  hideMemoButton?: boolean; // メモ帳ボタンを隠すか（メモ帳が開いているときなど）
-  forceRefresh?: boolean; // 強制的にメッセージをクリアして再初期化
-  loadHistoryFromDB?: boolean; // データベースから履歴を読み込むか
-  isInitializing?: boolean; // 初期化中かどうか（外部から制御）
-  enableSmartNotifications?: boolean; // スマート通知機能を有効にするか
-  onActivityRecord?: (message: string, sender: 'user' | 'ai') => void; // 学習活動記録
-  persistentMode?: boolean; // 継続モード（メモ切り替えでリセットしない）
-}
+// Import types from shared types file
+import type { 
+  QuestCard,
+  ResponseStyle, 
+  AIChatProps,
+  LoadingFallbackProps 
+} from './types';
 
 const AIChat: React.FC<AIChatProps> = ({
   isDashboard = false,
+  title,
   initialMessage,
   initialAIResponse,
   memoContent = '',
@@ -87,38 +62,29 @@ const AIChat: React.FC<AIChatProps> = ({
   forceRefresh = false,
   loadHistoryFromDB = true,
   isInitializing = false,
-  enableSmartNotifications = true,
-  onActivityRecord,
   persistentMode = false,
 }) => {
-  // 統一されたメッセージ管理フックを使用
-  const { messages, addMessage, setMessages, clearMessages } = useAIChatMessages();
+  // Zustand store selectors and actions
+  const messages = selectMessages();
+  const { addMessage, setMessages, clearMessages } = selectMessageActions();
+  const conversation = selectConversation();
+  const { setConversationId, setLoading, setProcessingStatus, setFallbackInfo } = selectConversationActions();
+  const { setHistoryOpen } = selectUIActions();
+  const isHistoryOpen = useChatStore((state) => state.isHistoryOpen);
+  
+  // Local UI state
   const [inputValue, setInputValue] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const messageListRef = useRef<HTMLDivElement>(null);
-  const [isUserScrolling, setIsUserScrolling] = useState(false);
-  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  
-  // 会話管理機能
-  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
-  const [conversationLoading, setConversationLoading] = useState(false);
-  
-  // 応答スタイルの状態
   const [responseStyle, setResponseStyle] = useState<ResponseStyle | null>(null);
-  
-  // 通知システムのref
-  const notificationManagerRef = useRef<SmartNotificationManagerRef>(null);
-
-  // 初期化管理用のref
   const initializationKeyRef = useRef('initialized');
   
-  // タイマー管理用
-  const timersRef = useRef<Set<NodeJS.Timeout>>(new Set());
-  const abortControllerRef = useRef<AbortController | null>(null);
+  // Refs
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const isSendingRef = useRef(false);
+  
+  // Custom hooks for side effects
+  const scrollBehavior = useScrollBehavior({ messageListRef });
+  const timerManager = useTimerManager();
 
   // デフォルトの初期メッセージを返す関数
   const getDefaultInitialMessage = (): string => {
@@ -161,81 +127,51 @@ const AIChat: React.FC<AIChatProps> = ({
     ];
   };
 
-  // スクロール位置の監視
-  const checkScrollPosition = () => {
-    const container = messageListRef.current;
-    if (!container) return;
-
-    const { scrollTop, scrollHeight, clientHeight } = container;
-    const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+  // Define handleNewChat before using it in eventManager
+  const handleNewChat = useCallback(async () => {
+    clearMessages();
+    setHistoryOpen(false);
     
-    // スクロール位置が90%以上の場合は最下部近くと判定
-    setShouldAutoScroll(scrollPercentage > 0.9);
-  };
-
-  // スクロールイベントハンドラ（イベント駆動）
-  const scrollTimeoutRef = useRef<number>();
-
-  const setupScrollHandling = useCallback(() => {
-    const container = messageListRef.current;
-    if (!container) return null;
-
-    const handleScroll = () => {
-      setIsUserScrolling(true);
-      checkScrollPosition();
-      
-      // スクロール停止後、少し待ってからユーザースクロールフラグをリセット
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-      scrollTimeoutRef.current = window.setTimeout(() => {
-        setIsUserScrolling(false);
-      }, 150);
-    };
-
-    container.addEventListener('scroll', handleScroll, { passive: true });
+    // Create new conversation
+    const newConversationId = await createNewConversation();
+    if (newConversationId) {
+      setConversationId(newConversationId);
+      console.log('🆕 新しい会話を作成しました:', newConversationId);
+    }
     
-    return () => {
-      container.removeEventListener('scroll', handleScroll);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
+    // Set initial message
+    const messageContent = initialMessage || getDefaultInitialMessage();
+    const initialMsg: Message = {
+      id: `initial-${Date.now()}`,
+      role: 'assistant',
+      content: messageContent,
+      timestamp: new Date(),
+      questCards: getDefaultQuestCards(),
     };
-  }, []);
+    addMessage(initialMsg);
+  }, [clearMessages, setHistoryOpen, setConversationId, addMessage, initialMessage]);
+
+  // Initialize event manager after handleNewChat is defined
+  const eventManager = useEventManager({
+    onNewChat: handleNewChat,
+    onHistoryOpen: () => setHistoryOpen(true),
+  });
 
   // メッセージクリア関数（イベント駆動）
   const clearMessagesIfNeeded = useCallback(() => {
     if (forceRefresh) {
       clearMessages();
       setHistoryLoaded(false);
-      setShouldAutoScroll(true);
-      setIsUserScrolling(false);
       initializationKeyRef.current = 'initialized';
       return true; // クリアが実行されたことを示す
     }
     return false;
   }, [forceRefresh, clearMessages]);
 
-  // ストア同期関数（カスタムフックで管理されるため不要）
-  const syncMessagesFromStore = useCallback(() => {
-    // カスタムフックが自動的に同期するため、ここでは何もしない
-  }, []);
-
-  // タイマー管理ヘルパー
-  const setManagedTimeout = useCallback((callback: () => void, delay: number) => {
-    const timer = setTimeout(() => {
-      timersRef.current.delete(timer);
-      callback();
-    }, delay);
-    timersRef.current.add(timer);
-    return timer;
-  }, []);
 
   // 対話履歴読み込み関数（イベント駆動）
   const loadChatHistory = useCallback(async () => {
     // ページリロードの検出
-    // performance.navigation.type === 1 はリロード
-    // performance.getEntriesByType('navigation')でも判定可能
     const isPageReload = performance.navigation?.type === 1 || 
                         (performance.getEntriesByType?.('navigation')[0] as any)?.type === 'reload';
     
@@ -267,7 +203,7 @@ const AIChat: React.FC<AIChatProps> = ({
 
     try {
       // 認証トークンを取得
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       if (!token) return;
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
@@ -306,11 +242,6 @@ const AIChat: React.FC<AIChatProps> = ({
         }
         
         setHistoryLoaded(true);
-        
-        // 履歴読み込み後に最下部にスクロール
-        setManagedTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-        }, 100);
       }
     } catch (error) {
       console.error('対話履歴の読み込みエラー:', error);
@@ -357,22 +288,61 @@ const AIChat: React.FC<AIChatProps> = ({
       // 初期化完了を記録
       initializationKeyRef.current = 'initialized';
     }
-  }, [initialMessage, initialAIResponse, isDashboard, loadHistoryFromDB, historyLoaded, messages.length, autoStart]);
+  }, [initialMessage, initialAIResponse, isDashboard, loadHistoryFromDB, historyLoaded, messages.length, autoStart, setMessages]);
 
-  // 自動スクロール処理（イベント駆動）
-  const previousMessageCountRef = useRef(0);
-  
-  const scrollToBottomIfNeeded = useCallback(() => {
-    // メッセージが新しく追加された場合かつ、ユーザーがスクロール中でない、かつ自動スクロールが有効な場合のみ実行
-    if (messages.length > previousMessageCountRef.current && !isUserScrolling && shouldAutoScroll) {
-      setManagedTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-      }, 100);
+  // 新しい会話を作成
+  const createNewConversation = async (): Promise<string | null> => {
+    try {
+      setLoading(true);
+      
+      const token = tokenManager.getAccessToken();
+      if (!token) {
+        console.error('認証トークンが見つかりません');
+        return null;
+      }
+      
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiBaseUrl}/conversations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          title: '', // 空文字列に変更（バックエンドで自動生成）
+          metadata: {
+            source: 'new_chat_button',
+            created_via: 'ai_chat_component'
+          }
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        return result.id;
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        console.error('新しい会話の作成に失敗:', {
+          status: response.status,
+          error: errorData,
+          detail: errorData.detail || errorData
+        });
+        return null;
+      }
+    } catch (error) {
+      console.error('新しい会話の作成エラー:', error);
+      return null;
+    } finally {
+      setLoading(false);
     }
-    previousMessageCountRef.current = messages.length;
-  }, [messages, isUserScrolling, shouldAutoScroll, setManagedTimeout]);
+  };
 
 
+  // 履歴を開く
+  const handleOpenHistory = () => {
+    setHistoryOpen(true);
+  };
 
   // クエストカードクリック処理
   const handleQuestCardClick = (cardId: string, cardLabel: string) => {
@@ -381,7 +351,6 @@ const AIChat: React.FC<AIChatProps> = ({
   };
 
   // メッセージ送信処理（二重送信防止付き）
-  const isSendingRef = useRef(false);
   const handleSendMessage = async () => {
     console.log('📢 handleSendMessage called'); // デバッグログ
     if (!inputValue.trim() || isLoading || isSendingRef.current) return;
@@ -390,11 +359,11 @@ const AIChat: React.FC<AIChatProps> = ({
     isSendingRef.current = true;
 
     // 会話IDが存在しない場合は新しい会話を作成
-    let conversationId = currentConversationId;
+    let conversationId = conversation.conversationId;
     if (!conversationId) {
       conversationId = await createNewConversation();
       if (conversationId) {
-        setCurrentConversationId(conversationId);
+        setConversationId(conversationId);
         console.log('🆕 メッセージ送信前に新しい会話を作成:', conversationId);
       }
     }
@@ -406,20 +375,11 @@ const AIChat: React.FC<AIChatProps> = ({
       timestamp: new Date(),
     };
 
-    // 統一されたフックでメッセージ追加
+    // メッセージ追加
     addMessage(userMessage);
     setInputValue('');
-    setIsLoading(true);
-    
-    // 学習活動記録
-    if (onActivityRecord) {
-      onActivityRecord(userMessage.content, 'user');
-    }
-    // 通知システムにも記録
-    notificationManagerRef.current?.recordActivity(userMessage.content, 'user');
-    
-    // メッセージ送信時は条件付きで最下部にスクロール
-    scrollToBottomIfNeeded();
+    setLoading(true);
+    setProcessingStatus('AI処理を開始しています...');
 
     try {
       let aiResponse = '';
@@ -434,8 +394,9 @@ const AIChat: React.FC<AIChatProps> = ({
         aiResponse = await onMessageSend(messageWithStyle, contextContent);
       } else {
         // データベース対応のチャットAPIを使用
-        const token = localStorage.getItem('auth-token');
+        const token = tokenManager.getAccessToken();
         if (token) {
+          setProcessingStatus('AIが考え中です...');
           const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
           const response = await fetch(`${apiBaseUrl}/chat`, {
             method: 'POST',
@@ -576,15 +537,13 @@ const AIChat: React.FC<AIChatProps> = ({
         content: '申し訳ございません。応答の生成中にエラーが発生しました。もう一度お試しください。',
         timestamp: new Date(),
       };
-      // 統一されたフックでエラーメッセージを追加
+      // エラーメッセージを追加
       addMessage(errorMessage);
-      
-      // エラーメッセージ表示時も条件付きで最下部にスクロール
-      setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
+      setProcessingStatus(null);
+      setFallbackInfo(false, null);
       isSendingRef.current = false; // 二重送信防止フラグをリセット
-      inputRef.current?.focus();
     }
   };
 
@@ -593,46 +552,6 @@ const AIChat: React.FC<AIChatProps> = ({
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       handleSendMessage();
-    }
-  };
-
-  const formatTime = (timestamp: Date | string | undefined | null) => {
-    try {
-      // timestampがnullまたはundefinedの場合は現在時刻を使用
-      if (!timestamp) {
-        return new Date().toLocaleTimeString('ja-JP', {
-          hour: '2-digit',
-          minute: '2-digit',
-        });
-      }
-
-      // 文字列の場合はDateオブジェクトに変換
-      let date: Date;
-      if (typeof timestamp === 'string') {
-        date = new Date(timestamp);
-      } else if (timestamp instanceof Date) {
-        date = timestamp;
-      } else {
-        // その他の型の場合は現在時刻を使用
-        date = new Date();
-      }
-      
-      // 無効な日付の場合は現在時刻を使用
-      if (isNaN(date.getTime())) {
-        date = new Date();
-      }
-      
-      return date.toLocaleTimeString('ja-JP', {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch (error) {
-      console.error('formatTime error:', error, 'timestamp:', timestamp);
-      // エラーが発生した場合は現在時刻を返す
-      return new Date().toLocaleTimeString('ja-JP', {
-        hour: '2-digit',
-        minute: '2-digit',
-      });
     }
   };
 
@@ -647,91 +566,12 @@ const AIChat: React.FC<AIChatProps> = ({
     
     // 会話IDを設定（sessionに含まれている場合）
     if (session.conversation_id) {
-      setCurrentConversationId(session.conversation_id);
+      setConversationId(session.conversation_id);
       console.log('📋 会話を切り替えました:', session.conversation_id);
     }
     
     setMessages(historyMessages);
-    setIsHistoryOpen(false);
-    setShouldAutoScroll(true);
-    
-    // 最下部にスクロール
-    setManagedTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
-  };
-
-  // 新しい会話を作成
-  const createNewConversation = async (): Promise<string | null> => {
-    try {
-      setConversationLoading(true);
-      
-      const token = localStorage.getItem('auth-token');
-      if (!token) {
-        console.error('認証トークンが見つかりません');
-        return null;
-      }
-      
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/conversations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          title: '', // 空文字列に変更（バックエンドで自動生成）
-          metadata: {
-            source: 'new_chat_button',
-            created_via: 'ai_chat_component'
-          }
-        }),
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        return result.id;
-      } else {
-        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        console.error('新しい会話の作成に失敗:', {
-          status: response.status,
-          error: errorData,
-          detail: errorData.detail || errorData
-        });
-        return null;
-      }
-    } catch (error) {
-      console.error('新しい会話の作成エラー:', error);
-      return null;
-    } finally {
-      setConversationLoading(false);
-    }
-  };
-
-  // 新しいチャット開始
-  const handleNewChat = async () => {
-    clearMessages();
-    setIsHistoryOpen(false);
-    setShouldAutoScroll(true);
-    
-    // 新しい会話を作成
-    const newConversationId = await createNewConversation();
-    if (newConversationId) {
-      setCurrentConversationId(newConversationId);
-      console.log('🆕 新しい会話を作成しました:', newConversationId);
-    }
-    
-    // 初期メッセージがある場合は設定、なければデフォルトメッセージを使用
-    const messageContent = initialMessage || getDefaultInitialMessage();
-    const initialMsg: Message = {
-      id: `initial-${Date.now()}`,
-      role: 'assistant',
-      content: messageContent,
-      timestamp: new Date(),
-      questCards: getDefaultQuestCards(),
-    };
-    addMessage(initialMsg);
+    setHistoryOpen(false);
   };
 
   // コンポーネントマウント時のリセット処理
@@ -749,61 +589,36 @@ const AIChat: React.FC<AIChatProps> = ({
   useEffect(() => {
     const wasCleared = clearMessagesIfNeeded();
     if (!wasCleared) {
-      syncMessagesFromStore();
       if (!historyLoaded && loadHistoryFromDB) {
         loadChatHistory();
       } else if (!loadHistoryFromDB || historyLoaded) {
         loadInitialMessages();
       }
     }
-  }, [forceRefresh, clearMessagesIfNeeded, syncMessagesFromStore, loadChatHistory, loadInitialMessages, loadHistoryFromDB, historyLoaded]);
-
-  // スクロール処理の設定
-  useEffect(() => {
-    const cleanup = setupScrollHandling();
-    return cleanup;
-  }, [setupScrollHandling]);
+  }, [forceRefresh, clearMessagesIfNeeded, loadChatHistory, loadInitialMessages, loadHistoryFromDB, historyLoaded]);
   
-  // メッセージ変更時のスクロール
-  useEffect(() => {
-    if (messages.length > previousMessageCountRef.current) {
-      scrollToBottomIfNeeded();
-      previousMessageCountRef.current = messages.length;
-    }
-  }, [messages, scrollToBottomIfNeeded]);
-  
-  // カスタムイベントリスナーの設定
-  useEffect(() => {
-    const handleNewChatRequest = () => {
-      handleNewChat();
-    };
+  // Event listeners are managed by useEventManager hook
 
-    const handleHistoryOpenRequest = () => {
-      setIsHistoryOpen(true);
-    };
+  // Cleanup is managed by custom hooks
 
-    window.addEventListener('newChatRequest', handleNewChatRequest);
-    window.addEventListener('historyOpenRequest', handleHistoryOpenRequest);
-
-    return () => {
-      window.removeEventListener('newChatRequest', handleNewChatRequest);
-      window.removeEventListener('historyOpenRequest', handleHistoryOpenRequest);
-    };
-  }, [handleNewChat]);
-
-  // コンポーネントアンマウント時のクリーンアップ
-  useEffect(() => {
-    return () => {
-      // 全タイマーのクリア
-      timersRef.current.forEach(timer => clearTimeout(timer));
-      timersRef.current.clear();
-      
-      // 非同期処理のキャンセル
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-    };
-  }, []);
+  // Enhanced loading fallback component with better UX
+  const LoadingFallback: React.FC<LoadingFallbackProps> = ({ text = "読み込み中...", height = 'auto' }) => (
+    <Box sx={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      p: 2,
+      gap: 1,
+      height,
+      minHeight: height === 'auto' ? '60px' : height,
+      backgroundColor: 'rgba(255, 250, 237, 0.5)',
+      borderRadius: '8px',
+      border: '1px solid rgba(240, 232, 216, 0.5)'
+    }}>
+      <CircularProgress size={20} sx={{ color: '#FF8C5A' }} />
+      <span style={{ color: '#6B6560', fontSize: '14px' }}>{text}</span>
+    </Box>
+  );
 
   return (
     <Box sx={{ 
@@ -812,6 +627,23 @@ const AIChat: React.FC<AIChatProps> = ({
       flexDirection: 'column',
       backgroundColor: '#FFFAED', // Soft butter background from mockup
     }}>
+      {/* Chat Header - Optional */}
+      {(title || onClose || showMemoButton || !hideMemoButton) && (
+        <Suspense fallback={<LoadingFallback text="ヘッダーを読み込み中..." height="60px" />}>
+          <ChatHeader
+            title={title}
+            onClose={onClose}
+            onOpenMemo={onOpenMemo}
+            onNewChat={handleNewChat}
+            onOpenHistory={handleOpenHistory}
+            showMemoButton={showMemoButton}
+            hideMemoButton={hideMemoButton}
+            showCloseButton={!!onClose}
+            showHistoryButton={!isDashboard}
+            showNewChatButton={!isDashboard}
+          />
+        </Suspense>
+      )}
 
       {/* メッセージリスト */}
       <Box 
@@ -1043,120 +875,34 @@ const AIChat: React.FC<AIChatProps> = ({
       </Box>
 
       {/* フローティング入力島 */}
-      <Box sx={{ 
-        position: 'fixed',
-        bottom: 24,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: 'calc(100% - 48px)',
-        maxWidth: '652px', // アイコンの外側の線に合わせる
-        zIndex: 100,
-      }}>
-        <Box sx={{
-          background: '#FFFDF7',
-          borderRadius: '20px',
-          boxShadow: '0 8px 32px rgba(45, 42, 38, 0.08)',
-          padding: '16px',
-          border: '1px solid #F0E8D8',
-        }}>
-          {/* 応答スタイルセレクター */}
-          <Box sx={{ 
-            mb: 1.5,
-            pb: 1.5, 
-            borderBottom: '1px solid #F0E8D8'
-          }}>
-            <ResponseStyleSelector
-              selectedStyle={responseStyle}
-              onStyleChange={setResponseStyle}
-            />
-          </Box>
-          
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <TextField
-              ref={inputRef}
-              multiline
-              maxRows={3}
-              fullWidth
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="メッセージを入力してください..."
-              variant="outlined"
-              disabled={isLoading}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: '12px',
-                  backgroundColor: '#FFF6E0',
-                  border: 'none',
-                  fontSize: '14px',
-                  '&:hover': {
-                    backgroundColor: '#FFFDF7',
-                  },
-                  '&.Mui-focused': {
-                    backgroundColor: '#FFFDF7',
-                    boxShadow: '0 0 0 2px #FF8C5A',
-                  },
-                },
-                '& .MuiOutlinedInput-notchedOutline': {
-                  border: 'none',
-                },
-                '& .MuiInputBase-input::placeholder': {
-                  color: '#9E9891',
-                },
-              }}
-            />
-          <Button
-            variant="contained"
-            onClick={handleSendMessage}
-            disabled={!inputValue.trim() || isLoading}
-            sx={{ 
-              minWidth: 'auto',
-              width: 44,
-              height: 44,
-              background: 'linear-gradient(135deg, #FF8C5A, #FF7A42)',
-              color: 'white',
-              borderRadius: '12px',
-              '&:hover': {
-                background: 'linear-gradient(135deg, #FF7A42, #FF6B35)',
-                transform: 'translateY(-2px) scale(1.05)',
-                boxShadow: '0 6px 16px rgba(255, 140, 90, 0.4)',
-              },
-              '&:active': {
-                transform: 'translateY(0) scale(0.98)',
-              },
-              '&:disabled': {
-                background: '#E5E7EB',
-                color: '#9CA3AF',
-                transform: 'none',
-              },
-              transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
-            }}
-          >
-              <SendIcon />
-            </Button>
-          </Stack>
-        </Box>
-      </Box>
+      <Suspense fallback={<LoadingFallback text="入力エリアを読み込み中..." height="120px" />}>
+        <ChatInputArea
+          inputValue={inputValue}
+          isLoading={conversation.isLoading}
+          responseStyle={responseStyle}
+          processingStatus={conversation.processingStatus}
+          fallbackUsed={conversation.fallbackUsed}
+          fallbackModel={conversation.fallbackModel}
+          onInputChange={setInputValue}
+          onSendMessage={handleSendMessage}
+          onKeyPress={handleKeyPress}
+          onStyleChange={setResponseStyle}
+        />
+      </Suspense>
 
       {/* チャット履歴パネル */}
       <AnimatePresence>
         {isHistoryOpen && (
-          <ChatHistory
-            isOpen={isHistoryOpen}
-            onClose={() => setIsHistoryOpen(false)}
-            onSessionSelect={handleSessionSelect}
-            currentPageId="general"
-          />
+          <Suspense fallback={<LoadingFallback text="チャット履歴を読み込み中..." height="300px" />}>
+            <ChatHistory
+              isOpen={isHistoryOpen}
+              onClose={() => setHistoryOpen(false)}
+              onSessionSelect={handleSessionSelect}
+              currentPageId="general"
+            />
+          </Suspense>
         )}
       </AnimatePresence>
-
-      {/* スマート通知システム */}
-      {enableSmartNotifications && (
-        <SmartNotificationManager 
-          ref={notificationManagerRef}
-          pageId="general"
-        />
-      )}
     </Box>
   );
 };

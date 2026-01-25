@@ -1,4 +1,5 @@
 import React, { useState, useEffect, memo, useMemo, useCallback } from 'react';
+import { tokenManager } from '../utils/tokenManager';
 import {
   Box,
   Container,
@@ -141,7 +142,7 @@ const DashboardPage: React.FC = () => {
       setIsLoading(true);
       setError(null);
       
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       if (!token) {
         throw new Error('認証トークンが見つかりません。再ログインが必要です。');
       }
@@ -185,7 +186,7 @@ const DashboardPage: React.FC = () => {
     hypothesis?: string;
   }) => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       
       const response = await fetch(`${apiBaseUrl}/projects`, {
@@ -219,7 +220,7 @@ const DashboardPage: React.FC = () => {
     hypothesis?: string;
   }) => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       
       if (!token) {
         setError('認証トークンがありません。再ログインしてください。');
@@ -270,7 +271,7 @@ const DashboardPage: React.FC = () => {
     if (!confirm('このプロジェクトを削除しますか？関連するメモも全て削除されます。')) return;
 
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
         method: 'DELETE',

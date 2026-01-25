@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { tokenManager, type TokenData } from '../utils/tokenManager';
 
 interface User {
   id: string;
@@ -16,6 +17,7 @@ interface AuthState {
   lastLoginTime: Date | null;
   loginCount: number;
   registrationMessage: string | null;
+  tokenData: TokenData | null;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (username: string, password: string, confirmPassword: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   logout: () => void;
@@ -23,6 +25,8 @@ interface AuthState {
   markFirstLoginComplete: () => void;
   isNewUser: () => boolean;
   clearRegistrationMessage: () => void;
+  refreshToken: () => Promise<boolean>;
+  isTokenValid: () => boolean;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -35,13 +39,44 @@ export const useAuthStore = create<AuthState>()(
       lastLoginTime: null,
       loginCount: 0,
       registrationMessage: null,
+      tokenData: null,
 
       initialize: async () => {
         const { user } = get();
-        if (user) {
-          // セッション有効性の確認はスキップ（シンプルな実装のため）
-          // 必要に応じてバックエンドAPIでの検証を追加可能
+        
+        // トークンマネージャーのイベントハンドラーを設定
+        tokenManager.setEventHandlers({
+          onTokenRefresh: (newTokens) => {
+            set({ tokenData: newTokens });
+          },
+          onTokenExpired: () => {
+            // トークン期限切れ時の自動ログアウト
+            get().logout();
+          },
+          onError: (error) => {
+            console.error('Token manager error:', error);
+          },
+        });
+
+        // 既存のトークンがある場合は読み込み
+        const existingTokens = tokenManager.getTokens();
+        if (existingTokens) {
+          set({ tokenData: existingTokens });
         }
+
+        if (user) {
+          // トークンの有効性をチェック
+          if (tokenManager.isTokenValid()) {
+            // トークンが有効な場合は更新が必要かチェック
+            if (tokenManager.shouldRefreshToken()) {
+              await get().refreshToken();
+            }
+          } else {
+            // トークンが無効な場合はログアウト
+            get().logout();
+          }
+        }
+        
         set({ isInitialized: true });
       },
 
@@ -83,13 +118,41 @@ export const useAuthStore = create<AuthState>()(
 
           const data = await response.json();
           
-          // JWTトークンを保存
-          localStorage.setItem('auth-token', data.token);
-          
           const user: User = {
             id: data.user.id.toString(),
             username: data.user.username,
           };
+
+          // トークン情報をチェックして保存（15分有効期限対応）
+          console.debug('Login response data:', {
+            hasAccessToken: !!data.access_token,
+            hasRefreshToken: !!data.refresh_token,
+            hasExpiresAt: !!data.expires_at,
+            hasExpiresIn: !!data.expires_in,
+            hasToken: !!data.token,
+            tokenType: data.token_type,
+            expiresIn: data.expires_in
+          });
+          let tokenData: TokenData | null = null;
+          
+          if (data.access_token && data.refresh_token && (data.expires_at || data.expires_in)) {
+            // 新しいトークンシステム（15分有効期限 + ローテーション対応）
+            const expiresAt = data.expires_at || (Date.now() + (data.expires_in * 1000));
+            tokenData = {
+              access_token: data.access_token,
+              refresh_token: data.refresh_token,
+              expires_at: expiresAt,
+              token_type: data.token_type || 'Bearer',
+            };
+            tokenManager.saveTokens(tokenData);
+          } else if (data.token && typeof data.token === 'string' && data.token.split('.').length === 3) {
+            // 旧システムとの互換性のため（有効なJWTトークンのみ）
+            localStorage.setItem('auth-token', data.token);
+          } else {
+            // 有効なトークンが受信できない場合はエラー
+            console.error('No valid token received from server');
+            throw new Error('Authentication failed: No valid token received');
+          }
 
           // ログイン情報を更新
           const { loginCount } = get();
@@ -100,7 +163,9 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
             lastLoginTime: currentTime,
             loginCount: loginCount + 1,
+            tokenData,
           });
+          
           return { success: true };
 
         } catch (error) {
@@ -186,8 +251,38 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        // トークンマネージャーでトークンをクリア
+        tokenManager.clearTokens();
+        
+        // 旧システムのトークンもクリア
         localStorage.removeItem('auth-token');
-        set({ user: null });
+        
+        // 状態をリセット
+        set({ 
+          user: null,
+          tokenData: null,
+        });
+      },
+
+      refreshToken: async (): Promise<boolean> => {
+        try {
+          const newTokens = await tokenManager.refreshToken();
+          if (newTokens) {
+            // ローテーションされたトークンを状態に更新
+            set({ tokenData: newTokens });
+            return true;
+          }
+          return false;
+        } catch (error) {
+          console.error('Token refresh failed in authStore:', error);
+          // リフレッシュ失敗時はログアウト
+          get().logout();
+          return false;
+        }
+      },
+
+      isTokenValid: (): boolean => {
+        return tokenManager.isTokenValid();
       },
 
       clearRegistrationMessage: () => {
@@ -201,6 +296,7 @@ export const useAuthStore = create<AuthState>()(
         isFirstLogin: state.isFirstLogin,
         lastLoginTime: state.lastLoginTime,
         loginCount: state.loginCount,
+        // tokenDataは別途tokenManagerで管理されるため除外
       }),
     }
   )

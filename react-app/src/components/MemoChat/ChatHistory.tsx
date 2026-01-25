@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { tokenManager } from '../../utils/tokenManager';
 import {
   Box,
   Typography,
@@ -27,24 +28,8 @@ import {
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 
-// 会話データの型定義
-interface ConversationData {
-  id: string;
-  title: string | null;
-  message_count: number;
-  last_message: string | null;
-  created_at: string;
-  updated_at: string;
-  metadata: Record<string, any>;
-  is_active: boolean;
-}
-
-interface ChatHistoryProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSessionSelect: (session: ConversationData & { messages: any[] }) => void;
-  currentPageId?: string;
-}
+// Import types from shared types file
+import type { ConversationData, ChatHistoryProps } from './types';
 
 const ChatHistory: React.FC<ChatHistoryProps> = ({
   isOpen,
@@ -63,7 +48,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
     setLoading(true);
     try {
       // JWTトークンを取得
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       
       if (!token) {
         console.error('認証トークンが見つかりません');
@@ -127,7 +112,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   // 会話のメッセージを取得
   const fetchConversationMessages = async (conversationId: string): Promise<any[]> => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       
       if (!token) {
         console.error('認証トークンが見つかりません');
@@ -158,7 +143,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   // 会話削除
   const handleDeleteConversation = async (conversationId: string) => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       
       if (!token) {
         console.error('認証トークンが見つかりません');

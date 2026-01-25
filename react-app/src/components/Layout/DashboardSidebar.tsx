@@ -1,4 +1,5 @@
 import React, { useState, useEffect, memo, useCallback } from 'react';
+import { tokenManager } from '../../utils/tokenManager';
 import {
   Box,
   Typography,
@@ -107,7 +108,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
       setIsLoading(true);
       setError(null);
       
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       if (!token) {
         throw new Error('認証トークンが見つかりません。');
       }
@@ -141,7 +142,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
       setIsLoading(true);
       setError(null);
       
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}/memos`, {
         headers: {
@@ -166,7 +167,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
   const fetchMemo = async (projectId: number, memoId: number) => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         headers: {
@@ -202,7 +203,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
       const title = lines[0] || '無題のメモ';
       const content = lines.slice(2).join('\n');
       
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       
       if (viewMode === 'memo-create') {
@@ -257,7 +258,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
     if (!selectedProject || !confirm('このメモを削除しますか？')) return;
     
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         method: 'DELETE',
@@ -294,7 +295,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
     hypothesis?: string;
   }) => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       
       const response = await fetch(`${apiBaseUrl}/projects`, {
@@ -326,7 +327,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
     hypothesis?: string;
   }) => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
@@ -357,7 +358,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
     if (!confirm('このプロジェクトを削除しますか？')) return;
 
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
