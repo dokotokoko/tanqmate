@@ -12,40 +12,9 @@ const ChatPage: React.FC = () => {
     clearCurrentMemo();
   }, [clearCurrentMemo]);
 
-  // AI応答の処理
-  const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
-    try {
-      const token = localStorage.getItem('auth-token');
-      
-      if (!token) {
-        throw new Error('認証トークンが見つかりません。再ログインしてください。');
-      }
-
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          message: message,
-          memo_content: memoContent,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data.response;
-    } catch (error) {
-      console.error('AI応答の取得に失敗しました:', error);
-      throw error;
-    }
-  };
+  // 注意: onMessageSendを削除しました
+  // AIChat.tsx内の直接APIコールを使用することで、response_styleが正しく送信されます
+  // (フェーズ9.1修正: 2026-01-26)
 
   return (
     <Box sx={{ 
@@ -75,7 +44,6 @@ const ChatPage: React.FC = () => {
           title="AIアシスタント"
           persistentMode={true}
           loadHistoryFromDB={true}
-          onMessageSend={handleAIMessage}
           initialMessage={AI_INITIAL_MESSAGE}
         />
       </Box>

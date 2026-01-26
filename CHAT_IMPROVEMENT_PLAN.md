@@ -2267,10 +2267,285 @@ response_style: currentResponseStyle?.id || 'auto',
 ---
 
 **最終更新日**: 2026年1月26日
-**実装ステータス**: フェーズ1-9完了 ✅
+**実装ステータス**: フェーズ1-9.1完了 ✅
+
+---
+
+## 🐛 フェーズ9.1: response_styleがautoになる根本原因の修正
+
+### 調査日・修正日
+**2026年1月26日**
+
+### 報告された問題
+
+フェーズ9の修正（useRefによるクロージャ対策）を適用しても、依然としてバックエンドログに `response_style: auto` が表示される。
+
+### 問題の根本原因
+
+**ChatPage.tsxの`onMessageSend`プロップが問題の原因でした。**
+
+#### 調査プロセス
+
+1. **コンソールログの確認**: 追加したデバッグログ（`📤 fetch直前のresponseStyle (ref):`）が出力されていない
+2. **コードパスの分析**: `onMessageSend`プロップが渡されている場合、別のコードパスが実行される
+3. **ChatPage.tsxの確認**: `handleAIMessage`関数が`response_style`を送信していないことを発見
+
+#### 問題のコードフロー
+
+```
+ChatPage.tsx
+  └─ <AIChat onMessageSend={handleAIMessage} ... />
+       │
+       └─ AIChat.tsx (handleSendMessage)
+            │
+            └─ if (onMessageSend) {  ← ここが実行される
+                 // response_styleをAPIパラメータとして送信しない
+                 // メッセージテキストに埋め込むだけ
+                 const messageWithStyle = responseStyle ?
+                   `[応答スタイル: ${responseStyle.label}]\n${message}` :
+                   message;
+                 await onMessageSend(messageWithStyle, contextContent);
+               }
+               else {
+                 // 直接APIコール（response_styleを正しく送信）
+                 // ← このパスは実行されない
+               }
+```
+
+#### ChatPage.tsxの問題コード
+
+```typescript
+// ChatPage.tsx:16-48（修正前）
+const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
+  const response = await fetch(`${apiBaseUrl}/chat`, {
+    body: JSON.stringify({
+      message: message,
+      memo_content: memoContent,
+      // ← response_style がない！
+    }),
+  });
+};
+```
+
+### 実施した修正
+
+#### 修正内容: ChatPage.tsxから`onMessageSend`を削除
+
+**ファイル**: [react-app/src/pages/ChatPage.tsx](react-app/src/pages/ChatPage.tsx)
+
+**理由**:
+- `onMessageSend`を削除することで、AIChat.tsx内の直接APIコールが使用される
+- 直接APIコールでは`responseStyleRef.current`が正しく使用され、`response_style`がAPIに送信される
+
+**修正前**:
+```typescript
+// ChatPage.tsx
+const handleAIMessage = async (message: string, memoContent: string) => {
+  // ... response_styleを含まないAPIリクエスト
+};
+
+<AIChat
+  title="AIアシスタント"
+  persistentMode={true}
+  loadHistoryFromDB={true}
+  onMessageSend={handleAIMessage}  // ← 問題の原因
+  initialMessage={AI_INITIAL_MESSAGE}
+/>
+```
+
+**修正後**:
+```typescript
+// ChatPage.tsx
+// onMessageSendを削除
+// AIChat.tsx内の直接APIコールを使用することで、response_styleが正しく送信される
+
+<AIChat
+  title="AIアシスタント"
+  persistentMode={true}
+  loadHistoryFromDB={true}
+  initialMessage={AI_INITIAL_MESSAGE}
+/>
+```
+
+---
+
+### 修正後のコードフロー
+
+```
+ChatPage.tsx
+  └─ <AIChat ... />  (onMessageSendなし)
+       │
+       └─ AIChat.tsx (handleSendMessage)
+            │
+            └─ if (onMessageSend) { ... }  ← スキップ
+               else {
+                 // 直接APIコール（response_styleを正しく送信）
+                 const currentResponseStyle = responseStyleRef.current;
+                 fetch(`${apiBaseUrl}/chat`, {
+                   body: JSON.stringify({
+                     message: userMessage.content,
+                     response_style: currentResponseStyle?.id || 'auto',  // ← 正しく送信
+                   }),
+                 });
+               }
+```
+
+---
+
+### テスト確認方法
+
+1. Docker環境を再起動（フロントエンドの変更を反映）
+2. ブラウザのDevToolsを開き、Consoleタブを表示
+3. チャット画面にアクセス
+4. 「応答スタイルを選択する」トグルをクリック
+5. 「サクサク進める」をクリック
+6. **確認**: コンソールに以下が表示されること
+   - `📝 responseStyleRef更新: select`
+7. メッセージを送信
+8. **確認**: コンソールに以下が表示されること
+   - `🚀 handleSendMessage開始時のresponseStyle: select`
+   - `📤 fetch直前のresponseStyle (ref): select`
+9. **確認**: バックエンドログに `🎯 Received response_style: select` が表示されること
+10. **確認**: AIの応答に選択肢ボタンが表示されること
+
+---
+
+### 変更されたファイル一覧（フェーズ9.1）
+
+| ファイル | 変更内容 |
+|---------|----------|
+| [react-app/src/pages/ChatPage.tsx](react-app/src/pages/ChatPage.tsx) | `handleAIMessage`関数と`onMessageSend`プロップを削除 |
+| [CHAT_IMPROVEMENT_PLAN.md](CHAT_IMPROVEMENT_PLAN.md) | フェーズ9.1追加 |
+
+---
+
+### 今後の課題
+
+#### 課題1: 他の画面でも同様の問題がないか確認
+
+**現状**: ChatPage.tsx以外にもAIChatコンポーネントを使用している画面がある
+
+**確認対象**:
+- StepPage.tsx
+- WorkspaceWithAI.tsx
+- InquiryExplorer.tsx
+- GeneralInquiryPage.tsx
+
+**優先度**: 🟡 中
+
+**対処案**:
+1. 各画面で`onMessageSend`の有無を確認
+2. 必要に応じて同様の修正を適用
+3. または、`onMessageSend`インターフェースを拡張して`response_style`を受け取るようにする
+
+---
+
+#### 課題2: onMessageSendインターフェースの改善
+
+**現状**: `onMessageSend`を使用する場合、`response_style`を渡す方法がない
+
+**優先度**: 🟢 低
+
+**対処案**:
+1. インターフェースを拡張: `onMessageSend(message, context, responseStyle)`
+2. または、AIChatのpropsに`responseStyle`を公開
+3. 柔軟性と統一性のバランスを検討
+
+---
+
+**最終更新日**: 2026年1月26日
+**実装ステータス**: フェーズ1-9.2完了 ✅
+
+---
+
+## 🐛 フェーズ9.2: LLMの二重括弧出力への対応
+
+### 調査日・修正日
+**2026年1月26日**
+
+### 報告された問題
+
+フェーズ9.1の修正後、最初は正常に動作していたが、ページを再読み込みすると以下のようなJSON文字列がそのまま表示される：
+
+```
+{{
+  "message": "自分に合う政党を探すクエスト開始！まずはレベル1から挑戦しよう！",
+  "action_options": [
+    "好きな政策ワードを3つ選ぶ",
+    "主要政党のHPを1つ見る",
+    "政党比較サイトで診断する"
+  ]
+}}
+```
+
+### 問題の根本原因
+
+**LLMが二重括弧 `{{...}}` で出力する場合がある。**
+
+`json.loads()` は二重括弧をパースできないため、パースが失敗し、JSON文字列がそのままフロントエンドに返されていた。
+
+#### 問題のコード（修正前）
+
+```python
+# chat_service.py:264-268
+json_start = response.find('{')
+json_end = response.rfind('}') + 1
+if json_start != -1 and json_end > json_start:
+    json_text = response[json_start:json_end]  # "{{...}}" のまま
+    parsed = json.loads(json_text)  # ← パースエラー！
+```
+
+### 実施した修正
+
+**ファイル**: [backend/services/chat_service.py](backend/services/chat_service.py)
+
+JSONパース前に二重括弧を単一括弧に変換する処理を追加：
+
+```python
+# 二重括弧 {{ }} を単一括弧に変換（LLMが二重括弧で出力する場合の対応）
+cleaned_response = response.replace('{{', '{').replace('}}', '}')
+self.logger.info(f"📝 Cleaned response (first 300 chars): {cleaned_response[:300]}")
+
+# JSON部分を抽出
+json_start = cleaned_response.find('{')
+json_end = cleaned_response.rfind('}') + 1
+if json_start != -1 and json_end > json_start:
+    json_text = cleaned_response[json_start:json_end]
+    parsed = json.loads(json_text)  # ← 正常にパース
+```
+
+**修正箇所**: 2箇所
+- `_process_with_async_llm` メソッド内（258-284行目付近）
+- `_process_with_sync_llm` メソッド内（359-385行目付近）
+
+---
+
+### 変更されたファイル一覧（フェーズ9.2）
+
+| ファイル | 変更内容 |
+|---------|----------|
+| [backend/services/chat_service.py](backend/services/chat_service.py) | 二重括弧を単一括弧に変換する処理を追加（2箇所） |
+| [CHAT_IMPROVEMENT_PLAN.md](CHAT_IMPROVEMENT_PLAN.md) | フェーズ9.2追加 |
+
+---
+
+### テスト確認方法
+
+1. Docker環境を再起動（バックエンドの変更を反映）
+2. 「サクサク進める」を選択してメッセージを送信
+3. **確認**: 選択肢ボタンが表示される
+4. ページを再読み込み
+5. **確認**: 再度メッセージを送信しても選択肢ボタンが表示される
+6. バックエンドログで以下を確認：
+   - `📝 Raw response`: 元のLLM応答（二重括弧の場合あり）
+   - `📝 Cleaned response`: 単一括弧に変換後
+   - `✅ Select style JSON parsed successfully!`: パース成功
+
+---
+
+**最終更新日**: 2026年1月26日
+**実装ステータス**: フェーズ1-9.2完了 ✅
 **次のステップ**:
-1. Docker環境を再起動してフロントエンドの変更を反映
-2. テスト確認方法に従ってselectスタイルをテスト
-3. コンソールログで`responseStyleRef`が正しく更新されているか確認
-4. バックエンドログで`response_style: select`が受信されているか確認
-5. 選択肢ボタンが表示されることを確認
+1. Docker環境を再起動してバックエンドの変更を反映
+2. selectスタイルでテスト
+3. ページ再読み込み後も選択肢ボタンが表示されることを確認

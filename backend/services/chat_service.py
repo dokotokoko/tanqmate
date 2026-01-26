@@ -260,17 +260,22 @@ class ChatService(BaseService):
                 self.logger.info(f"🎮 Select style detected! Attempting to parse JSON...")
                 self.logger.info(f"📝 Raw response (first 300 chars): {response[:300]}")
                 try:
+                    # 二重括弧 {{ }} を単一括弧に変換（LLMが二重括弧で出力する場合の対応）
+                    cleaned_response = response.replace('{{', '{').replace('}}', '}')
+                    self.logger.info(f"📝 Cleaned response (first 300 chars): {cleaned_response[:300]}")
+
                     # JSON部分を抽出
-                    json_start = response.find('{')
-                    json_end = response.rfind('}') + 1
+                    json_start = cleaned_response.find('{')
+                    json_end = cleaned_response.rfind('}') + 1
                     if json_start != -1 and json_end > json_start:
-                        json_text = response[json_start:json_end]
+                        json_text = cleaned_response[json_start:json_end]
                         parsed = json.loads(json_text)
 
                         # メッセージと行動オプションを抽出
                         message_text = parsed.get('message', '')
                         action_options = parsed.get('action_options', [])[:3]  # 3つまで
 
+                        self.logger.info(f"✅ Select style JSON parsed successfully! message={message_text[:50]}..., options={action_options}")
                         return {
                             "response": message_text,
                             "agent_used": False,
@@ -356,17 +361,22 @@ class ChatService(BaseService):
                 self.logger.info(f"🎮 Select style detected! Attempting to parse JSON...")
                 self.logger.info(f"📝 Raw response (first 300 chars): {response[:300]}")
                 try:
+                    # 二重括弧 {{ }} を単一括弧に変換（LLMが二重括弧で出力する場合の対応）
+                    cleaned_response = response.replace('{{', '{').replace('}}', '}')
+                    self.logger.info(f"📝 Cleaned response (first 300 chars): {cleaned_response[:300]}")
+
                     # JSON部分を抽出
-                    json_start = response.find('{')
-                    json_end = response.rfind('}') + 1
+                    json_start = cleaned_response.find('{')
+                    json_end = cleaned_response.rfind('}') + 1
                     if json_start != -1 and json_end > json_start:
-                        json_text = response[json_start:json_end]
+                        json_text = cleaned_response[json_start:json_end]
                         parsed = json.loads(json_text)
 
                         # メッセージと行動オプションを抽出
                         message_text = parsed.get('message', '')
                         action_options = parsed.get('action_options', [])[:3]  # 3つまで
 
+                        self.logger.info(f"✅ Select style JSON parsed successfully! message={message_text[:50]}..., options={action_options}")
                         return {
                             "response": message_text,
                             "agent_used": False,
