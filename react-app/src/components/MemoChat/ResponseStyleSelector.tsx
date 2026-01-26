@@ -80,6 +80,14 @@ const responseStyles: ResponseStyle[] = [
     prompts: ['視野を広げて', '多角的に考えて'],
   },
   {
+    id: 'select',
+    label: 'サクサク進める',
+    description: 'クリックだけで探究が進む',
+    icon: <Speed />,
+    color: 'success',
+    prompts: ['次に何をすればいい？', '小さな一歩を教えて'],
+  },
+  {
     id: 'custom',
     label: 'カスタム',
     description: '自分で応答スタイルを指定',

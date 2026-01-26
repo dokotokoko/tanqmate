@@ -11,6 +11,9 @@ interface Message {
   is_clarification?: boolean;
   clarification_questions?: string[];
   suggestion_options?: string[];
+
+  // 応答スタイル表示用フィールド
+  response_style_used?: string;
 }
 
 /**

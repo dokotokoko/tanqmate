@@ -44,6 +44,9 @@ class ChatResponse(BaseModel):
     clarification_questions: Optional[List[str]] = None  # 構造化された質問リスト
     suggestion_options: Optional[List[str]] = None  # クリック可能な選択肢
 
+    # 応答スタイル表示用フィールド
+    response_style_used: Optional[str] = None  # 使用された応答スタイル
+
 class ChatHistoryResponse(BaseModel):
     message: str
     response: str
@@ -114,7 +117,8 @@ async def chat_with_ai(
             fallback_used=result.get("fallback_used", False),
             is_clarification=result.get("is_clarification", False),
             clarification_questions=result.get("clarification_questions"),
-            suggestion_options=result.get("suggestion_options")
+            suggestion_options=result.get("suggestion_options"),
+            response_style_used=result.get("response_style_used")
         )
         
     except Exception as e:

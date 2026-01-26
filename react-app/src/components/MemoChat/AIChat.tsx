@@ -28,6 +28,8 @@ import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
 import { useAIChatMessages } from '../../hooks/useAIChatMessages';
 import ResponseStyleSelector, { ResponseStyle } from './ResponseStyleSelector';
 import { SuggestionChips } from './SuggestionChips';
+import { ResponseStyleBadge } from './ResponseStyleBadge';
+import { ProgressTracker } from './ProgressTracker';
 
 interface Message {
   id: string;
@@ -42,6 +44,8 @@ interface Message {
   is_clarification?: boolean;
   clarification_questions?: string[];
   suggestion_options?: string[];
+  // 応答スタイル表示用フィールド
+  response_style_used?: string;
 }
 
 interface AIChatProps {
@@ -104,9 +108,12 @@ const AIChat: React.FC<AIChatProps> = ({
   
   // 応答スタイルの状態
   const [responseStyle, setResponseStyle] = useState<ResponseStyle | null>(null);
-  
+
   // 通知システムのref
   const notificationManagerRef = useRef<SmartNotificationManagerRef>(null);
+
+  // ゲーミフィケーション: ステップカウンター
+  const [stepCount, setStepCount] = useState(0);
 
   // 初期化管理用のref
   const initializationKeyRef = useRef('initialized');
@@ -319,6 +326,14 @@ const AIChat: React.FC<AIChatProps> = ({
   const handleSuggestionClick = async (option: string) => {
     if (isLoading || isSendingRef.current) return;
 
+    // ゲーミフィケーション: ステップカウンターをインクリメント
+    setStepCount(prev => prev + 1);
+
+    // ハプティックフィードバック（モバイル対応）
+    if (navigator.vibrate) {
+      navigator.vibrate(50);
+    }
+
     // 選択肢をinputValueにセットしてからメッセージ送信
     setInputValue(option);
 
@@ -405,6 +420,7 @@ const AIChat: React.FC<AIChatProps> = ({
                 is_clarification: result.is_clarification || false,
                 clarification_questions: result.clarification_questions || [],
                 suggestion_options: result.suggestion_options || [],
+                response_style_used: result.response_style_used,
               };
               addMessage(assistantMessage);
 
@@ -558,6 +574,7 @@ const AIChat: React.FC<AIChatProps> = ({
                 is_clarification: result.is_clarification || false,
                 clarification_questions: result.clarification_questions || [],
                 suggestion_options: result.suggestion_options || [],
+                response_style_used: result.response_style_used,
               };
 
               // 統一されたフックでAI応答を追加
@@ -588,6 +605,7 @@ const AIChat: React.FC<AIChatProps> = ({
                 is_clarification: result.is_clarification || false,
                 clarification_questions: result.clarification_questions || [],
                 suggestion_options: result.suggestion_options || [],
+                response_style_used: result.response_style_used,
               };
               addMessage(assistantMessage);
 
@@ -964,20 +982,24 @@ const AIChat: React.FC<AIChatProps> = ({
                   </Avatar>
                   
                   <Box sx={{ flex: 1 }}>
-                    <Typography
-                      variant="body2"
-                      color="text.secondary"
-                      sx={{ mb: 0.5 }}
-                    >
-                      {message.role === 'assistant' ? 'AI アシスタント' : 'あなた'} • {(() => {
-                        try {
-                          return formatTime(message.timestamp);
-                        } catch (error) {
-                          console.error('Timestamp formatting error:', error, 'message:', message);
-                          return '時刻不明';
-                        }
-                      })()}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                      >
+                        {message.role === 'assistant' ? 'AI アシスタント' : 'あなた'} • {(() => {
+                          try {
+                            return formatTime(message.timestamp);
+                          } catch (error) {
+                            console.error('Timestamp formatting error:', error, 'message:', message);
+                            return '時刻不明';
+                          }
+                        })()}
+                      </Typography>
+                      {message.role === 'assistant' && message.response_style_used && (
+                        <ResponseStyleBadge styleUsed={message.response_style_used} />
+                      )}
+                    </Box>
                     
                     <Box
                       sx={{
@@ -1150,11 +1172,17 @@ const AIChat: React.FC<AIChatProps> = ({
 
       {/* スマート通知システム */}
       {enableSmartNotifications && (
-        <SmartNotificationManager 
+        <SmartNotificationManager
           ref={notificationManagerRef}
           pageId="general"
         />
       )}
+
+      {/* 進捗トラッカー（ゲーミフィケーション） */}
+      <ProgressTracker
+        stepCount={stepCount}
+        onReset={() => setStepCount(0)}
+      />
     </Box>
   );
 };

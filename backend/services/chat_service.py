@@ -146,7 +146,13 @@ class ChatService(BaseService):
                 "project_id": project_id,
                 "metrics": metrics,
                 "agent_used": ai_response.get("agent_used", False),
-                "fallback_used": ai_response.get("fallback_used", False)
+                "fallback_used": ai_response.get("fallback_used", False),
+                # 質問明確化機能用フィールド
+                "is_clarification": ai_response.get("is_clarification", False),
+                "clarification_questions": ai_response.get("clarification_questions"),
+                "suggestion_options": ai_response.get("suggestion_options"),
+                # 応答スタイル表示用フィールド
+                "response_style_used": ai_response.get("response_style_used")
             }
             
         except Exception as e:
@@ -243,11 +249,37 @@ class ChatService(BaseService):
             
             # Response APIのoutput_textを取得
             response = llm_client.extract_output_text(response_obj)
-            
+
+            # selectスタイルの場合はJSON応答をパース
+            if response_style == "select":
+                try:
+                    # JSON部分を抽出
+                    json_start = response.find('{')
+                    json_end = response.rfind('}') + 1
+                    if json_start != -1 and json_end > json_start:
+                        json_text = response[json_start:json_end]
+                        parsed = json.loads(json_text)
+
+                        # メッセージと行動オプションを抽出
+                        message_text = parsed.get('message', '')
+                        action_options = parsed.get('action_options', [])[:3]  # 3つまで
+
+                        return {
+                            "response": message_text,
+                            "agent_used": False,
+                            "fallback_used": False,
+                            "response_style_used": response_style,
+                            "suggestion_options": action_options  # 行動選択肢として返す
+                        }
+                except Exception as parse_error:
+                    self.logger.warning(f"Select style JSON parse failed: {parse_error}")
+                    # パース失敗時は通常応答として返す
+
             return {
                 "response": response,
                 "agent_used": False,
-                "fallback_used": False
+                "fallback_used": False,
+                "response_style_used": response_style  # 使用した応答スタイルを記録
             }
             
         except Exception as e:
@@ -311,11 +343,37 @@ class ChatService(BaseService):
             
             # Response APIのoutput_textを取得
             response = llm_instance.extract_output_text(response_obj)
-            
+
+            # selectスタイルの場合はJSON応答をパース
+            if response_style == "select":
+                try:
+                    # JSON部分を抽出
+                    json_start = response.find('{')
+                    json_end = response.rfind('}') + 1
+                    if json_start != -1 and json_end > json_start:
+                        json_text = response[json_start:json_end]
+                        parsed = json.loads(json_text)
+
+                        # メッセージと行動オプションを抽出
+                        message_text = parsed.get('message', '')
+                        action_options = parsed.get('action_options', [])[:3]  # 3つまで
+
+                        return {
+                            "response": message_text,
+                            "agent_used": False,
+                            "fallback_used": True,
+                            "response_style_used": response_style,
+                            "suggestion_options": action_options  # 行動選択肢として返す
+                        }
+                except Exception as parse_error:
+                    self.logger.warning(f"Select style JSON parse failed: {parse_error}")
+                    # パース失敗時は通常応答として返す
+
             return {
                 "response": response,
                 "agent_used": False,
-                "fallback_used": True
+                "fallback_used": True,
+                "response_style_used": response_style  # 使用した応答スタイルを記録
             }
             
         except Exception as e:
@@ -507,19 +565,22 @@ class ChatService(BaseService):
             questions_list = []
             all_options = []
 
-            for i, q_data in enumerate(parsed['clarification_questions'], 1):
+            # 質問数を3つに制限
+            clarification_questions = parsed['clarification_questions'][:3]
+
+            for i, q_data in enumerate(clarification_questions, 1):
                 question_text = q_data['question']
-                options = q_data.get('options', [])
+                options = q_data.get('options', [])[:3]  # 各質問の選択肢も3つまで
 
                 formatted_response += f"{i}. {question_text}\n"
                 if options:
-                    formatted_response += f"   （例: {', '.join(options[:3])}）\n"
+                    formatted_response += f"   （例: {', '.join(options)}）\n"
 
                 questions_list.append(question_text)
                 all_options.extend(options)
 
-            # quick_optionsも追加
-            quick_opts = parsed.get('quick_options', [])
+            # quick_optionsも追加（3つまで）
+            quick_opts = parsed.get('quick_options', [])[:3]
             all_options.extend(quick_opts)
 
             formatted_response += "\n💡 細かく希望がなければ、上記の選択肢から選んでください。"
@@ -530,7 +591,8 @@ class ChatService(BaseService):
                 "fallback_used": False,
                 "is_clarification": True,
                 "clarification_questions": questions_list,
-                "suggestion_options": all_options  # クリック可能な全選択肢
+                "suggestion_options": all_options,  # クリック可能な全選択肢
+                "response_style_used": "clarification"  # 明確化質問モード
             }
 
         except Exception as parse_error:
