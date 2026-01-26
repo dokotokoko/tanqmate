@@ -6,11 +6,15 @@
 import asyncio
 import json
 import logging
+import os
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, timezone
 from supabase import Client
 
 logger = logging.getLogger(__name__)
+
+# 環境変数から履歴取得上限を取得（デフォルト20件）
+DEFAULT_HISTORY_LIMIT = int(os.getenv("CHAT_HISTORY_CONTEXT_LIMIT", "20"))
 
 
 class AsyncDatabaseHelper:
@@ -104,20 +108,22 @@ class AsyncDatabaseHelper:
             return None
     
     async def get_conversation_history(
-        self, 
-        conversation_id: str, 
-        limit: int = 100
+        self,
+        conversation_id: str,
+        limit: int = None
     ) -> List[Dict[str, Any]]:
         """
         対話履歴を非同期で取得
-        
+
         Args:
             conversation_id: 会話ID
-            limit: 取得する履歴の最大数
-            
+            limit: 取得する履歴の最大数（Noneの場合は環境変数から取得、デフォルト20件）
+
         Returns:
             対話履歴のリスト
         """
+        if limit is None:
+            limit = DEFAULT_HISTORY_LIMIT
         try:
             result = await asyncio.to_thread(
                 lambda: self.supabase.table("chat_logs")
@@ -256,22 +262,24 @@ async def parallel_fetch_context_and_history(
     page_id: str,
     conversation_id: str,
     user_id: int,
-    history_limit: int = 100
+    history_limit: int = None
 ) -> Tuple[Optional[int], Optional[str], Optional[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     プロジェクトコンテキストと対話履歴を並列で取得
-    
+
     Args:
         db_helper: データベースヘルパー
         context_builder: コンテキストビルダー
         page_id: ページID
         conversation_id: 会話ID
         user_id: ユーザーID
-        history_limit: 履歴取得数の上限
-        
+        history_limit: 履歴取得数の上限（Noneの場合は環境変数から取得、デフォルト20件）
+
     Returns:
         (project_id, project_context, project, conversation_history) のタプル
     """
+    if history_limit is None:
+        history_limit = DEFAULT_HISTORY_LIMIT
     try:
         # プロジェクトコンテキスト構築と履歴取得を並列実行
         context_task = context_builder.build_context_from_page_id(page_id, user_id)

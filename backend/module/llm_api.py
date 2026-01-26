@@ -21,32 +21,42 @@ class learning_plannner():
     同期・非同期の両方のメソッドを持つ
     """
     
-    def __init__(self, pool_size: int = 5):
+    def __init__(self, pool_size: int = None):
         """
         初期化
-        
+
         Args:
-            pool_size: 非同期処理用のセマフォプールサイズ
+            pool_size: 非同期処理用のセマフォプールサイズ（Noneの場合は環境変数から取得）
         """
         load_dotenv()
         self.model = "gpt-4.1"
         self.api_key = os.getenv("OPENAI_API_KEY")
-        
+
         if not self.api_key:
             raise ValueError("OpenAI APIキーが設定されていません。環境変数OPENAI_API_KEYを設定してください。")
-        
+
+        # 環境変数からタイムアウトとリトライ設定を取得
+        timeout = float(os.getenv("LLM_POOL_TIMEOUT", "60.0"))
+        max_retries = int(os.getenv("LLM_MAX_RETRIES", "3"))
+
+        # pool_sizeが指定されていない場合は環境変数から取得
+        if pool_size is None:
+            pool_size = int(os.getenv("LLM_POOL_SIZE", "20"))
+
         # 同期クライアントの初期化
         self.client = OpenAI(api_key=self.api_key)
-        
+
         # 非同期クライアントの初期化
         self.async_client = AsyncOpenAI(
             api_key=self.api_key,
-            timeout=30.0,  # タイムアウトを30秒に設定
-            max_retries=2   # リトライを2回に制限
+            timeout=timeout,      # 環境変数から取得（デフォルト60秒）
+            max_retries=max_retries  # 環境変数から取得（デフォルト3回）
         )
-        
+
         # 非同期処理用のセマフォ（同時実行数を制限）
         self.semaphore = asyncio.Semaphore(pool_size)
+
+        logger.info(f"🚀 LLMクライアント初期化: pool_size={pool_size}, timeout={timeout}s, max_retries={max_retries}")
         
         # メトリクス収集用
         self.request_count = 0
@@ -482,19 +492,19 @@ _llm_instance: Optional[learning_plannner] = None
 _async_llm_instance: Optional[AsyncLearningPlanner] = None
 
 
-def get_async_llm_client(pool_size: int = 5) -> AsyncLearningPlanner:
+def get_async_llm_client(pool_size: int = None) -> AsyncLearningPlanner:
     """
     非同期LLMクライアントのシングルトンを取得（後方互換性）
-    
+
     Args:
-        pool_size: プールサイズ（初回のみ有効）
-        
+        pool_size: プールサイズ（初回のみ有効、Noneの場合は環境変数から取得）
+
     Returns:
         AsyncLearningPlannerのインスタンス
     """
     global _async_llm_instance
-    
+
     if _async_llm_instance is None:
         _async_llm_instance = AsyncLearningPlanner(pool_size=pool_size)
-    
+
     return _async_llm_instance
