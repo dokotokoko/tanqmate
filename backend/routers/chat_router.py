@@ -90,7 +90,12 @@ async def chat_with_ai(
     chat_service: ChatService = Depends(get_chat_service)
 ):
     """AIとのチャット（統合最適化版）"""
-    
+
+    # デバッグログ: response_styleの確認
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"🎯 Received response_style: {chat_data.response_style}")
+
     # メッセージ長制限
     MAX_MESSAGE_LENGTH = int(os.environ.get("MAX_CHAT_MESSAGE_LENGTH", "2000"))
     if len(chat_data.message) > MAX_MESSAGE_LENGTH:

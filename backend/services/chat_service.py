@@ -175,10 +175,12 @@ class ChatService(BaseService):
         # 環境変数で機能のON/OFFを制御
         enable_clarification = os.environ.get("ENABLE_CLARIFICATION", "true").lower() == "true"
 
-        # 長考モードでない場合のみ質問の抽象度を判定
-        is_deep_thinking = response_style in ["research", "deepen"]
+        # 明確化質問をスキップするスタイル
+        # - research, deepen: 長考モード（詳細な応答を生成）
+        # - select: サクサク進めるモード（常に行動選択肢を表示）
+        skip_clarification_styles = ["research", "deepen", "select"]
 
-        if enable_clarification and not is_deep_thinking:
+        if enable_clarification and response_style not in skip_clarification_styles:
             intent = await self._classify_question_intent(message)
 
             # 抽象的な質問の場合は明確化質問を生成
@@ -216,6 +218,9 @@ class ChatService(BaseService):
             from module.llm_api import get_async_llm_client
             from .response_styles import ResponseStyleManager
 
+            # デバッグログ: response_styleの確認
+            self.logger.info(f"🎯 _process_with_async_llm called with response_style: {response_style}")
+
             # NOTE: get_async_llm_client は初回呼び出しの pool_size（=Semaphore上限）のみ有効
             pool_size = int(os.environ.get("LLM_POOL_SIZE", "5"))
             llm_client = get_async_llm_client(pool_size=pool_size)  # awaitは不要
@@ -252,6 +257,8 @@ class ChatService(BaseService):
 
             # selectスタイルの場合はJSON応答をパース
             if response_style == "select":
+                self.logger.info(f"🎮 Select style detected! Attempting to parse JSON...")
+                self.logger.info(f"📝 Raw response (first 300 chars): {response[:300]}")
                 try:
                     # JSON部分を抽出
                     json_start = response.find('{')
@@ -346,6 +353,8 @@ class ChatService(BaseService):
 
             # selectスタイルの場合はJSON応答をパース
             if response_style == "select":
+                self.logger.info(f"🎮 Select style detected! Attempting to parse JSON...")
+                self.logger.info(f"📝 Raw response (first 300 chars): {response[:300]}")
                 try:
                     # JSON部分を抽出
                     json_start = response.find('{')

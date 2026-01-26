@@ -106,15 +106,23 @@ const ResponseStyleSelector: React.FC<ResponseStyleSelectorProps> = ({
   const [customInstruction, setCustomInstruction] = useState('');
 
   const handleToggle = () => {
-    setIsOpen(!isOpen);
+    const newIsOpen = !isOpen;
+    setIsOpen(newIsOpen);
+
+    // トグルをONにした時、選択されていなければデフォルトスタイルを自動選択
+    if (newIsOpen && !selectedStyle) {
+      onStyleChange(responseStyles[0]); // デフォルトは「考えを整理する」
+    }
   };
 
   const handleStyleSelect = (style: ResponseStyle) => {
+    console.log('🎨 ResponseStyleSelector: スタイル選択', style.id, style.label);
     if (style.id === 'custom') {
       // カスタムスタイルの場合はインライン入力を表示
       setShowCustomInput(true);
       setCustomInstruction(selectedStyle?.customInstruction || '');
     } else {
+      console.log('🎨 ResponseStyleSelector: onStyleChange呼び出し', style.id);
       onStyleChange(style);
       setShowCustomInput(false);
       // スタイル選択後は自動で閉じる

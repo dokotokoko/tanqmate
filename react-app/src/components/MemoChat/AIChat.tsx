@@ -108,6 +108,14 @@ const AIChat: React.FC<AIChatProps> = ({
   
   // 応答スタイルの状態
   const [responseStyle, setResponseStyle] = useState<ResponseStyle | null>(null);
+  // responseStyleの最新値を保持するref（クロージャ問題対策）
+  const responseStyleRef = useRef<ResponseStyle | null>(null);
+
+  // responseStyleが変更されたらrefも更新
+  useEffect(() => {
+    responseStyleRef.current = responseStyle;
+    console.log('📝 responseStyleRef更新:', responseStyle?.id);
+  }, [responseStyle]);
 
   // 通知システムのref
   const notificationManagerRef = useRef<SmartNotificationManagerRef>(null);
@@ -117,7 +125,12 @@ const AIChat: React.FC<AIChatProps> = ({
 
   // 初期化管理用のref
   const initializationKeyRef = useRef('initialized');
-  
+
+  // デバッグ: responseStyleの状態変更を監視
+  useEffect(() => {
+    console.log('🎯 AIChat: responseStyle changed:', responseStyle?.id || 'null', responseStyle);
+  }, [responseStyle]);
+
   // タイマー管理用
   const timersRef = useRef<Set<NodeJS.Timeout>>(new Set());
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -326,6 +339,9 @@ const AIChat: React.FC<AIChatProps> = ({
   const handleSuggestionClick = async (option: string) => {
     if (isLoading || isSendingRef.current) return;
 
+    // デバッグログ: handleSuggestionClick開始時のresponseStyle確認
+    console.log('🎯 handleSuggestionClick開始時のresponseStyle:', responseStyle?.id, responseStyle);
+
     // ゲーミフィケーション: ステップカウンターをインクリメント
     setStepCount(prev => prev + 1);
 
@@ -393,6 +409,9 @@ const AIChat: React.FC<AIChatProps> = ({
           const token = localStorage.getItem('auth-token');
           if (token) {
             const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+            // デバッグログ: handleSuggestionClick内のfetch直前のresponseStyle確認（refを使用）
+            const currentResponseStyle = responseStyleRef.current;
+            console.log('📤 handleSuggestionClick fetch直前のresponseStyle (ref):', currentResponseStyle?.id, currentResponseStyle);
             const response = await fetch(`${apiBaseUrl}/chat`, {
               method: 'POST',
               headers: {
@@ -403,8 +422,8 @@ const AIChat: React.FC<AIChatProps> = ({
               body: JSON.stringify({
                 message: userMessage.content,
                 context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
-                response_style: responseStyle?.id || 'auto',
-                custom_instruction: responseStyle?.customInstruction || undefined,
+                response_style: currentResponseStyle?.id || 'auto',
+                custom_instruction: currentResponseStyle?.customInstruction || undefined,
               }),
             });
 
@@ -489,7 +508,10 @@ const AIChat: React.FC<AIChatProps> = ({
   const isSendingRef = useRef(false);
   const handleSendMessage = async () => {
     if (!inputValue.trim() || isLoading || isSendingRef.current) return;
-    
+
+    // デバッグログ: 送信時のresponseStyle確認
+    console.log('🚀 handleSendMessage開始時のresponseStyle:', responseStyle?.id, responseStyle);
+
     // 二重送信防止フラグ
     isSendingRef.current = true;
 
@@ -541,6 +563,9 @@ const AIChat: React.FC<AIChatProps> = ({
         const token = localStorage.getItem('auth-token');
         if (token) {
           const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+          // デバッグログ: API送信直前のresponseStyle確認（refを使用）
+          const currentResponseStyle = responseStyleRef.current;
+          console.log('📤 fetch直前のresponseStyle (ref):', currentResponseStyle?.id, currentResponseStyle);
           const response = await fetch(`${apiBaseUrl}/chat`, {
             method: 'POST',
             headers: {
@@ -551,8 +576,8 @@ const AIChat: React.FC<AIChatProps> = ({
             body: JSON.stringify({
               message: userMessage.content,
               context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
-              response_style: responseStyle?.id || 'auto',
-              custom_instruction: responseStyle?.customInstruction || undefined,
+              response_style: currentResponseStyle?.id || 'auto',
+              custom_instruction: currentResponseStyle?.customInstruction || undefined,
             }),
           });
 

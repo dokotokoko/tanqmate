@@ -1526,5 +1526,751 @@ const handleSuggestionClick = (option: string) => {
 ---
 
 **最終更新日**: 2026年1月26日
-**実装ステータス**: フェーズ1-5完了 ✅
+**実装ステータス**: フェーズ1-6完了 ✅
 **次のステップ**: selectプロンプトの実戦テストとユーザーフィードバック収集
+
+---
+
+## 🐛 フェーズ6: select応答スタイルのバグ修正（完了）
+
+### 実装完了日
+**2026年1月26日**
+
+### 発見された重大なバグ
+
+#### バグ: `process_chat_message`で`suggestion_options`が欠落
+
+**問題箇所**: [backend/services/chat_service.py:144-150](backend/services/chat_service.py#L144-L150)
+
+**症状**:
+- 「サクサク進める」（select）応答スタイルを選択しても、選択肢ボタンが一切表示されない
+- プロンプトでJSON出力を指示し、`_process_with_async_llm`で正しくパースしても、親メソッドで切り捨てられていた
+
+**原因**:
+`process_chat_message`メソッドの返り値に以下のフィールドが含まれていなかった：
+- `suggestion_options`（選択肢）
+- `response_style_used`（使用した応答スタイル）
+- `is_clarification`（明確化質問かどうか）
+- `clarification_questions`（質問リスト）
+
+**修正前のコード**:
+```python
+return {
+    "response": ai_response["response"],
+    "project_id": project_id,
+    "metrics": metrics,
+    "agent_used": ai_response.get("agent_used", False),
+    "fallback_used": ai_response.get("fallback_used", False)
+    # ← suggestion_options など欠落!
+}
+```
+
+**修正後のコード**:
+```python
+return {
+    "response": ai_response["response"],
+    "project_id": project_id,
+    "metrics": metrics,
+    "agent_used": ai_response.get("agent_used", False),
+    "fallback_used": ai_response.get("fallback_used", False),
+    # 質問明確化機能用フィールド
+    "is_clarification": ai_response.get("is_clarification", False),
+    "clarification_questions": ai_response.get("clarification_questions"),
+    "suggestion_options": ai_response.get("suggestion_options"),
+    # 応答スタイル表示用フィールド
+    "response_style_used": ai_response.get("response_style_used")
+}
+```
+
+---
+
+### selectスタイルで選択肢が表示される法則
+
+#### 正常動作時のデータフロー
+
+| ステップ | 処理内容 |
+|---------|----------|
+| 1. ユーザー選択 | 応答スタイルで「サクサク進める」を選択 |
+| 2. APIリクエスト | `response_style: "select"` を送信 |
+| 3. プロンプト実行 | selectプロンプトがJSON形式で応答を生成 |
+| 4. JSONパース | `message`と`action_options`を抽出 |
+| 5. API応答 | `suggestion_options`としてフロントエンドに返す |
+| 6. UI表示 | `SuggestionChips`コンポーネントで選択肢ボタンを表示 |
+
+#### selectプロンプトの出力形式
+
+```json
+{
+  "message": "激励メッセージ（30-50文字）",
+  "action_options": [
+    "行動1（15文字以内）",
+    "行動2（15文字以内）",
+    "行動3（15文字以内）"
+  ]
+}
+```
+
+#### 具体例
+
+**入力**: 「環境問題について調べたい」
+
+**期待される出力**:
+```json
+{
+  "message": "まずは身近なところから観察してみよう！",
+  "action_options": [
+    "近所のゴミを写真に撮る",
+    "今日使った水の量を記録",
+    "環境ニュースを1つ読む"
+  ]
+}
+```
+
+**UIでの表示**:
+- メッセージ: 「まずは身近なところから観察してみよう！」
+- 選択肢ボタン: 3つのクリック可能なChip
+
+---
+
+### テスト確認方法
+
+#### テストケース1: selectスタイルで選択肢が表示されることを確認
+
+1. アプリにログイン
+2. チャット画面で「サクサク進める」を選択
+3. 任意のメッセージを送信（例: 「環境問題について調べたい」）
+4. **期待結果**: AIの応答に3つの選択肢ボタンが表示される
+
+#### テストケース2: 選択肢をクリックして次に進める
+
+1. 表示された選択肢ボタンをクリック
+2. **期待結果**:
+   - ボタンが「✓ 完了！」に変化
+   - 選択した内容がメッセージとして送信される
+   - 次の応答でまた選択肢が表示される
+
+#### テストケース3: 明確化質問でも選択肢が表示される
+
+1. 「サクサク進める」以外のスタイルを選択
+2. 抽象的な質問を送信（例: 「機械学習について」）
+3. **期待結果**: 明確化質問と共に選択肢ボタンが表示される
+
+---
+
+### 修正したファイル
+
+| ファイル | 修正内容 |
+|---------|----------|
+| [backend/services/chat_service.py](backend/services/chat_service.py#L144-L155) | `process_chat_message`の返り値に欠落フィールドを追加 |
+
+---
+
+### 今後の課題
+
+#### 課題1: LLMがJSON形式で出力しない場合がある
+
+**現状**: selectプロンプトでJSON形式を指示しているが、LLMが通常のテキストで応答する場合がある
+
+**影響**: JSONパースが失敗し、選択肢が表示されない
+
+**優先度**: 🔴 高
+
+**解決策**:
+1. プロンプトにJSON形式の厳格な指示を追加
+2. パース失敗時のフォールバックUI（手動入力を促す）
+3. 複数回のリトライ処理
+
+---
+
+#### 課題2: 選択肢の内容が抽象的になる場合がある
+
+**現状**: 「〇〇を調べる」のような抽象的な選択肢が生成される場合がある
+
+**影響**: 「5-15分で完了できる超具体的なアクション」というコンセプトに反する
+
+**優先度**: 🟡 中
+
+**解決策**:
+1. プロンプトに具体例をさらに追加
+2. 出力バリデーション（行動動詞のチェック）
+3. ユーザーフィードバックを基に継続的改善
+
+---
+
+#### 課題3: 質問明確化とselectの選択肢が混在する場合の整理
+
+**現状**:
+- 質問明確化: `clarification_questions` + `quick_options`
+- select応答: `action_options`
+
+両方の選択肢がフロントエンドで`suggestion_options`として扱われる
+
+**影響**: UIは統一されているが、目的が異なる選択肢が混在している
+
+**優先度**: 🟢 低
+
+**解決策**:
+1. フロントエンドで選択肢のタイプを区別
+2. 明確化質問用と行動提案用で異なるスタイルを適用
+3. 将来的にはコンポーネントを分離
+
+---
+
+## 📋 全体の実装状況まとめ
+
+| フェーズ | 内容 | ステータス |
+|---------|------|----------|
+| フェーズ1 | 応答速度の改善（トークン数制限） | ✅ 完了 |
+| フェーズ2 | 抽象的質問への3つの追加質問機能 | ✅ 完了 |
+| フェーズ3 | フロントエンド連携 | ✅ 完了 |
+| フェーズ4 | UI/UX改善とselect応答スタイル追加 | ✅ 完了 |
+| フェーズ5 | selectのゲーミフィケーション完全実装 | ✅ 完了 |
+| フェーズ6 | select応答のバグ修正 | ✅ 完了 |
+| フェーズ6.1 | selectで明確化質問が表示されるバグ修正 | ✅ 完了 |
+
+---
+
+## 🐛 フェーズ6.1: selectスタイルで明確化質問が表示されるバグの修正（完了）
+
+### 実装完了日
+**2026年1月26日**
+
+### 発見されたバグ
+
+#### 症状
+「サクサク進める」（select）を選択しても、選択肢ボタンではなく**明確化質問**（「〜ですか？」「〜教えてください」）が表示される
+
+#### 原因
+[chat_service.py:178-181](backend/services/chat_service.py#L178-L181) の条件分岐で、`select`スタイルが明確化質問スキップの対象に含まれていなかった
+
+**修正前のコード**:
+```python
+# 長考モードでない場合のみ質問の抽象度を判定
+is_deep_thinking = response_style in ["research", "deepen"]
+
+if enable_clarification and not is_deep_thinking:
+    # 抽象的な質問の場合は明確化質問を生成 ← selectでも実行されてしまう
+```
+
+**修正後のコード**:
+```python
+# 明確化質問をスキップするスタイル
+# - research, deepen: 長考モード（詳細な応答を生成）
+# - select: サクサク進めるモード（常に行動選択肢を表示）
+skip_clarification_styles = ["research", "deepen", "select"]
+
+if enable_clarification and response_style not in skip_clarification_styles:
+    # selectスタイルでは明確化質問をスキップし、直接行動選択肢を生成
+```
+
+### 期待される動作
+
+| スタイル | 抽象的な質問への対応 |
+|---------|---------------------|
+| organize, ideas, expand | 明確化質問を生成（3つの追加質問） |
+| research, deepen | 明確化質問をスキップ → 詳細な応答を直接生成 |
+| **select** | **明確化質問をスキップ → 行動選択肢を直接生成** |
+
+### テスト確認
+
+1. バックエンドを再起動
+2. 「サクサク進める」を選択
+3. 抽象的な質問を送信（例: 「環境問題について」）
+4. **期待結果**: 明確化質問ではなく、3つの行動選択肢ボタンが表示される
+
+---
+
+## 📖 フェーズ7: selectスタイル動作条件の明確化とテスト方法
+
+### 調査日
+**2026年1月26日**
+
+### 背景
+「サクサク進める」（select）の応答スタイルで選択肢ボタンが表示されないという報告があった。調査の結果、テスト時に `response_style: auto` で処理されており、「サクサク進める」が選択されていなかったことが判明。
+
+---
+
+### selectスタイルで選択肢ボタンが表示される条件
+
+#### 必須手順
+| ステップ | 処理内容 | 確認ポイント |
+|---------|----------|-------------|
+| 1 | ユーザーが「サクサク進める」を選択 | 応答スタイルセレクターで緑色のボタンをクリック |
+| 2 | フロントエンドから `response_style: "select"` を送信 | DevToolsのNetworkタブでリクエストボディを確認 |
+| 3 | バックエンドがselectプロンプトを使用 | ログに `🎯 Received response_style: select` が表示 |
+| 4 | LLMがJSON形式で応答を生成 | ログに `🎮 Select style detected!` が表示 |
+| 5 | JSONパースが成功 | ログに `📝 Raw response` でJSON形式のテキストが表示 |
+| 6 | `suggestion_options`としてフロントエンドに返却 | APIレスポンスに `suggestion_options` 配列が含まれる |
+| 7 | フロントエンドで`SuggestionChips`が表示 | 紫色のグラデーションボタンが3つ表示される |
+
+---
+
+### 正常動作時のログ例
+
+```
+backend-1   | INFO - 🎯 Received response_style: select
+backend-1   | INFO - 🎯 _process_with_async_llm called with response_style: select
+backend-1   | INFO - 🎮 Select style detected! Attempting to parse JSON...
+backend-1   | INFO - 📝 Raw response (first 300 chars): {"message": "まずは身近なところから観察してみよう！", "action_options": ["近所のゴミを写真に撮る", "今日使った水の量を記録", "環境ニュースを1つ読む"]}
+```
+
+---
+
+### 正常動作時のAPI応答例
+
+**入力**: 「環境問題について調べたい」
+
+**API応答**:
+```json
+{
+  "response": "まずは身近なところから観察してみよう！",
+  "suggestion_options": [
+    "近所のゴミを写真に撮る",
+    "今日使った水の量を記録",
+    "環境ニュースを1つ読む"
+  ],
+  "response_style_used": "select",
+  "is_clarification": false
+}
+```
+
+---
+
+### テスト手順（チェックリスト）
+
+#### 事前準備
+- [ ] Docker環境が起動していること
+- [ ] フロントエンドとバックエンドが正常に動作していること
+- [ ] ブラウザのDevToolsを開いておくこと
+
+#### テスト実行
+1. [ ] チャット画面にアクセス
+2. [ ] 「応答スタイルを選択する」トグルをクリック
+3. [ ] **「サクサク進める」（緑色のSpeedアイコン）をクリック**
+4. [ ] 任意のメッセージを送信（例: 「環境問題について調べたい」）
+5. [ ] バックエンドログを確認: `response_style: select` が表示されているか
+6. [ ] AIの応答に**3つの選択肢ボタン**が表示されているか
+7. [ ] 選択肢ボタンをクリックして動作を確認
+
+#### 期待される結果
+- 紫色グラデーションの選択肢ボタンが3つ表示される
+- ボタンには `PlayArrow` アイコンが付いている
+- クリックすると「✓ 完了！」に変化し、緑色になる
+- 画面右上にステップカウンターが表示される
+
+---
+
+### よくある問題と対処法
+
+#### 問題1: 選択肢ボタンが表示されない
+
+**確認ポイント**:
+1. 「サクサク進める」を本当に選択したか？
+   - トグルをクリック後、緑色の「サクサク進める」ボタンをクリックする必要がある
+   - 選択されると、ボタンが強調表示される
+
+2. バックエンドログを確認
+   - `response_style: auto` → 「サクサク進める」が選択されていない
+   - `response_style: select` → 正しく選択されている
+
+3. JSONパースが失敗していないか
+   - ログに `Select style JSON parse failed` が表示されていないか確認
+
+#### 問題2: JSONパースエラーが発生する
+
+**原因**: LLMがJSON形式ではなく通常テキストで応答した
+
+**対処**:
+1. プロンプトにJSON形式の指示が明確に含まれているか確認
+2. 必要に応じてプロンプトを強化（Few-shot examplesの追加など）
+3. フォールバック時は通常テキスト応答として表示される
+
+#### 問題3: 選択肢が質問形式になっている
+
+**原因**: プロンプトの禁止事項が守られていない
+
+**対処**:
+1. プロンプト内の「🚫 絶対禁止事項」を確認
+2. Few-shot examplesを追加
+3. 必要に応じてモデルパラメータ（temperature）を調整
+
+---
+
+### 新たに発見された課題
+
+#### 課題1: テストドキュメントの不足
+
+**現状**: selectスタイルの正しいテスト方法がドキュメント化されていなかった
+
+**影響**: テスト時に「サクサク進める」を選択せずに検証してしまう
+
+**解決策**: 本セクションで詳細なテスト手順を追加 ✅
+
+---
+
+#### 課題2: 応答スタイル選択のUI改善
+
+**現状**: 応答スタイルの選択状態が視覚的に分かりにくい可能性
+
+**優先度**: 🟡 中
+
+**改善案**:
+1. 選択中のスタイルをより明確に強調表示
+2. チャット入力欄の近くに現在のスタイルを小さく表示
+3. 初回アクセス時にスタイル選択を促すヒントを表示
+
+---
+
+## 🐛 フェーズ8: selectスタイル選択時にautoが送信されるバグの修正
+
+### 調査日
+**2026年1月26日**
+
+### 報告された問題
+- 「サクサク進める」をWEB画面上で選択しても、バックエンドログに `response_style: auto` が表示される
+- 選択肢ボタンが一切表示されない
+
+### 調査プロセス
+
+#### 1. ターミナルログの分析
+```
+backend-1   | INFO - 🎯 Received response_style: auto
+```
+→ フロントエンドから `auto` が送信されていることを確認
+
+#### 2. フロントエンドコードの調査
+
+**調査箇所**:
+- [AIChat.tsx](react-app/src/components/MemoChat/AIChat.tsx) - responseState管理
+- [ResponseStyleSelector.tsx](react-app/src/components/MemoChat/ResponseStyleSelector.tsx) - スタイル選択UI
+
+**発見した問題点**:
+
+##### 問題1: responseStyleの初期値がnull
+
+```typescript
+// AIChat.tsx:110
+const [responseStyle, setResponseStyle] = useState<ResponseStyle | null>(null);
+```
+
+##### 問題2: APIリクエストでnullの場合autoが送信される
+
+```typescript
+// AIChat.tsx:554
+response_style: responseStyle?.id || 'auto',
+```
+
+##### 問題3: トグルONでもスタイルが自動選択されない（根本原因）
+
+```typescript
+// ResponseStyleSelector.tsx:147
+const currentStyle = selectedStyle || responseStyles[0];
+```
+
+このコードは**UI表示のみ**に使われており：
+- `selectedStyle`（親コンポーネントの`responseStyle`）が`null`の場合
+- UIでは`responseStyles[0]`（考えを整理する）がハイライト表示される
+- **しかし、実際の`responseStyle`は`null`のまま**
+
+結果として、ユーザーがトグルをONにしてスタイルが選択されているように見えても、APIには`auto`が送信される。
+
+---
+
+### 実施した修正
+
+#### 修正1: トグルON時のデフォルトスタイル自動選択
+
+**ファイル**: [react-app/src/components/MemoChat/ResponseStyleSelector.tsx](react-app/src/components/MemoChat/ResponseStyleSelector.tsx)
+
+**修正前**:
+```typescript
+const handleToggle = () => {
+  setIsOpen(!isOpen);
+};
+```
+
+**修正後**:
+```typescript
+const handleToggle = () => {
+  const newIsOpen = !isOpen;
+  setIsOpen(newIsOpen);
+
+  // トグルをONにした時、選択されていなければデフォルトスタイルを自動選択
+  if (newIsOpen && !selectedStyle) {
+    onStyleChange(responseStyles[0]); // デフォルトは「考えを整理する」
+  }
+};
+```
+
+**効果**: トグルをONにするだけで、デフォルトスタイル（考えを整理する）が自動的に選択される
+
+#### 修正2: デバッグログの追加
+
+**目的**: 問題発生時の原因特定を容易にする
+
+**追加箇所1**: ResponseStyleSelector.tsx
+```typescript
+const handleStyleSelect = (style: ResponseStyle) => {
+  console.log('🎨 ResponseStyleSelector: スタイル選択', style.id, style.label);
+  // ...
+  console.log('🎨 ResponseStyleSelector: onStyleChange呼び出し', style.id);
+  onStyleChange(style);
+  // ...
+};
+```
+
+**追加箇所2**: AIChat.tsx
+```typescript
+useEffect(() => {
+  console.log('🎯 AIChat: responseStyle changed:', responseStyle?.id || 'null', responseStyle);
+}, [responseStyle]);
+```
+
+---
+
+### 修正後の期待される動作
+
+1. ユーザーがトグルをONにする
+2. **自動的に「考えを整理する」が選択される** ← 新しい動作
+3. コンソールに `🎯 AIChat: responseStyle changed: organize` が表示
+4. メッセージ送信時に `response_style: organize` がAPIに送信
+5. 「サクサク進める」をクリックすると
+6. コンソールに `🎨 ResponseStyleSelector: スタイル選択 select サクサク進める` が表示
+7. `🎯 AIChat: responseStyle changed: select` が表示
+8. メッセージ送信時に `response_style: select` がAPIに送信
+9. 選択肢ボタンが表示される
+
+---
+
+### テスト確認方法
+
+1. Docker環境を再起動（フロントエンドの変更を反映）
+2. ブラウザのDevToolsを開き、Consoleタブを表示
+3. チャット画面にアクセス
+4. 「応答スタイルを選択する」トグルをクリック
+5. **確認**: コンソールに `🎯 AIChat: responseStyle changed: organize` が表示されること
+6. 「サクサク進める」をクリック
+7. **確認**: コンソールに以下が表示されること
+   - `🎨 ResponseStyleSelector: スタイル選択 select サクサク進める`
+   - `🎯 AIChat: responseStyle changed: select`
+8. メッセージを送信
+9. **確認**: バックエンドログに `response_style: select` が表示されること
+10. **確認**: AIの応答に選択肢ボタンが表示されること
+
+---
+
+### 残った課題
+
+#### 課題1: デバッグログの本番環境での扱い
+
+**現状**: デバッグ用のconsole.logが残っている
+
+**優先度**: 🟡 中
+
+**対処案**:
+1. 環境変数で制御（開発環境のみ表示）
+2. 本番リリース前に削除
+3. または、ログレベル管理ツールの導入
+
+---
+
+#### 課題2: スタイル選択状態の永続化
+
+**現状**: ページリロードでスタイル選択がリセットされる
+
+**優先度**: 🟢 低
+
+**対処案**:
+1. localStorageに選択状態を保存
+2. リロード後に復元
+
+---
+
+#### 課題3: 選択状態のビジュアルフィードバック強化
+
+**現状**: 選択されたスタイルが分かりにくい場合がある
+
+**優先度**: 🟡 中
+
+**対処案**:
+1. 入力欄の近くに現在の選択スタイルを常時表示
+2. チップやバッジで選択中スタイルを明示
+
+---
+
+### 変更されたファイル一覧（フェーズ8）
+
+| ファイル | 変更内容 |
+|---------|----------|
+| [react-app/src/components/MemoChat/ResponseStyleSelector.tsx](react-app/src/components/MemoChat/ResponseStyleSelector.tsx) | トグルON時のデフォルト選択 + デバッグログ |
+| [react-app/src/components/MemoChat/AIChat.tsx](react-app/src/components/MemoChat/AIChat.tsx) | responseState監視のデバッグログ |
+| [CHAT_IMPROVEMENT_PLAN.md](CHAT_IMPROVEMENT_PLAN.md) | フェーズ8追加 |
+
+---
+
+**最終更新日**: 2026年1月26日
+**実装ステータス**: フェーズ1-9完了 ✅
+**次のステップ**:
+1. Docker環境を再起動してフロントエンドの変更を反映
+2. 上記テスト確認方法に従ってselectスタイルをテスト
+3. コンソールログで選択状態が正しく反映されているか確認
+4. 選択肢ボタンが表示されることを確認
+5. 問題が解決しない場合はコンソールログを確認して追加調査
+
+---
+
+## 🐛 フェーズ9: responseStyleがAPI送信時にnullになるバグの修正
+
+### 調査日・修正日
+**2026年1月26日**
+
+### 報告された問題
+
+- 「サクサク進める」（select）をWEB画面上で選択しても、バックエンドログに `response_style: auto` が表示される
+- コンソールログでは `🎯 AIChat: responseStyle changed: select Object` が表示されているのに、送信時には `auto` になっている
+
+### 問題の原因分析
+
+#### コンソールログの詳細分析
+
+```
+ResponseStyleSelector.tsx:119 🎨 ResponseStyleSelector: スタイル選択 select サクサク進める
+ResponseStyleSelector.tsx:125 🎨 ResponseStyleSelector: onStyleChange呼び出し select
+AIChat.tsx:123 🎯 AIChat: responseStyle changed: select Object
+AIChat.tsx:123 🎯 AIChat: responseStyle changed: null null   ← ここで問題発生
+AIChat.tsx:123 🎯 AIChat: responseStyle changed: null null
+AIChat.tsx:123 🎯 AIChat: responseStyle changed: organize Object
+```
+
+**根本原因**:
+`responseStyle`が正しく`select`に設定された後、何らかの原因でコンポーネントが再レンダリングまたは再マウントされ、`useState`の初期値（`null`）にリセットされていた。
+
+これにより、メッセージ送信時の`handleSendMessage`関数内では：
+```typescript
+response_style: responseStyle?.id || 'auto',  // responseStyleがnullなので'auto'になる
+```
+
+### 実施した修正
+
+#### 修正内容: useRefを使用してresponseStyleの最新値を保持
+
+**ファイル**: [react-app/src/components/MemoChat/AIChat.tsx](react-app/src/components/MemoChat/AIChat.tsx)
+
+**問題点**:
+- `handleSendMessage`関数がレンダリング時の`responseStyle`の値をキャプチャ（クロージャ）
+- 非同期処理中にコンポーネントが再レンダリングされると、キャプチャした値が古くなる
+- 結果として、API送信時に`null`（または古い値）が参照される
+
+**解決策**:
+`useRef`を使用して`responseStyle`の最新値を常に参照できるようにする
+
+**追加したコード（AIChat.tsx）**:
+```typescript
+// 応答スタイルの状態
+const [responseStyle, setResponseStyle] = useState<ResponseStyle | null>(null);
+// responseStyleの最新値を保持するref（クロージャ問題対策）
+const responseStyleRef = useRef<ResponseStyle | null>(null);
+
+// responseStyleが変更されたらrefも更新
+useEffect(() => {
+  responseStyleRef.current = responseStyle;
+  console.log('📝 responseStyleRef更新:', responseStyle?.id);
+}, [responseStyle]);
+```
+
+**handleSendMessage内の修正（旧）**:
+```typescript
+response_style: responseStyle?.id || 'auto',
+```
+
+**handleSendMessage内の修正（新）**:
+```typescript
+// refを使用して最新の値を取得
+const currentResponseStyle = responseStyleRef.current;
+console.log('📤 fetch直前のresponseStyle (ref):', currentResponseStyle?.id, currentResponseStyle);
+response_style: currentResponseStyle?.id || 'auto',
+```
+
+**handleSuggestionClick内も同様に修正**
+
+---
+
+### 修正後の期待される動作
+
+1. ユーザーが「サクサク進める」を選択
+2. `responseStyle`と`responseStyleRef.current`の両方が`select`に更新
+3. メッセージ送信時、`responseStyleRef.current`から最新値を取得
+4. API送信で`response_style: select`が正しく送られる
+5. バックエンドで`🎯 Received response_style: select`がログに表示
+6. 選択肢ボタンが正しく表示される
+
+---
+
+### テスト確認方法
+
+1. Docker環境を再起動（フロントエンドの変更を反映）
+2. ブラウザのDevToolsを開き、Consoleタブを表示
+3. チャット画面にアクセス
+4. 「応答スタイルを選択する」トグルをクリック
+5. 「サクサク進める」をクリック
+6. **確認**: コンソールに以下が表示されること
+   - `📝 responseStyleRef更新: select`
+7. メッセージを送信
+8. **確認**: コンソールに以下が表示されること
+   - `🚀 handleSendMessage開始時のresponseStyle: select`
+   - `📤 fetch直前のresponseStyle (ref): select`
+9. **確認**: バックエンドログに `response_style: select` が表示されること
+10. **確認**: AIの応答に選択肢ボタンが表示されること
+
+---
+
+### 変更されたファイル一覧（フェーズ9）
+
+| ファイル | 変更内容 |
+|---------|----------|
+| [react-app/src/components/MemoChat/AIChat.tsx](react-app/src/components/MemoChat/AIChat.tsx) | useRefによるresponseStyle最新値の保持 + デバッグログ追加 |
+| [CHAT_IMPROVEMENT_PLAN.md](CHAT_IMPROVEMENT_PLAN.md) | フェーズ9追加 |
+
+---
+
+### 新たに発見された課題
+
+#### 課題1: コンポーネント再マウントの根本原因の特定
+
+**現状**: `responseStyle`が`null`にリセットされる原因が完全には特定されていない
+
+**可能性**:
+1. 親コンポーネントの状態変更によるAIChatの再マウント
+2. ルーティング変更による再マウント
+3. React.StrictModeによる開発環境での二重レンダリング
+
+**優先度**: 🟡 中
+
+**対処案**:
+- useRefによる解決で実用上は問題解決
+- 根本原因は将来的にコンポーネント設計を見直す際に調査
+
+---
+
+#### 課題2: デバッグログの整理
+
+**現状**: 多数のデバッグログが追加されている
+
+**影響**: 本番環境でのパフォーマンスとログの可読性に影響
+
+**優先度**: 🟢 低
+
+**対処案**:
+1. 本番リリース前にデバッグログを削除または条件付きにする
+2. `process.env.NODE_ENV === 'development'` で制御
+
+---
+
+**最終更新日**: 2026年1月26日
+**実装ステータス**: フェーズ1-9完了 ✅
+**次のステップ**:
+1. Docker環境を再起動してフロントエンドの変更を反映
+2. テスト確認方法に従ってselectスタイルをテスト
+3. コンソールログで`responseStyleRef`が正しく更新されているか確認
+4. バックエンドログで`response_style: select`が受信されているか確認
+5. 選択肢ボタンが表示されることを確認
