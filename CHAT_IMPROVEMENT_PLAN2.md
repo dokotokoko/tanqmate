@@ -1214,5 +1214,393 @@ async def parallel_fetch_context_and_history(
 ---
 
 **最終更新日**: 2026年1月26日
-**実装ステータス**: フェーズ10.2-10.4完了 ✅
-**次の優先タスク**: フェーズ10.1 ストリーミング対応の詳細設計・実装
+**実装ステータス**: フェーズ10.1-10.4完了 ✅
+
+---
+
+## ✅ フェーズ10.1: ストリーミングレスポンスの実装完了
+
+### 実装日
+**2026年1月26日**
+
+### 概要
+
+最重要課題であったストリーミングレスポンス対応を実装しました。これにより、AIの応答が生成され次第リアルタイムで画面に表示されるようになり、体感応答速度が大幅に改善されます。
+
+### 実装内容
+
+#### 1. バックエンド: SSEストリーミングエンドポイント追加
+
+**ファイル**: [backend/main.py](backend/main.py)
+
+**追加したインポート**:
+```python
+from fastapi.responses import StreamingResponse
+```
+
+**新規エンドポイント**: `/chat/stream`
+
+```python
+@app.post("/chat/stream", dependencies=[Depends(chat_rate_limiter)])
+async def chat_with_ai_stream(
+    chat_data: ChatMessage,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """AIとのストリーミングチャット（SSE）"""
+
+    async def event_generator():
+        # 1. DB取得（会話履歴・コンテキスト）
+        # 2. LLMストリーミング呼び出し
+        async for chunk in async_llm_client.generate_response_streaming(input_items):
+            yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+        # 3. 完了通知
+        yield f"data: {json.dumps({'done': True, 'response_style_used': style})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Nginx用
+        }
+    )
+```
+
+**特徴**:
+- Server-Sent Events（SSE）プロトコルを使用
+- 既存の `generate_response_streaming()` メソッドを活用
+- チャットログの保存は非同期バックグラウンド処理
+- エラーハンドリング対応
+
+---
+
+#### 2. フロントエンド: SSEストリーミング対応
+
+**ファイル**: [react-app/src/components/MemoChat/AIChat.tsx](react-app/src/components/MemoChat/AIChat.tsx)
+
+**追加した状態変数**:
+```typescript
+// ストリーミング用の状態
+const [streamingContent, setStreamingContent] = useState<string>('');
+const [isStreaming, setIsStreaming] = useState(false);
+```
+
+**新規関数**: `streamingFetch()`
+```typescript
+const streamingFetch = async (
+  message: string,
+  responseStyleId: string | null,
+  customInstruction: string | undefined
+): Promise<{ response: string; response_style_used?: string }> => {
+  const response = await fetch(`${apiBaseUrl}/chat/stream`, { ... });
+
+  const reader = response.body?.getReader();
+  const decoder = new TextDecoder();
+  let fullResponse = '';
+
+  setIsStreaming(true);
+  setStreamingContent('');
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const chunk = decoder.decode(value, { stream: true });
+    // SSEパース処理
+    for (const line of lines) {
+      const data = JSON.parse(line.slice(6));
+      if (data.chunk) {
+        fullResponse += data.chunk;
+        setStreamingContent(fullResponse);  // リアルタイム更新
+      }
+    }
+  }
+
+  return { response: fullResponse, ... };
+};
+```
+
+**リアルタイム表示UI**:
+- ストリーミング中は専用の表示コンポーネントを表示
+- カーソル点滅アニメーション付き
+- 自動スクロール対応
+
+**フォールバック機構**:
+- ストリーミングが失敗した場合は自動的に通常APIにフォールバック
+- ユーザーに影響なく透過的に動作
+
+---
+
+### 変更されたファイル一覧（フェーズ10.1）
+
+| ファイル | 変更内容 |
+|---------|----------|
+| [backend/main.py](backend/main.py) | `StreamingResponse`インポート追加、`/chat/stream`エンドポイント追加 |
+| [react-app/src/components/MemoChat/AIChat.tsx](react-app/src/components/MemoChat/AIChat.tsx) | ストリーミング用state追加、`streamingFetch()`関数追加、リアルタイム表示UI追加、スクロール処理追加 |
+
+---
+
+### 期待される改善効果
+
+| 指標 | 変更前 | 変更後 | 改善率 |
+|------|--------|--------|--------|
+| 最初の文字表示 | 8-15秒 | **1-2秒** | **87%短縮** |
+| 体感応答速度 | 遅い（待機感） | **即座に応答開始** | 大幅向上 |
+| ユーザー体験 | 何も表示されない待機 | リアルタイムでテキスト表示 | 質的改善 |
+
+---
+
+### テスト確認方法
+
+1. Docker環境を再起動して変更を反映
+   ```bash
+   docker compose down && docker compose up -d
+   ```
+
+2. ブラウザのDevToolsを開き、Networkタブを表示
+
+3. チャット画面でメッセージを送信
+
+4. **確認ポイント**:
+   - コンソールに `🌊 ストリーミングモードで送信開始` が表示される
+   - Networkタブで `/chat/stream` リクエストが確認できる
+   - メッセージが文字単位でリアルタイム表示される
+   - カーソル点滅アニメーションが表示される
+   - 応答完了後、メッセージが正常に保存される
+
+5. フォールバックテスト（オプション）:
+   - 一時的にストリーミングエンドポイントを無効化
+   - 通常のAPIにフォールバックすることを確認
+
+---
+
+### 残存する課題
+
+#### 課題1: 選択肢ボタン（suggestion_options）のストリーミング対応
+
+**現状**: ストリーミング完了後に選択肢ボタンを表示する仕組みがまだ未実装
+
+**影響**: `select`スタイル使用時に選択肢ボタンが表示されない可能性
+
+**優先度**: 🟡 中
+
+**対処案**:
+1. ストリーミング完了時のレスポンスにsuggestion_optionsを含める
+2. 完了後に通常APIから追加情報を取得する
+
+---
+
+#### 課題2: モデル使い分けの最適化（P2）
+
+**現状**: すべてのリクエストで `gpt-4.1` を使用
+
+**優先度**: 🟡 中
+
+**対処案**: 応答スタイルに応じてモデルを切り替え
+- 高速モード: `gpt-4o-mini`
+- 高品質モード: `gpt-4.1`
+
+---
+
+### フェーズ10全体の改善まとめ
+
+| ステップ | 内容 | 状態 |
+|---------|------|------|
+| 10.1 | ストリーミングレスポンス | ✅ 完了 |
+| 10.2 | セマフォプール増加 | ✅ 完了 |
+| 10.3 | タイムアウト延長 | ✅ 完了 |
+| 10.4 | 履歴取得最適化 | ✅ 完了 |
+| 10.5 | モデル使い分け | 🔲 未実装 |
+| 10.6 | リトライ改善 | 🔲 未実装 |
+| 10.7 | キャッシュ導入 | 🔲 未実装 |
+
+---
+
+**最終更新日**: 2026年1月26日
+**実装ステータス**: フェーズ10.1-10.4完了 ✅
+
+---
+
+## ✅ フェーズ10.8: UI改善とマークダウンレンダリング対応
+
+### 実装日
+**2026年1月26日**
+
+### 概要
+
+ユーザーからのフィードバックに基づき、以下の3つの改善を実施しました：
+1. 選択肢ボタンのサイズを小さく調整
+2. ストリーミング応答の高速化
+3. マークダウンレンダリングとURLリンク対応
+
+### 改善1: 選択肢ボタンのサイズ調整
+
+**問題**: 選択肢ボタンが大きすぎて、小さめの画面では読みづらい
+
+**ファイル**: [react-app/src/components/MemoChat/SuggestionChips.tsx](react-app/src/components/MemoChat/SuggestionChips.tsx)
+
+**変更内容**:
+```typescript
+// 変更前
+fontSize: { xs: '0.95rem', sm: '1.05rem' },
+fontWeight: 600,
+py: { xs: 2.5, sm: 3 },
+px: { xs: 1.5, sm: 2 },
+borderRadius: 3,
+
+// 変更後
+fontSize: { xs: '0.875rem', sm: '0.875rem' },  // 通常テキストと同じサイズ（14px）
+fontWeight: 500,
+py: { xs: 0.75, sm: 1 },  // 縦幅を小さく
+px: { xs: 1, sm: 1.5 },   // 横幅も調整
+borderRadius: 2,
+```
+
+**アイコンサイズも調整**:
+```typescript
+// 変更前
+<PlayArrow sx={{ fontSize: { xs: '16px', sm: '18px' } }} />
+
+// 変更後
+<PlayArrow sx={{ fontSize: '14px' }} />
+```
+
+---
+
+### 改善2: ストリーミング応答の高速化
+
+**問題**: ストリーミングが遅く、リアルタイム表示されない
+
+**原因**: web_searchツールが有効で、検索処理に時間がかかっていた
+
+**ファイル**:
+- [backend/main.py](backend/main.py)
+- [backend/module/llm_api.py](backend/module/llm_api.py)
+
+**変更内容**:
+
+1. **開始イベントの即座送信**（main.py）:
+```python
+# 即座に開始イベントを送信（接続確認）
+yield f"data: {json.dumps({'started': True}, ensure_ascii=False)}\n\n"
+
+# ストリーミングでLLM応答を生成（web_searchなしで高速化）
+async for chunk in async_llm_client.generate_response_streaming(input_items, use_web_search=False):
+```
+
+2. **web_search無効化オプション追加**（llm_api.py）:
+```python
+async def generate_response_streaming(
+    self,
+    input_items: List[Dict[str, Any]],
+    callback: Optional[callable] = None,
+    max_tokens: Optional[int] = None,
+    use_web_search: bool = True  # 新規パラメータ
+) -> AsyncIterator[str]:
+    ...
+    # web_searchは任意（高速応答が必要な場合は無効化）
+    if use_web_search:
+        request_params["tools"] = [{"type": "web_search"}]
+```
+
+**効果**:
+- web_search処理をスキップすることで、最初の文字表示が高速化
+- 通常のチャットでは検索不要な場合が多いため、体感速度が向上
+
+---
+
+### 改善3: マークダウンレンダリングとURLリンク対応
+
+**問題**: researchモードなど長文応答でマークダウンがそのまま表示され、URLリンクもクリックできない
+
+**ファイル**: [react-app/src/components/MemoChat/AIChat.tsx](react-app/src/components/MemoChat/AIChat.tsx)
+
+**変更内容**:
+
+1. **react-markdownインポート追加**:
+```typescript
+import ReactMarkdown from 'react-markdown';
+```
+
+2. **AIメッセージのマークダウンレンダリング**:
+```typescript
+{message.role === 'assistant' ? (
+  <Box sx={{
+    lineHeight: 1.6,
+    '& p': { margin: '0.5em 0' },
+    '& a': { color: 'primary.main', textDecoration: 'underline' },
+    '& ul, & ol': { paddingLeft: '1.5em' },
+    '& code': { backgroundColor: 'rgba(0, 0, 0, 0.05)', ... },
+    '& pre': { backgroundColor: 'rgba(0, 0, 0, 0.05)', ... },
+    '& blockquote': { borderLeft: '3px solid', ... },
+  }}>
+    <ReactMarkdown
+      components={{
+        a: ({ href, children }) => (
+          <a href={href} target="_blank" rel="noopener noreferrer">
+            {children}
+          </a>
+        ),
+      }}
+    >
+      {message.content}
+    </ReactMarkdown>
+  </Box>
+) : (
+  // ユーザーメッセージはプレーンテキスト
+  <Typography ...>{message.content}</Typography>
+)}
+```
+
+3. **ストリーミング中の表示にもマークダウン対応**:
+- ストリーミング中もリアルタイムでマークダウンがレンダリングされる
+- カーソル点滅アニメーションは維持
+
+**対応した要素**:
+- 見出し（h1-h6）
+- リスト（ul, ol）
+- リンク（新しいタブで開く）
+- コードブロック
+- インラインコード
+- 引用（blockquote）
+- 段落
+
+---
+
+### 変更されたファイル一覧（フェーズ10.8）
+
+| ファイル | 変更内容 |
+|---------|----------|
+| [react-app/src/components/MemoChat/SuggestionChips.tsx](react-app/src/components/MemoChat/SuggestionChips.tsx) | ボタンサイズ・フォントサイズ縮小 |
+| [backend/main.py](backend/main.py) | 開始イベント送信、web_search無効化 |
+| [backend/module/llm_api.py](backend/module/llm_api.py) | use_web_searchパラメータ追加 |
+| [react-app/src/components/MemoChat/AIChat.tsx](react-app/src/components/MemoChat/AIChat.tsx) | マークダウンレンダリング対応 |
+
+---
+
+### テスト確認方法
+
+1. Docker環境を再起動
+   ```bash
+   docker compose down && docker compose up -d
+   ```
+
+2. **選択肢ボタンの確認**:
+   - 「サクサク進める」モードでメッセージを送信
+   - 選択肢ボタンが小さくなり、読みやすくなっていることを確認
+
+3. **ストリーミングの確認**:
+   - メッセージ送信後、即座に応答が始まることを確認
+   - コンソールに `🌊 ストリーミング開始` が表示されることを確認
+
+4. **マークダウンの確認**:
+   - 「情報を調べたい」（research）モードで質問
+   - URLリンクが青色で表示され、クリックで新しいタブが開くことを確認
+   - リスト、見出し、コードブロックが正しく表示されることを確認
+
+---
+
+**最終更新日**: 2026年1月26日
+**実装ステータス**: フェーズ10.1-10.4、10.8完了 ✅
+**次の優先タスク**: テスト・動作確認、必要に応じてモデル使い分け（10.5）の実装

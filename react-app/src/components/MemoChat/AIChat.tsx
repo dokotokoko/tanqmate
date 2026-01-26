@@ -21,6 +21,7 @@ import {
   Add as AddIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactMarkdown from 'react-markdown';
 import ChatHistory from './ChatHistory';
 import SmartNotificationManager, { SmartNotificationManagerRef } from '../SmartNotificationManager';
 import { useChatStore } from '../../stores/chatStore';
@@ -110,6 +111,10 @@ const AIChat: React.FC<AIChatProps> = ({
   const [responseStyle, setResponseStyle] = useState<ResponseStyle | null>(null);
   // responseStyleの最新値を保持するref（クロージャ問題対策）
   const responseStyleRef = useRef<ResponseStyle | null>(null);
+
+  // ストリーミング用の状態
+  const [streamingContent, setStreamingContent] = useState<string>('');
+  const [isStreaming, setIsStreaming] = useState(false);
 
   // responseStyleが変更されたらrefも更新
   useEffect(() => {
@@ -504,6 +509,88 @@ const AIChat: React.FC<AIChatProps> = ({
     }, 100);
   };
 
+  // ストリーミングフェッチ関数
+  const streamingFetch = async (
+    message: string,
+    responseStyleId: string | null,
+    customInstruction: string | undefined
+  ): Promise<{ response: string; response_style_used?: string }> => {
+    const token = localStorage.getItem('auth-token');
+    if (!token) {
+      throw new Error('認証トークンが見つかりません');
+    }
+
+    const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+
+    const response = await fetch(`${apiBaseUrl}/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        message: message,
+        context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
+        response_style: responseStyleId || 'auto',
+        custom_instruction: customInstruction,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API応答エラー: ${response.status}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('ストリームの読み取りに失敗しました');
+    }
+
+    const decoder = new TextDecoder();
+    let fullResponse = '';
+    let responseStyleUsed: string | undefined;
+
+    setIsStreaming(true);
+    setStreamingContent('');
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n\n').filter(line => line.startsWith('data: '));
+
+        for (const line of lines) {
+          try {
+            const jsonStr = line.slice(6); // "data: " を削除
+            const data = JSON.parse(jsonStr);
+
+            if (data.chunk) {
+              fullResponse += data.chunk;
+              setStreamingContent(fullResponse);
+            } else if (data.done) {
+              responseStyleUsed = data.response_style_used;
+            } else if (data.error) {
+              throw new Error(data.error);
+            }
+          } catch (parseError) {
+            // JSON パースエラーは無視（不完全なチャンクの場合）
+            console.debug('SSEパースエラー（無視）:', parseError);
+          }
+        }
+      }
+    } finally {
+      setIsStreaming(false);
+      setStreamingContent('');
+    }
+
+    return {
+      response: fullResponse,
+      response_style_used: responseStyleUsed,
+    };
+  };
+
   // メッセージ送信処理（二重送信防止付き）
   const isSendingRef = useRef(false);
   const handleSendMessage = async () => {
@@ -559,13 +646,52 @@ const AIChat: React.FC<AIChatProps> = ({
           userMessage.content;
         aiResponse = await onMessageSend(messageWithStyle, contextContent);
       } else {
-        // データベース対応のチャットAPIを使用
+        // データベース対応のチャットAPIを使用（ストリーミング優先）
         const token = localStorage.getItem('auth-token');
         if (token) {
-          const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-          // デバッグログ: API送信直前のresponseStyle確認（refを使用）
           const currentResponseStyle = responseStyleRef.current;
           console.log('📤 fetch直前のresponseStyle (ref):', currentResponseStyle?.id, currentResponseStyle);
+
+          // ストリーミングAPIを優先使用
+          try {
+            console.log('🌊 ストリーミングモードで送信開始');
+            const streamResult = await streamingFetch(
+              userMessage.content,
+              currentResponseStyle?.id || null,
+              currentResponseStyle?.customInstruction
+            );
+
+            // ストリーミング完了後、メッセージを追加
+            const assistantMessage: Message = {
+              id: `assistant-${Date.now()}`,
+              role: 'assistant',
+              content: streamResult.response,
+              timestamp: new Date(),
+              response_style_used: streamResult.response_style_used,
+            };
+
+            addMessage(assistantMessage);
+
+            // 学習活動記録（AI応答）
+            if (onActivityRecord) {
+              onActivityRecord(assistantMessage.content, 'ai');
+            }
+            notificationManagerRef.current?.recordActivity(assistantMessage.content, 'ai');
+
+            setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
+
+            setIsLoading(false);
+            isSendingRef.current = false;
+            inputRef.current?.focus();
+            return; // 早期リターン
+
+          } catch (streamError) {
+            console.warn('⚠️ ストリーミング失敗、通常APIにフォールバック:', streamError);
+            // フォールバック: 通常のAPIを使用
+          }
+
+          // フォールバック: 従来の非ストリーミングAPI
+          const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
           const response = await fetch(`${apiBaseUrl}/chat`, {
             method: 'POST',
             headers: {
@@ -880,7 +1006,14 @@ const AIChat: React.FC<AIChatProps> = ({
       previousMessageCountRef.current = messages.length;
     }
   }, [messages, scrollToBottomIfNeeded]);
-  
+
+  // ストリーミング中のスクロール（リアルタイム更新時）
+  useEffect(() => {
+    if (isStreaming && streamingContent && shouldAutoScroll) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [streamingContent, isStreaming, shouldAutoScroll]);
+
   // コンポーネントアンマウント時のクリーンアップ
   useEffect(() => {
     return () => {
@@ -1079,7 +1212,71 @@ const AIChat: React.FC<AIChatProps> = ({
                             </Typography>
                           )}
                         </Box>
+                      ) : message.role === 'assistant' ? (
+                        // AIメッセージはマークダウンレンダリング
+                        <Box
+                          sx={{
+                            lineHeight: 1.6,
+                            '& p': { margin: '0.5em 0' },
+                            '& p:first-of-type': { marginTop: 0 },
+                            '& p:last-of-type': { marginBottom: 0 },
+                            '& a': {
+                              color: 'primary.main',
+                              textDecoration: 'underline',
+                              '&:hover': { textDecoration: 'none' },
+                            },
+                            '& ul, & ol': { paddingLeft: '1.5em', margin: '0.5em 0' },
+                            '& li': { marginBottom: '0.25em' },
+                            '& code': {
+                              backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                              padding: '0.1em 0.3em',
+                              borderRadius: '4px',
+                              fontFamily: 'monospace',
+                              fontSize: '0.9em',
+                            },
+                            '& pre': {
+                              backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                              padding: '0.5em',
+                              borderRadius: '4px',
+                              overflow: 'auto',
+                              '& code': {
+                                backgroundColor: 'transparent',
+                                padding: 0,
+                              },
+                            },
+                            '& h1, & h2, & h3, & h4, & h5, & h6': {
+                              marginTop: '0.5em',
+                              marginBottom: '0.25em',
+                              fontWeight: 600,
+                            },
+                            '& blockquote': {
+                              borderLeft: '3px solid',
+                              borderColor: 'primary.main',
+                              paddingLeft: '1em',
+                              margin: '0.5em 0',
+                              fontStyle: 'italic',
+                            },
+                          }}
+                        >
+                          <ReactMarkdown
+                            components={{
+                              // リンクは新しいタブで開く
+                              a: ({ href, children }) => (
+                                <a
+                                  href={href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  {children}
+                                </a>
+                              ),
+                            }}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                        </Box>
                       ) : (
+                        // ユーザーメッセージはプレーンテキスト
                         <Typography
                           variant="body1"
                           sx={{
@@ -1110,8 +1307,98 @@ const AIChat: React.FC<AIChatProps> = ({
             ))}
           </AnimatePresence>
           
-          {/* ローディング表示 */}
-          {isLoading && (
+          {/* ストリーミング中のリアルタイム表示 */}
+          {isStreaming && streamingContent && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <ListItem
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 2,
+                  py: 2,
+                  px: 1,
+                }}
+              >
+                <Avatar
+                  sx={{
+                    bgcolor: 'primary.main',
+                    width: 36,
+                    height: 36,
+                  }}
+                >
+                  <AIIcon />
+                </Avatar>
+
+                <Box sx={{ flex: 1 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
+                    <Typography
+                      variant="body2"
+                      color="text.secondary"
+                    >
+                      AI アシスタント • 応答中...
+                    </Typography>
+                  </Box>
+
+                  <Box
+                    sx={{
+                      p: 2,
+                      backgroundColor: 'background.paper',
+                      borderRadius: 1.4,
+                      lineHeight: 1.6,
+                      '& p': { margin: '0.5em 0' },
+                      '& p:first-of-type': { marginTop: 0 },
+                      '& p:last-of-type': { marginBottom: 0 },
+                      '& a': {
+                        color: 'primary.main',
+                        textDecoration: 'underline',
+                      },
+                      '& ul, & ol': { paddingLeft: '1.5em', margin: '0.5em 0' },
+                      '& li': { marginBottom: '0.25em' },
+                      '& code': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.05)',
+                        padding: '0.1em 0.3em',
+                        borderRadius: '4px',
+                        fontFamily: 'monospace',
+                        fontSize: '0.9em',
+                      },
+                    }}
+                  >
+                    <ReactMarkdown
+                      components={{
+                        a: ({ href, children }) => (
+                          <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>
+                        ),
+                      }}
+                    >
+                      {streamingContent}
+                    </ReactMarkdown>
+                    <Box
+                      component="span"
+                      sx={{
+                        display: 'inline-block',
+                        width: '8px',
+                        height: '16px',
+                        backgroundColor: 'primary.main',
+                        ml: 0.5,
+                        animation: 'blink 1s infinite',
+                        '@keyframes blink': {
+                          '0%, 50%': { opacity: 1 },
+                          '51%, 100%': { opacity: 0 },
+                        },
+                      }}
+                    />
+                  </Box>
+                </Box>
+              </ListItem>
+            </motion.div>
+          )}
+
+          {/* ローディング表示（ストリーミング中でない場合のみ） */}
+          {isLoading && !isStreaming && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}

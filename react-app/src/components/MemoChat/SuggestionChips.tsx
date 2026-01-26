@@ -96,21 +96,21 @@ export const SuggestionChips: React.FC<SuggestionChipsProps> = ({
             <Chip
               icon={
                 isCompleted ? (
-                  <CheckCircle sx={{ fontSize: { xs: '16px', sm: '18px' } }} />
+                  <CheckCircle sx={{ fontSize: '14px' }} />
                 ) : (
-                  <PlayArrow sx={{ fontSize: { xs: '16px', sm: '18px' } }} />
+                  <PlayArrow sx={{ fontSize: '14px' }} />
                 )
               }
               label={isCompleted ? '✓ 完了！' : option}
               onClick={() => handleClick(option, index)}
               disabled={disabled || isCompleted}
             sx={{
-              fontSize: { xs: '0.95rem', sm: '1.05rem' },
-              fontWeight: 600,
-              py: { xs: 2.5, sm: 3 },
-              px: { xs: 1.5, sm: 2 },
+              fontSize: { xs: '0.875rem', sm: '0.875rem' },  // 通常テキストと同じサイズ（14px）
+              fontWeight: 500,
+              py: { xs: 0.75, sm: 1 },  // 縦幅を小さく
+              px: { xs: 1, sm: 1.5 },   // 横幅も調整
               height: 'auto',
-              borderRadius: 3,
+              borderRadius: 2,
               border: 'none',
               background: isCompleted
                 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'

@@ -281,19 +281,25 @@ class learning_plannner():
             self,
             input_items: List[Dict[str, Any]],
             callback: Optional[callable] = None,
-            max_tokens: Optional[int] = None
+            max_tokens: Optional[int] = None,
+            use_web_search: bool = True
         ) -> AsyncIterator[str]:
             """
             Responses API の streaming は event.type を見て delta を拾う
+
+            Args:
+                use_web_search: web_searchツールを使用するか（Falseで高速化）
             """
             async with self.semaphore:
                 request_params: Dict[str, Any] = {
                     "model": self.model,
                     "input": input_items,
-                    "tools": [{"type": "web_search"}],
                     "stream": True,
                     "store": True,
                 }
+                # web_searchは任意（高速応答が必要な場合は無効化）
+                if use_web_search:
+                    request_params["tools"] = [{"type": "web_search"}]
                 if max_tokens is not None:
                     request_params["max_output_tokens"] = max_tokens
 

@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import sys
@@ -1097,6 +1098,146 @@ async def chat_with_ai(
         metrics["error"] = str(e)
         
         handle_database_error(e, "AI応答の生成")
+
+
+@app.post("/chat/stream", dependencies=[Depends(chat_rate_limiter)])
+async def chat_with_ai_stream(
+    chat_data: ChatMessage,
+    current_user: int = Depends(get_current_user_cached)
+):
+    """AIとのストリーミングチャット（SSE）
+
+    Server-Sent Events（SSE）によるストリーミング応答を提供。
+    体感応答速度を大幅に向上させる。
+
+    Returns:
+        StreamingResponse: SSE形式のストリーミング応答
+        - data: {"chunk": "テキストの一部"} - テキストチャンク
+        - data: {"done": true, "response_style_used": "..."} - 完了通知
+        - data: {"error": "エラーメッセージ"} - エラー通知
+    """
+
+    async def event_generator():
+        """SSEイベントジェネレーター"""
+        full_response = ""
+
+        try:
+            # 基本検証
+            validate_supabase()
+
+            if async_llm_client is None:
+                yield f"data: {json.dumps({'error': 'LLMクライアントが初期化されていません'}, ensure_ascii=False)}\n\n"
+                return
+
+            # メッセージ長検証
+            if chat_data.message and len(chat_data.message) > MAX_CHAT_MESSAGE_LENGTH:
+                yield f"data: {json.dumps({'error': 'メッセージが長すぎます'}, ensure_ascii=False)}\n\n"
+                return
+
+            # ヘルパー初期化
+            db_helper = AsyncDatabaseHelper(supabase)
+            context_builder = AsyncProjectContextBuilder(db_helper)
+            page_id = "general"
+
+            # conversationの取得/作成
+            conversation_id = await asyncio.to_thread(
+                lambda: get_or_create_conversation_sync(supabase, current_user, "general")
+            )
+
+            # 履歴取得数の動的調整
+            history_limit = 20
+            if chat_data.message and len(chat_data.message) > 500:
+                history_limit = 50
+
+            # プロジェクトコンテキストと履歴を並列取得
+            project_id, project_context, project, conversation_history = await parallel_fetch_context_and_history(
+                db_helper=db_helper,
+                context_builder=context_builder,
+                page_id=page_id,
+                conversation_id=conversation_id,
+                user_id=current_user,
+                history_limit=history_limit
+            )
+
+            # メッセージ構築（Response API形式）
+            input_items = []
+            input_items.append(async_llm_client.text("system", dev_system_prompt))
+
+            if conversation_history:
+                for history_msg in conversation_history:
+                    role = "user" if history_msg["sender"] == "user" else "assistant"
+                    input_items.append(async_llm_client.text(role, history_msg["message"]))
+
+            input_items.append(async_llm_client.text("user", chat_data.message))
+
+            logger.info(f"🌊 ストリーミング開始: user={current_user}, message_len={len(chat_data.message)}")
+
+            # 即座に開始イベントを送信（接続確認）
+            yield f"data: {json.dumps({'started': True}, ensure_ascii=False)}\n\n"
+
+            # ストリーミングでLLM応答を生成（web_searchなしで高速化）
+            async for chunk in async_llm_client.generate_response_streaming(input_items, use_web_search=False):
+                full_response += chunk
+                # SSE形式でチャンクを送信
+                yield f"data: {json.dumps({'chunk': chunk}, ensure_ascii=False)}\n\n"
+
+            logger.info(f"✅ ストリーミング完了: response_len={len(full_response)}")
+
+            # ログ保存（非同期で並列実行）
+            user_context_data = build_context_data(
+                project_id=project_id,
+                project=project
+            )
+
+            ai_context_data = build_ai_context_data(
+                project_context=project_context,
+                project_id=project_id,
+                agent_payload={},
+                is_agent=False
+            )
+
+            user_msg_data = {
+                "user_id": current_user,
+                "page_id": page_id,
+                "sender": "user",
+                "message": chat_data.message,
+                "conversation_id": conversation_id,
+                "context_data": json.dumps(user_context_data, ensure_ascii=False)
+            }
+
+            ai_msg_data = {
+                "user_id": current_user,
+                "page_id": page_id,
+                "sender": "assistant",
+                "message": full_response,
+                "conversation_id": conversation_id,
+                "context_data": json.dumps(ai_context_data, ensure_ascii=False)
+            }
+
+            # 並列保存（バックグラウンドで実行）
+            asyncio.create_task(parallel_save_chat_logs(
+                db_helper,
+                user_msg_data,
+                ai_msg_data
+            ))
+
+            # 完了通知
+            yield f"data: {json.dumps({'done': True, 'response_style_used': chat_data.response_style or 'auto'}, ensure_ascii=False)}\n\n"
+
+        except Exception as e:
+            logger.error(f"❌ ストリーミングエラー: {e}")
+            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Nginx用バッファリング無効化
+        }
+    )
+
 
 @app.get("/chat/history", response_model=List[ChatHistoryResponse])
 async def get_chat_history(
