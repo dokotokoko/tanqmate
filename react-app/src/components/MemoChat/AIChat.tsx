@@ -393,12 +393,19 @@ const AIChat: React.FC<AIChatProps> = ({
               context: persistentMode ? `現在のメモ: ${currentMemoTitle}\n\n${currentMemoContent}` : undefined,
               response_style: responseStyle?.id || 'auto',
               custom_instruction: responseStyle?.customInstruction || undefined,
+              conversation_id: conversationId || undefined,  // 既存の会話IDを送信
             }),
           });
 
           if (response.ok) {
             const result = await response.json();
             aiResponse = result.response;
+            
+            // 返された会話IDを保存（新規作成された場合など）
+            if (result.conversation_id && result.conversation_id !== conversationId) {
+              setConversationId(result.conversation_id);
+              console.log('📝 会話IDを更新:', result.conversation_id);
+            }
             
             // フォールバック情報を確認
             if (result.fallback_used && result.fallback_model) {

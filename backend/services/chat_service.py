@@ -58,7 +58,8 @@ class ChatService(BaseService):
         project_id: Optional[str] = None,
         session_type: str = "general",
         response_style: Optional[str] = "auto",
-        custom_instruction: Optional[str] = None
+        custom_instruction: Optional[str] = None,
+        conversation_id: Optional[str] = None  # 既存の会話IDを受け取る
     ) -> Dict[str, Any]:
         """メインチャット処理（統合最適化版）"""
         start_time = time.time()
@@ -80,7 +81,12 @@ class ChatService(BaseService):
             context_builder = AsyncProjectContextBuilder(db_helper)
             
             # 会話IDを取得または作成
-            conversation_id = self.get_or_create_conversation_sync(session_type)
+            # 既存のconversation_idが渡された場合はそれを使用、なければ新規作成
+            if not conversation_id:
+                conversation_id = self.get_or_create_conversation_sync(session_type)
+            else:
+                # 既存のconversation_idが有効か確認
+                conversation_id = self.get_or_create_conversation_sync(session_type, existing_id=conversation_id)
             
             project_id, project_context, project, conversation_history = \
                 await parallel_fetch_context_and_history(
@@ -146,7 +152,8 @@ class ChatService(BaseService):
                 "project_id": project_id,
                 "metrics": metrics,
                 "agent_used": ai_response.get("agent_used", False),
-                "fallback_used": ai_response.get("fallback_used", False)
+                "fallback_used": ai_response.get("fallback_used", False),
+                "conversation_id": conversation_id  # 使用した会話IDを返す
             }
             
         except Exception as e:
@@ -274,11 +281,25 @@ class ChatService(BaseService):
             self.logger.error(f"Failed to get chat history: {e}")
             return []
     
-    def get_or_create_conversation_sync(self, session_type: str = "general") -> str:
+    def get_or_create_conversation_sync(self, session_type: str = "general", existing_id: Optional[str] = None) -> str:
         """会話セッション管理"""
         try:
             if not self.user_id:
                 raise ValueError("User ID is required for conversation management")
+            
+            # 既存のIDが渡された場合、それが有効かチェック
+            if existing_id:
+                check_result = self.supabase.table("chat_conversations")\
+                    .select("id")\
+                    .eq("id", existing_id)\
+                    .eq("user_id", self.user_id)\
+                    .eq("is_active", True)\
+                    .limit(1)\
+                    .execute()
+                
+                if check_result.data:
+                    return existing_id
+                # 既存IDが無効な場合は、新規作成へ進む
             
             # 既存のアクティブな会話を検索
             result = self.supabase.table("chat_conversations")\

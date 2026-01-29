@@ -31,6 +31,7 @@ class ChatMessage(BaseModel):
     temperature: Optional[float] = 0.7
     response_style: Optional[str] = "auto"  # 応答スタイルパラメータ追加
     custom_instruction: Optional[str] = None  # カスタムスタイル用の指示
+    conversation_id: Optional[str] = None  # 既存の会話IDを受け取る
 
 class ChatResponse(BaseModel):
     response: str
@@ -38,6 +39,7 @@ class ChatResponse(BaseModel):
     metrics: Optional[dict] = None
     agent_used: Optional[bool] = False
     fallback_used: Optional[bool] = False
+    conversation_id: Optional[str] = None  # 使用された会話IDを返す
 
 class ChatHistoryResponse(BaseModel):
     message: str
@@ -98,7 +100,8 @@ async def chat_with_ai(
             project_id=chat_data.project_id,
             session_type=chat_data.session_type,
             response_style=chat_data.response_style,  # 応答スタイルを渡す
-            custom_instruction=chat_data.custom_instruction  # カスタム指示を渡す
+            custom_instruction=chat_data.custom_instruction,  # カスタム指示を渡す
+            conversation_id=chat_data.conversation_id  # 既存の会話IDを渡す
         )
         
         return ChatResponse(
@@ -106,7 +109,8 @@ async def chat_with_ai(
             project_id=result.get("project_id"),
             metrics=result.get("metrics"),
             agent_used=result.get("agent_used", False),
-            fallback_used=result.get("fallback_used", False)
+            fallback_used=result.get("fallback_used", False),
+            conversation_id=result.get("conversation_id")  # 会話IDを返す
         )
         
     except Exception as e:

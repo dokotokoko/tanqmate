@@ -344,6 +344,10 @@ export const useChatStore = create<ChatState>()(
           currentMemoTitle: state.currentMemoTitle,
           currentMemoContent: state.currentMemoContent,
           chatPageId: state.chatPageId,
+          // conversationIdを永続化に追加
+          conversation: {
+            conversationId: state.conversation.conversationId,
+          },
         }),
         onRehydrateStorage: () => (state) => {
           if (state) {
