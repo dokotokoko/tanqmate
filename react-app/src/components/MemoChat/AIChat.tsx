@@ -2,9 +2,17 @@ import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 
 import { tokenManager } from '../../utils/tokenManager';
 import {
   Box,
+  TextField,
+  Button,
+  Typography,
+  List,
+  ListItem,
+  Avatar,
+  Stack,
   CircularProgress,
+  IconButton,
 } from '@mui/material';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { 
   useChatStore,
   selectMessages,
@@ -36,6 +44,10 @@ const ChatHistory = lazy(() => import('./ChatHistory').catch(err => {
   console.error('Failed to load ChatHistory:', err);
   return { default: () => <div>履歴パネルの読み込みに失敗しました</div> };
 }));
+const QuestCards = lazy(() => import('./QuestCards').catch(err => {
+  console.error('Failed to load QuestCards:', err);
+  return { default: () => <div>クエストカードの読み込みに失敗しました</div> };
+}));
 
 // Import types from shared types file
 import type { 
@@ -44,6 +56,39 @@ import type {
   AIChatProps,
   LoadingFallbackProps 
 } from './types';
+
+// Time formatting utility
+const formatTime = (timestamp: Date | string | undefined | null) => {
+  try {
+    if (!timestamp) {
+      return new Date().toLocaleTimeString('ja-JP', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    }
+
+    let date: Date;
+    if (typeof timestamp === 'string') {
+      date = new Date(timestamp);
+    } else if (timestamp instanceof Date) {
+      date = timestamp;
+    } else {
+      date = new Date();
+    }
+    
+    if (isNaN(date.getTime())) {
+      date = new Date();
+    }
+    
+    return date.toLocaleTimeString('ja-JP', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  } catch (error) {
+    console.error('Error formatting time:', error);
+    return '時刻不明';
+  }
+};
 
 const AIChat: React.FC<AIChatProps> = ({
   isDashboard = false,
@@ -80,6 +125,7 @@ const AIChat: React.FC<AIChatProps> = ({
   
   // Refs
   const messageListRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const isSendingRef = useRef(false);
   
   // Custom hooks for side effects
@@ -193,7 +239,7 @@ const AIChat: React.FC<AIChatProps> = ({
       // 新しい会話を作成
       const newConversationId = await createNewConversation();
       if (newConversationId) {
-        setCurrentConversationId(newConversationId);
+        setConversationId(newConversationId);
         console.log('🆕 リロード時に新しい会話を作成:', newConversationId);
       }
       return;
@@ -353,7 +399,7 @@ const AIChat: React.FC<AIChatProps> = ({
   // メッセージ送信処理（二重送信防止付き）
   const handleSendMessage = async () => {
     console.log('📢 handleSendMessage called'); // デバッグログ
-    if (!inputValue.trim() || isLoading || isSendingRef.current) return;
+    if (!inputValue.trim() || conversation.isLoading || isSendingRef.current) return;
     
     // 二重送信防止フラグ
     isSendingRef.current = true;
@@ -824,13 +870,17 @@ const AIChat: React.FC<AIChatProps> = ({
                       
                       {/* クエストカード表示 */}
                       {message.questCards && message.questCards.length > 0 && (
-                        <>
+                        <Suspense fallback={
+                          <Box sx={{ p: 1 }}>
+                            <CircularProgress size={20} />
+                          </Box>
+                        }>
                           {console.log('🎨 Rendering quest cards for message:', message.id, message.questCards)}
                           <QuestCards
                             cards={message.questCards}
                             onCardClick={handleQuestCardClick}
                           />
-                        </>
+                        </Suspense>
                       )}
                     </Box>
                   </Box>
@@ -844,7 +894,7 @@ const AIChat: React.FC<AIChatProps> = ({
           </AnimatePresence>
           
           {/* ローディング表示 */}
-          {isLoading && (
+          {conversation.isLoading && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
