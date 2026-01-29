@@ -8,7 +8,6 @@ import os
 import json
 import uuid
 import logging
-import re
 from .base import BaseService
 from async_helpers import (
     parallel_fetch_context_and_history,
@@ -59,7 +58,8 @@ class ChatService(BaseService):
         project_id: Optional[str] = None,
         session_type: str = "general",
         response_style: Optional[str] = "auto",
-        custom_instruction: Optional[str] = None
+        custom_instruction: Optional[str] = None,
+        conversation_id: Optional[str] = None  # 既存の会話IDを受け取る
     ) -> Dict[str, Any]:
         """メインチャット処理（統合最適化版）"""
         start_time = time.time()
@@ -81,7 +81,12 @@ class ChatService(BaseService):
             context_builder = AsyncProjectContextBuilder(db_helper)
             
             # 会話IDを取得または作成
-            conversation_id = self.get_or_create_conversation_sync(session_type)
+            # 既存のconversation_idが渡された場合はそれを使用、なければ新規作成
+            if not conversation_id:
+                conversation_id = self.get_or_create_conversation_sync(session_type)
+            else:
+                # 既存のconversation_idが有効か確認
+                conversation_id = self.get_or_create_conversation_sync(session_type, existing_id=conversation_id)
             
             project_id, project_context, project, conversation_history = \
                 await parallel_fetch_context_and_history(
@@ -142,21 +147,13 @@ class ChatService(BaseService):
             
             metrics["total_time"] = time.time() - start_time
             
-            # AI応答からカード情報を抽出
-            self.logger.info(f"Raw AI response length: {len(ai_response['response'])}")
-            self.logger.debug(f"Raw AI response (first 500 chars): {ai_response['response'][:500]}")
-            response_text, quest_cards = self._extract_quest_cards(ai_response["response"])
-            self.logger.info(f"After extraction - Response text length: {len(response_text)}, Quest cards count: {len(quest_cards)}")
-            if quest_cards:
-                self.logger.info(f"Quest cards details: {quest_cards}")
-            
             return {
-                "response": response_text,
+                "response": ai_response["response"],
                 "project_id": project_id,
                 "metrics": metrics,
                 "agent_used": ai_response.get("agent_used", False),
                 "fallback_used": ai_response.get("fallback_used", False),
-                "quest_cards": quest_cards
+                "conversation_id": conversation_id  # 使用した会話IDを返す
             }
             
         except Exception as e:
@@ -284,11 +281,25 @@ class ChatService(BaseService):
             self.logger.error(f"Failed to get chat history: {e}")
             return []
     
-    def get_or_create_conversation_sync(self, session_type: str = "general") -> str:
+    def get_or_create_conversation_sync(self, session_type: str = "general", existing_id: Optional[str] = None) -> str:
         """会話セッション管理"""
         try:
             if not self.user_id:
                 raise ValueError("User ID is required for conversation management")
+            
+            # 既存のIDが渡された場合、それが有効かチェック
+            if existing_id:
+                check_result = self.supabase.table("chat_conversations")\
+                    .select("id")\
+                    .eq("id", existing_id)\
+                    .eq("user_id", self.user_id)\
+                    .eq("is_active", True)\
+                    .limit(1)\
+                    .execute()
+                
+                if check_result.data:
+                    return existing_id
+                # 既存IDが無効な場合は、新規作成へ進む
             
             # 既存のアクティブな会話を検索
             result = self.supabase.table("chat_conversations")\
@@ -349,52 +360,4 @@ class ChatService(BaseService):
                 .execute()
         except Exception as e:
             self.logger.warning(f"Conversation timestamp update failed: {e}")
-    
-    def _extract_quest_cards(self, response_text: str) -> tuple[str, list]:
-        """LLM応答からクエストカード情報を抽出"""
-        try:
-            # JSONブロックを検索
-            json_pattern = r'```json\s*(\{[^`]*\})\s*```'
-            match = re.search(json_pattern, response_text, re.DOTALL)
-            
-            if not match:
-                self.logger.debug("No JSON block found in response")
-                return response_text, []
-            
-            json_str = match.group(1)
-            self.logger.debug(f"Found JSON block: {json_str[:200]}...")
-            
-            # JSONをパース
-            try:
-                quest_data = json.loads(json_str)
-                quest_cards = quest_data.get("quest_cards", [])
-                self.logger.info(f"Extracted {len(quest_cards)} quest cards from response")
-                
-                # カードデータを検証
-                validated_cards = []
-                valid_colors = {"teal", "yellow", "purple", "pink", "green"}
-                
-                for card in quest_cards[:5]:  # 最大5つ
-                    if all(key in card for key in ["id", "label", "emoji", "color"]):
-                        if card["color"] in valid_colors:
-                            validated_cards.append({
-                                "id": str(card["id"]),
-                                "label": str(card["label"]),
-                                "emoji": str(card["emoji"]),
-                                "color": str(card["color"])
-                            })
-                            self.logger.debug(f"Added card: {card['id']} - {card['label']}")
-                
-                # JSONブロックを応答テキストから削除
-                clean_response = re.sub(json_pattern, '', response_text, flags=re.DOTALL).strip()
-                
-                return clean_response, validated_cards
-                
-            except json.JSONDecodeError as e:
-                self.logger.warning(f"Failed to parse quest cards JSON: {e}")
-                return response_text, []
-                
-        except Exception as e:
-            self.logger.error(f"Error extracting quest cards: {e}")
-            return response_text, []
     
