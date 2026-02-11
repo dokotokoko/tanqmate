@@ -123,6 +123,216 @@ const Layout: React.FC = () => {
   }, [isMobile, hasInitialized]);
 
 
+  interface MenuItem {
+    text: string;
+    icon: React.ReactNode;
+    path: string;
+    action?: () => void;
+    tutorialId?: string;
+  }
+
+  const mainListItems: MenuItem[] = useMemo(() => [
+    { text: 'AIチャット', icon: <ChatIcon />, path: '/chat', tutorialId: 'ai-chat-button' },
+    //{ text: '探究テーマを見つける・探す', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
+    { text: 'ダッシュボード', icon: <DashboardIcon />, path: '#', action: handleDashboardSidebarToggle },
+    //{ text: '対話エージェント検証', icon: <Psychology />, path: '/conversation-agent-test' },
+    // { text: '探究クエスト掲示板!', icon: <Explore />, path: '/quests'} // 一時的に非表示
+  ], [handleDashboardSidebarToggle]);
+
+  // 展開状態のサイドバー
+  const fullDrawer = (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 3, background: 'linear-gradient(135deg, #FF7A00 0%, #FF6B35 100%)' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box>
+            <Typography variant="h6" sx={{ color: 'white', fontWeight: 600 }}>
+              探Qメイト
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.8)', mt: 0.5 }}>
+              あなたの学びのパートナー
+            </Typography>
+          </Box>
+          <IconButton
+            onClick={handleSidebarToggle}
+            sx={{
+              color: 'white',
+              '&:hover': {
+                backgroundColor: 'rgba(255,255,255,0.1)',
+              },
+            }}
+          >
+            <MenuIcon />
+          </IconButton>
+        </Box>
+      </Box>
+
+      <List sx={{ flex: 1, px: 1 }} data-tutorial="navigation-menu">
+        {mainListItems.map((item) => (
+          <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton
+              selected={location.pathname === item.path}
+              onClick={() => {
+                if (item.action) {
+                  item.action();
+                } else if (item.path !== '#') {
+                navigate(item.path);
+                }
+                if (isMobile) setMobileOpen(false);
+              }}
+              {...(item.tutorialId && { 'data-tutorial': item.tutorialId })}
+              sx={{
+                borderRadius: 1.4,
+                '&.Mui-selected': {
+                  background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
+                  color: 'white',
+                  '& .MuiListItemIcon-root': {
+                    color: 'white',
+                  },
+                },
+                '&:hover': {
+                  background: 'rgba(255, 122, 0, 0.1)',
+                },
+              }}
+            >
+              <ListItemIcon>{item.icon}</ListItemIcon>
+              <ListItemText 
+                primary={item.text} 
+                primaryTypographyProps={{
+                  fontSize: '0.9rem',
+                  fontWeight: location.pathname === item.path ? 600 : 400,
+                }}
+              />
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+
+      <Divider />
+
+      {/* クエスト提案 - 一時的に非表示 */}
+      {/* <QuestSuggestion /> */}
+
+      <Divider />
+
+      <Divider />
+      
+      <Box sx={{ p: 2 }}>
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: 2, 
+            mb: 2,
+            cursor: 'pointer',
+            p: 1,
+            borderRadius: 1,
+            '&:hover': {
+              bgcolor: 'rgba(255, 122, 0, 0.1)',
+            },
+          }}
+          onClick={handleUserMenuOpen}
+        >
+          <Avatar sx={{ bgcolor: '#FF7A00' }}>
+            {user?.username?.charAt(0).toUpperCase()}
+          </Avatar>
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="body2" fontWeight={600}>
+              {user?.username}
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              ログイン中
+            </Typography>
+          </Box>
+          <ExpandMore sx={{ color: 'text.secondary' }} />
+        </Box>
+      </Box>
+    </Box>
+  );
+
+  // 縮小状態のサイドバー
+  const collapsedDrawer = (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ 
+        p: 1.5, 
+        background: 'linear-gradient(135deg, #FF7A00 0%, #FF6B35 100%)',
+        display: 'flex',
+        justifyContent: 'center',
+      }}>
+        <IconButton
+          onClick={handleSidebarToggle}
+          sx={{
+            color: 'white',
+            '&:hover': {
+              backgroundColor: 'rgba(255,255,255,0.1)',
+            },
+          }}
+        >
+          <MenuIcon />
+        </IconButton>
+      </Box>
+
+      <List sx={{ flex: 1, px: 0.5 }}>
+        {mainListItems.map((item) => (
+          <ListItem key={item.text} disablePadding sx={{ mb: 0.5 }}>
+            <ListItemButton
+              selected={location.pathname === item.path}
+              onClick={() => {
+                if (item.action) {
+                  item.action();
+                } else if (item.path !== '#') {
+                  navigate(item.path);
+                }
+              }}
+              {...(item.tutorialId && { 'data-tutorial': item.tutorialId })}
+              sx={{
+                borderRadius: 1.4,
+                justifyContent: 'center',
+                minHeight: 48,
+                '&.Mui-selected': {
+                  background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
+                  color: 'white',
+                  '& .MuiListItemIcon-root': {
+                    color: 'white',
+                  },
+                },
+                '&:hover': {
+                  background: 'rgba(255, 122, 0, 0.1)',
+                },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 'auto', justifyContent: 'center' }}>
+                {item.icon}
+              </ListItemIcon>
+            </ListItemButton>
+          </ListItem>
+        ))}
+      </List>
+
+      <Divider />
+
+      <Divider />
+      
+      <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <IconButton
+          onClick={handleUserMenuOpen}
+          sx={{
+            width: '100%',
+            height: 48,
+            borderRadius: 1,
+            color: '#FF7A00',
+            '&:hover': {
+              bgcolor: 'rgba(255, 122, 0, 0.1)',
+            },
+          }}
+        >
+          <Avatar sx={{ bgcolor: '#FF7A00', width: 32, height: 32 }}>
+            {user?.username?.charAt(0).toUpperCase()}
+          </Avatar>
+        </IconButton>
+      </Box>
+    </Box>
+  );
+
   return (
     <LayoutContext.Provider value={{ sidebarOpen: true, onSidebarToggle: handleDashboardSidebarToggle }}>
       <Box sx={{ display: 'flex', minHeight: '100vh', background: '#FFFAED' }}>
