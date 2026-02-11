@@ -28,6 +28,7 @@ const ConversationAgentTestPage = lazy(() => import('./pages/ConversationAgentTe
 const InquiryExplorer = lazy(() => import('./components/InquiryExplorer/InquiryExplorer'));
 const VibesTanqOnboarding = lazy(() => import('./pages/VibesTanqOnboarding'));
 const VibesTanqDashboard = lazy(() => import('./pages/VibesTanqDashboard'));
+const QuestMapPage = lazy(() => import('./pages/QuestMapPage'));
 
 // import QuestBoardPage from './pages/QuestBoardPage'; // 一時的に非表示
 
@@ -207,6 +208,7 @@ function App() {
                 <Route path="step/:stepNumber" element={<LazyWrapper><StepPage /></LazyWrapper>} />
                 <Route path="memos" element={<LazyWrapper><MultiMemoPage /></LazyWrapper>} />
                 <Route path="inquiry" element={<LazyWrapper><GeneralInquiryPage /></LazyWrapper>} />
+                <Route path="quest-map" element={<LazyWrapper><QuestMapPage /></LazyWrapper>} />
                 {/* <Route path="quests" element={<QuestBoardPage />} /> 一時的に非表示 */}
                 <Route path="framework-games/theme-deep-dive" element={<LazyWrapper><ThemeDeepDiveGame /></LazyWrapper>} />
                 <Route path="conversation-agent-test" element={<LazyWrapper><ConversationAgentTestPage /></LazyWrapper>} />

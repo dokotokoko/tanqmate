@@ -41,7 +41,7 @@ class learning_plannner():
         # 非同期クライアントの初期化
         self.async_client = AsyncOpenAI(
             api_key=self.api_key,
-            timeout=30.0,  # タイムアウトを30秒に設定
+            timeout=60.0,  # タイムアウトを60秒に設定（クエストマップ生成対応）
             max_retries=2   # リトライを2回に制限
         )
         

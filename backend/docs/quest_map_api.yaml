@@ -1,0 +1,926 @@
+# docs/quest_map_api.yaml - 探QマップAPI仕様書 (OpenAPI 3.0)
+openapi: 3.0.3
+info:
+  title: 探Qマップ API
+  description: |
+    探Qマップ機能のRESTful API仕様書
+    
+    ## 概要
+    探Qマップは、目標達成のためのインタラクティブな課題分解・進捗管理システムです。
+    このAPIを使用して、クエスト作成、ノード管理、AI機能、リアルタイム更新などの機能にアクセスできます。
+    
+    ## 認証
+    全てのエンドポイントはBearer Token認証が必要です。
+    
+    ## レート制限
+    - 通常のAPI: 100リクエスト/分
+    - AI機能: 10リクエスト/分
+    
+    ## エラー処理
+    APIは標準的なHTTPステータスコードを使用し、エラー詳細はJSONで返されます。
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@tanqmates.com
+    url: https://tanqmates.com/support
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.tanqmates.com/v1
+    description: Production server
+  - url: https://staging-api.tanqmates.com/v1  
+    description: Staging server
+  - url: http://localhost:8000
+    description: Local development server
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Quests
+    description: クエスト管理
+  - name: Nodes
+    description: ノード操作
+  - name: AI Features
+    description: AI機能
+  - name: Real-time
+    description: リアルタイム機能
+  - name: Integration
+    description: 他機能との連携
+  - name: Health
+    description: ヘルスチェック
+
+paths:
+  # ===== クエスト管理 =====
+  /quest-map/quests:
+    post:
+      tags: [Quests]
+      summary: 新規クエスト作成
+      description: |
+        新しいクエストを作成します。
+        AIが目標と現状を分析し、初期ノード構造を自動生成します。
+      operationId: createQuest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestCreateRequest'
+            examples:
+              programming_quest:
+                summary: プログラミング学習クエスト
+                value:
+                  goal: "プログラミングスキルを身につける"
+                  initial_context: "現在Python基礎を学習中、実践的なスキルを身につけたい"
+              fitness_quest:
+                summary: フィットネスクエスト
+                value:
+                  goal: "健康的な生活習慣を確立する"
+                  initial_context: "運動不足解消と食生活改善が目標"
+      responses:
+        '201':
+          description: クエスト作成成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitError'
+
+    get:
+      tags: [Quests]
+      summary: ユーザーのクエスト一覧取得
+      description: 認証されたユーザーのクエスト一覧を取得します。
+      operationId: getUserQuests
+      parameters:
+        - name: status
+          in: query
+          description: フィルタするステータス
+          schema:
+            $ref: '#/components/schemas/QuestStatus'
+        - name: limit
+          in: query
+          description: 取得件数
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: offset
+          in: query
+          description: オフセット
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: クエスト一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  quests:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/QuestResponse'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /quest-map/quests/{quest_id}:
+    get:
+      tags: [Quests]
+      summary: クエスト詳細取得
+      description: 指定されたクエストの詳細情報と統計データを取得します。
+      operationId: getQuest
+      parameters:
+        - $ref: '#/components/parameters/QuestId'
+      responses:
+        '200':
+          description: クエスト詳細
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      tags: [Quests]
+      summary: クエスト更新
+      operationId: updateQuest
+      parameters:
+        - $ref: '#/components/parameters/QuestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuestUpdateRequest'
+      responses:
+        '200':
+          description: クエスト更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestResponse'
+
+    delete:
+      tags: [Quests]
+      summary: クエスト削除
+      operationId: deleteQuest
+      parameters:
+        - $ref: '#/components/parameters/QuestId'
+      responses:
+        '200':
+          description: 削除成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  quest_id:
+                    type: integer
+
+  /quest-map/quests/{quest_id}/graph:
+    get:
+      tags: [Quests]
+      summary: クエストグラフデータ取得
+      description: |
+        クエストに関連するすべてのノードとエッジ、統計情報を含む
+        完全なグラフデータを取得します。
+      operationId: getQuestGraph
+      parameters:
+        - $ref: '#/components/parameters/QuestId'
+      responses:
+        '200':
+          description: クエストグラフデータ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuestGraphResponse'
+
+  # ===== ノード操作 =====
+  /quest-map/nodes/generate:
+    post:
+      tags: [Nodes, AI Features]
+      summary: AI選択肢生成
+      description: |
+        AIがクエストの目標と現状を分析し、
+        具体的なアクションプランを提案します。
+      operationId: generateActionNodes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeGenerateRequest'
+            examples:
+              programming_nodes:
+                summary: プログラミング学習ノード生成
+                value:
+                  quest_id: 1
+                  context: "Python基礎から実践まで段階的に学習したい"
+                  node_count: 5
+                  focus_category: "programming"
+      responses:
+        '200':
+          description: AI生成された選択肢リスト
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeGenerationResponse'
+
+  /quest-map/nodes/{node_id}/breakdown:
+    post:
+      tags: [Nodes, AI Features]
+      summary: ノード細分化
+      description: |
+        選択したノードをより小さな実行可能なタスクに
+        AIが自動分解します。
+      operationId: breakdownNode
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeBreakdownRequest'
+      responses:
+        '200':
+          description: 分解されたサブタスクリスト
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeBreakdownResponse'
+
+  /quest-map/nodes/{node_id}/expand:
+    post:
+      tags: [Nodes, AI Features]
+      summary: ノード拡散
+      description: |
+        選択したノードに対して、異なるアプローチや手法による
+        代替案をAIが生成します。
+      operationId: expandNode
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeExpandRequest'
+      responses:
+        '200':
+          description: 代替選択肢リスト
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeExpansionResponse'
+
+  /quest-map/nodes/{node_id}/complete:
+    post:
+      tags: [Nodes]
+      summary: ノード完了
+      description: |
+        ノードを完了状態にマークし、フィードバックや
+        成果物を記録します。
+      operationId: completeNode
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeCompleteRequest'
+      responses:
+        '200':
+          description: 更新されたノード情報
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeResponse'
+
+  # ===== AI機能 =====
+  /quest-map/quests/{quest_id}/ai-consult:
+    post:
+      tags: [AI Features]
+      summary: AIチャット相談
+      description: |
+        クエストまたは特定ノードについてAIに相談し、
+        アドバイスを受けることができます。
+      operationId: consultAIForQuest
+      parameters:
+        - $ref: '#/components/parameters/QuestId'
+        - name: node_id
+          in: query
+          description: 相談対象のノードID
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question:
+                  type: string
+                  maxLength: 1000
+                  example: "次に取り組むべきステップは何ですか？"
+      responses:
+        '200':
+          description: AIからのアドバイス
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  advice:
+                    type: string
+                  timestamp:
+                    type: string
+                    format: date-time
+
+  /quest-map/quests/{quest_id}/ai-consult/stream:
+    get:
+      tags: [AI Features]
+      summary: ストリーミングAI相談
+      description: Server-Sent Eventsを使用したストリーミングAI相談
+      operationId: streamAIConsultation
+      parameters:
+        - $ref: '#/components/parameters/QuestId'
+        - name: question
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: node_id
+          in: query
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: ストリーミングレスポンス
+          content:
+            text/event-stream:
+              schema:
+                type: string
+
+  # ===== リアルタイム機能 =====
+  /quest-map/quests/{quest_id}/realtime:
+    get:
+      tags: [Real-time]
+      summary: WebSocket接続
+      description: |
+        探Qマップのリアルタイム更新用WebSocket接続。
+        複数ユーザー間での同時編集をサポートします。
+      operationId: connectWebSocket
+      parameters:
+        - $ref: '#/components/parameters/QuestId'
+        - name: user_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: device_id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '101':
+          description: WebSocket connection established
+        '400':
+          description: Invalid WebSocket request
+
+  /quest-map/quests/{quest_id}/realtime/broadcast:
+    post:
+      tags: [Real-time]
+      summary: リアルタイム更新ブロードキャスト
+      operationId: broadcastUpdate
+      parameters:
+        - $ref: '#/components/parameters/QuestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [update_type, data]
+              properties:
+                update_type:
+                  $ref: '#/components/schemas/UpdateType'
+                data:
+                  type: object
+      responses:
+        '200':
+          description: ブロードキャスト成功
+
+  # ===== 連携機能 =====
+  /quest-map/quest-cards/to-quest-map:
+    post:
+      tags: [Integration]
+      summary: クエストカードから探Qマップ生成
+      operationId: convertQuestCardsToMap
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quest_cards, goal]
+              properties:
+                quest_cards:
+                  type: array
+                  items:
+                    type: object
+                goal:
+                  type: string
+                current_situation:
+                  type: string
+                quest_title:
+                  type: string
+      responses:
+        '200':
+          description: 生成された探Qマップ
+
+  /quest-map/quests/{quest_id}/to-quest-cards:
+    get:
+      tags: [Integration]
+      summary: 探Qマップからクエストカード生成
+      operationId: convertQuestMapToCards
+      parameters:
+        - $ref: '#/components/parameters/QuestId'
+        - name: max_cards
+          in: query
+          schema:
+            type: integer
+            minimum: 3
+            maximum: 12
+            default: 8
+      responses:
+        '200':
+          description: 生成されたクエストカード
+
+  # ===== ヘルスチェック =====
+  /quest-map/health:
+    get:
+      tags: [Health]
+      summary: ヘルスチェック
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: システム正常
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  service:
+                    type: string
+                    example: "quest-map"
+                  timestamp:
+                    type: string
+                    format: date-time
+
+# ===== コンポーネント定義 =====
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    QuestId:
+      name: quest_id
+      in: path
+      required: true
+      description: クエストID
+      schema:
+        type: integer
+        minimum: 1
+        example: 1
+
+    NodeId:
+      name: node_id
+      in: path
+      required: true
+      description: ノードID
+      schema:
+        type: integer
+        minimum: 1
+        example: 1
+
+  schemas:
+    # ===== Enum型定義 =====
+    NodeType:
+      type: string
+      enum: [goal, action, breakdown, milestone]
+      example: action
+
+    NodeStatus:
+      type: string
+      enum: [pending, in_progress, completed, blocked, cancelled]
+      example: pending
+
+    EdgeType:
+      type: string
+      enum: [next, breakdown, dependency, alternative]
+      example: next
+
+    QuestStatus:
+      type: string
+      enum: [planning, in_progress, completed, paused, cancelled]
+      example: planning
+
+    UpdateType:
+      type: string
+      enum: [node_added, node_updated, node_deleted, edge_added, edge_deleted]
+
+    # ===== リクエストスキーマ =====
+    QuestCreateRequest:
+      type: object
+      required: [goal]
+      properties:
+        goal:
+          type: string
+          minLength: 1
+          maxLength: 1000
+          description: 達成したい目標
+          example: "プログラミングスキルを身につける"
+        initial_context:
+          type: string
+          maxLength: 2000
+          description: 現在の状況・背景情報
+          example: "現在Python基礎を学習中、実践的なスキルを身につけたい"
+
+    QuestUpdateRequest:
+      type: object
+      properties:
+        goal:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        current_status:
+          $ref: '#/components/schemas/QuestStatus'
+
+    NodeGenerateRequest:
+      type: object
+      required: [quest_id]
+      properties:
+        quest_id:
+          type: integer
+          minimum: 1
+        context:
+          type: string
+          maxLength: 2000
+          description: 追加のコンテキスト情報
+        node_count:
+          type: integer
+          minimum: 3
+          maximum: 10
+          default: 5
+          description: 生成する選択肢の数
+        focus_category:
+          type: string
+          maxLength: 100
+          description: 特に焦点を当てるカテゴリ
+
+    NodeBreakdownRequest:
+      type: object
+      required: [node_id]
+      properties:
+        node_id:
+          type: integer
+          minimum: 1
+        detail_level:
+          type: integer
+          minimum: 2
+          maximum: 5
+          default: 3
+          description: 詳細レベル
+        context:
+          type: string
+          maxLength: 1000
+
+    NodeExpandRequest:
+      type: object
+      required: [node_id]
+      properties:
+        node_id:
+          type: integer
+          minimum: 1
+        alternative_count:
+          type: integer
+          minimum: 2
+          maximum: 8
+          default: 3
+          description: 代替案の数
+        context:
+          type: string
+          maxLength: 1000
+
+    NodeCompleteRequest:
+      type: object
+      required: [node_id]
+      properties:
+        node_id:
+          type: integer
+          minimum: 1
+        feedback:
+          type: string
+          maxLength: 2000
+          description: 完了時のフィードバック
+        evidence:
+          type: string
+          maxLength: 1000
+          description: 完了の証拠・成果物
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: 達成度評価
+
+    # ===== レスポンススキーマ =====
+    QuestResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          example: 1
+        user_id:
+          type: integer
+          example: 123
+        goal:
+          type: string
+          example: "プログラミングスキルを身につける"
+        current_status:
+          $ref: '#/components/schemas/QuestStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        statistics:
+          type: object
+          properties:
+            total_nodes:
+              type: integer
+            completed_nodes:
+              type: integer
+            pending_nodes:
+              type: integer
+            in_progress_nodes:
+              type: integer
+
+    NodeResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        quest_id:
+          type: integer
+        type:
+          $ref: '#/components/schemas/NodeType'
+        title:
+          type: string
+          example: "Python基礎文法学習"
+        description:
+          type: string
+          example: "変数、関数、制御文の基礎を学ぶ"
+        category:
+          type: string
+          example: "programming"
+        status:
+          $ref: '#/components/schemas/NodeStatus'
+        position:
+          type: object
+          properties:
+            x:
+              type: integer
+            y:
+              type: integer
+        parent_id:
+          type: integer
+          nullable: true
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    EdgeResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        quest_id:
+          type: integer
+        source_id:
+          type: integer
+        target_id:
+          type: integer
+        type:
+          $ref: '#/components/schemas/EdgeType'
+        weight:
+          type: integer
+          default: 1
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    QuestGraphResponse:
+      type: object
+      properties:
+        quest:
+          $ref: '#/components/schemas/QuestResponse'
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/NodeResponse'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/EdgeResponse'
+        statistics:
+          type: object
+          properties:
+            total_nodes:
+              type: integer
+            total_edges:
+              type: integer
+            completed_nodes:
+              type: integer
+            pending_nodes:
+              type: integer
+            in_progress_nodes:
+              type: integer
+
+    NodeGenerationResponse:
+      type: object
+      properties:
+        quest_id:
+          type: integer
+        suggested_nodes:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              description:
+                type: string
+              category:
+                type: string
+              estimated_duration:
+                type: string
+        reasoning:
+          type: string
+          description: AI分析の理由
+        generated_at:
+          type: string
+          format: date-time
+
+    NodeBreakdownResponse:
+      type: object
+      properties:
+        node_id:
+          type: integer
+        subtasks:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              description:
+                type: string
+              order:
+                type: integer
+              estimated_time:
+                type: string
+        breakdown_strategy:
+          type: string
+          description: 分解戦略の説明
+
+    NodeExpansionResponse:
+      type: object
+      properties:
+        node_id:
+          type: integer
+        alternatives:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              description:
+                type: string
+              approach:
+                type: string
+              pros:
+                type: array
+                items:
+                  type: string
+              cons:
+                type: array
+                items:
+                  type: string
+        expansion_reasoning:
+          type: string
+
+    # ===== エラースキーマ =====
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "VALIDATION_ERROR"
+            message:
+              type: string
+              example: "リクエストデータが無効です"
+            details:
+              type: object
+            timestamp:
+              type: string
+              format: date-time
+
+  responses:
+    ValidationError:
+      description: バリデーションエラー
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "VALIDATION_ERROR"
+              message: "ゴールは必須です"
+              details:
+                field: "goal"
+                constraint: "required"
+
+    UnauthorizedError:
+      description: 認証エラー
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "UNAUTHORIZED"
+              message: "認証が必要です"
+
+    NotFoundError:
+      description: リソースが見つからない
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "NOT_FOUND"
+              message: "指定されたクエストが見つかりません"
+
+    RateLimitError:
+      description: レート制限エラー
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "RATE_LIMIT_EXCEEDED"
+              message: "リクエスト数の上限に達しました。しばらくお待ちください"

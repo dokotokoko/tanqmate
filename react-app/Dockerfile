@@ -7,7 +7,7 @@ ARG MODE=development
 WORKDIR /app
 
 # package.jsonとpackage-lock.jsonをコピー
-COPY package*.json ./
+COPY package*.json package-lock.json ./
 
 # 依存関係をインストール
 RUN npm ci

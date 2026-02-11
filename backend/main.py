@@ -23,6 +23,7 @@ from routers.conversation_agent_router import router as conversation_agent_route
 from routers.conversations_router import router as conversations_router
 from routers.metrics_router import router as metrics_router, debug_router
 from routers.vibes_tanq_router import router as vibes_tanq_router
+from routers.quest_map import router as quest_map_router
 
 # LLMクライアントをインポート
 from module.llm_api import get_async_llm_client
@@ -59,7 +60,9 @@ app.add_middleware(
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "https://dev.tanqmates.local.test",
-        "http://dev.tanqmates.local.test"
+        "http://dev.tanqmates.local.test",
+        "https://demo.tanqmates.org",
+        "http://demo.tanqmates.org"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -76,6 +79,7 @@ app.include_router(project_router)        # プロジェクト関連
 app.include_router(memo_router)           # メモ管理関連
 app.include_router(quest_router)          # クエストシステム関連
 app.include_router(user_quest_router)     # ユーザークエスト関連
+app.include_router(quest_map_router)      # 探Qマップ関連
 app.include_router(admin_router)          # 管理機能関連
 app.include_router(theme_router)          # テーマ探究ツール関連
 app.include_router(conversation_agent_router)  # 会話エージェント関連
@@ -140,5 +144,6 @@ if __name__ == "__main__":
         host="0.0.0.0",
         port=8000,
         reload=True,  # 開発モードではリロード有効
-        log_level="info"
+        log_level="info",
+        timeout_keep_alive=75  # Keep-aliveタイムアウトを75秒に設定
     )

@@ -577,8 +577,8 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
               '&::-webkit-scrollbar': {
                 display: 'none',
               },
-              '-ms-overflow-style': 'none',
-              'scrollbar-width': 'none',
+              msOverflowStyle: 'none',
+              scrollbarWidth: 'none',
             }}>
               {isLoading ? (
                 <Box>

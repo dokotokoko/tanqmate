@@ -35,6 +35,7 @@ import {
   Psychology as PsychologyIcon,
   Description as DescriptionIcon,
   CalendarToday as CalendarIcon,
+  Map as MapIcon,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
@@ -373,6 +374,28 @@ const DashboardPage: React.FC = () => {
             justifyContent: { xs: 'flex-end', sm: 'flex-start' }
           }}>
             <Button
+              variant="outlined"
+              startIcon={<MapIcon />}
+              onClick={() => navigate('/quest-map')}
+              data-tutorial="quest-map-section"
+              sx={{
+                borderColor: '#FF8C5A',
+                color: '#FF8C5A',
+                '&:hover': {
+                  borderColor: '#FF7A00',
+                  background: 'rgba(255, 140, 90, 0.08)',
+                },
+                borderRadius: 1.4,
+                px: { xs: 2, sm: 3 },
+                py: 1.5,
+                fontSize: { xs: '0.875rem', sm: '1rem' },
+                minWidth: { xs: 'auto', sm: 'auto' }
+              }}
+            >
+              <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>探Qマップ</Box>
+              <Box sx={{ display: { xs: 'inline', sm: 'none' } }}>マップ</Box>
+            </Button>
+            <Button
               variant="contained"
               startIcon={<PsychologyIcon />}
               onClick={handleUserToggleChat}
@@ -393,6 +416,98 @@ const DashboardPage: React.FC = () => {
               <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>AIアシスタント</Box>
               <Box sx={{ display: { xs: 'inline', sm: 'none' } }}>AI</Box>
             </Button>
+          </Box>
+        </Box>
+
+        {/* 探究ツールクイックアクセス */}
+        <Box sx={{ mb: 4 }}>
+          <Typography 
+            variant="h5" 
+            sx={{ 
+              fontWeight: 600,
+              fontSize: { xs: '1.25rem', sm: '1.5rem' },
+              mb: 2
+            }}
+          >
+            探究ツール
+          </Typography>
+          <Box sx={{ 
+            display: 'grid',
+            gridTemplateColumns: { 
+              xs: '1fr', 
+              sm: 'repeat(2, 1fr)', 
+              md: 'repeat(3, 1fr)'
+            },
+            gap: 2
+          }}>
+            <Card
+              sx={{
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                background: 'linear-gradient(135deg, #FFF4EE 0%, #FFE8DC 100%)',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 8px 25px rgba(255, 140, 90, 0.25)',
+                },
+              }}
+              onClick={() => navigate('/quest-map')}
+            >
+              <CardContent sx={{ p: { xs: 2, sm: 3 }, textAlign: 'center' }}>
+                <MapIcon sx={{ fontSize: 48, color: '#FF8C5A', mb: 2 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600, color: '#FF8C5A' }}>
+                  探Qマップ
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  ゴールまでの道筋を可視化して行動を促進
+                </Typography>
+              </CardContent>
+            </Card>
+            
+            <Card
+              sx={{
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                background: 'linear-gradient(135deg, #F0F8FF 0%, #E6F3FF 100%)',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 8px 25px rgba(100, 149, 237, 0.25)',
+                },
+              }}
+              onClick={() => navigate('/inquiry')}
+            >
+              <CardContent sx={{ p: { xs: 2, sm: 3 }, textAlign: 'center' }}>
+                <PsychologyIcon sx={{ fontSize: 48, color: '#6495ED', mb: 2 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600, color: '#6495ED' }}>
+                  思考整理
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  AIとの対話で考えを深めて整理
+                </Typography>
+              </CardContent>
+            </Card>
+
+            <Card
+              sx={{
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                background: 'linear-gradient(135deg, #F5FFF5 0%, #E8FFE8 100%)',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 8px 25px rgba(50, 205, 50, 0.25)',
+                },
+              }}
+              onClick={() => navigate('/memos')}
+            >
+              <CardContent sx={{ p: { xs: 2, sm: 3 }, textAlign: 'center' }}>
+                <DescriptionIcon sx={{ fontSize: 48, color: '#32CD32', mb: 2 }} />
+                <Typography variant="h6" sx={{ fontWeight: 600, color: '#32CD32' }}>
+                  メモ管理
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  アイデアや調査結果を整理して保存
+                </Typography>
+              </CardContent>
+            </Card>
           </Box>
         </Box>
 

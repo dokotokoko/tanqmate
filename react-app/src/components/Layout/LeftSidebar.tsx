@@ -10,6 +10,7 @@ import {
   AccountCircle as AccountCircleIcon,
   Logout as LogoutIcon,
   Person as PersonIcon,
+  Map as MapIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
@@ -57,6 +58,12 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
       label: 'プロジェクト',
       path: '#',
       action: onDashboardToggle
+    },
+    {
+      icon: <MapIcon />,
+      label: '探Qマップ',
+      path: '/quest-map',
+      action: () => navigate('/quest-map')
     },
     {
       icon: <TimelineIcon />,
