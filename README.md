@@ -3,11 +3,11 @@
 [![React](https://img.shields.io/badge/React-18.2.0-blue.svg)](https://reactjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.6-green.svg)](https://fastapi.tiangolo.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.3.3-blue.svg)](https://www.typescriptlang.org/)
-[![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](CONTRIBUTING.md)
+[![License](https://img.shields.io/badge/license-MIT-brightgreen.svg)](LICENSE)
 
 > **探究学習を革新する AI 対話型学習支援プラットフォーム**
 
-探Qメイトは、学生の探究学習を伴走するAIパートナーです。
+探Qメイトは、学生の探究学習を伴走するAIパートナーです。OpenAI GPT-4を活用し、個別最適化された学習支援を提供します。
 
 ## ✨ なぜ探Qメイトなのか？
 
@@ -80,25 +80,41 @@ docker-compose down
 ## 📚 プロジェクト構造
 
 ```
-learning-assistant/
-├── backend/               # FastAPI バックエンド
-│   ├── main.py           # API サーバー
-│   ├── module/           # LLM API モジュール
-│   ├── prompt/           # プロンプトテンプレート
-│   └── requirements.txt  # Python依存関係
-├── react-app/            # React フロントエンド
+tanqmates/
+├── backend/                  # FastAPI バックエンド
+│   ├── main.py              # API サーバー
+│   ├── routers/             # APIエンドポイント
+│   │   ├── auth_router.py   # 認証
+│   │   ├── chat_router.py   # チャット
+│   │   ├── memo_router.py   # メモ管理
+│   │   ├── project_router.py# プロジェクト管理
+│   │   └── quest_router.py  # クエスト
+│   ├── services/            # ビジネスロジック
+│   ├── module/              # LLM API モジュール
+│   ├── conversation_agent/  # AI対話エージェント
+│   ├── prompt/              # プロンプトテンプレート
+│   └── requirements.txt     # Python依存関係
+├── react-app/               # React フロントエンド
 │   ├── src/
-│   │   ├── components/   # UIコンポーネント
-│   │   ├── pages/       # ページコンポーネント
-│   │   ├── services/    # APIクライアント
-│   │   └── styles/      # スタイルシート
-│   └── package.json     # Node.js依存関係
-├── nginx/               # Nginx設定
-│   ├── nginx.conf      # リバースプロキシ設定
-│   └── certs/          # SSL証明書（中身は各自）
-├── docker-compose.yml        # 本番用Docker設定
-├── docker-compose.dev.yml    # 開発用Docker設定
-└── DEVELOPMENT_SETUP.md      # 開発用セットアップ
+│   │   ├── components/      # UIコンポーネント
+│   │   │   ├── MemoChat/    # メモ・チャット統合UI
+│   │   │   ├── Layout/      # レイアウト
+│   │   │   └── Project/     # プロジェクト管理
+│   │   ├── pages/          # ページコンポーネント
+│   │   ├── hooks/          # カスタムフック
+│   │   ├── stores/         # Zustand状態管理
+│   │   ├── services/       # APIクライアント
+│   │   └── styles/         # スタイルシート
+│   ├── package.json        # Node.js依存関係
+│   └── vite.config.ts      # Vite設定
+├── nginx/                  # Nginx設定
+│   ├── nginx.conf         # リバースプロキシ設定
+│   └── certs/             # SSL証明書
+├── docker-compose.yml      # 本番用Docker設定
+├── docker-compose.dev.yml  # 開発用Docker設定
+├── DEVELOPMENT_SETUP.md    # 開発環境セットアップ
+├── CONTRIBUTING.md         # コントリビューションガイド（作成予定）
+└── API_DOCUMENTATION.md    # API仕様書（作成予定）
 ```
 
 ## 🤝 コントリビューション
@@ -106,7 +122,6 @@ learning-assistant/
 **探Qメイトはコミュニティによって発展するプロジェクトです！**
 
 バグ報告、機能提案、コードの貢献など、あらゆる形の参加を歓迎します。
-詳細は [CONTRIBUTING.md](CONTRIBUTING.md) をご覧ください。
 
 ### 開発参加の流れ
 
@@ -116,22 +131,32 @@ learning-assistant/
 4. ブランチにプッシュします (`git push origin feature/amazing-feature`)
 5. プルリクエストを作成します
 
+### ブランチ戦略
+- `main` - 本番環境用の安定版
+- `develop` - 開発用ブランチ
+- `feature/*` - 新機能開発
+- `hotfix/*` - 緊急修正
+
 ## 🛠️ 技術スタック
 
 ### Frontend
-- **React 18** + **TypeScript**
-- **Vite** - 高速開発環境
-- **Material-UI v5** - UIコンポーネントライブラリ
-- **Zustand** - 状態管理
-- **React Router v6** - ルーティング
-- **React Markdown** - Markdownレンダリング
+- **React 18.2.0** + **TypeScript 5.3.3**
+- **Vite 5.0.0** - 高速開発環境
+- **Material-UI v5.14.20** - UIコンポーネントライブラリ
+- **Zustand 4.4.7** - 状態管理
+- **React Router v6.20.1** - ルーティング
+- **React Markdown 9.0.1** - Markdownレンダリング
+- **Framer Motion 10.16.16** - アニメーション
+- **React Query 3.39.3** - データフェッチング
 
 ### Backend
-- **FastAPI** - 高性能 Python Web フレームワーク
-- **Uvicorn** - ASGIサーバー
-- **Supabase** - BaaS (PostgreSQL)
-- **OpenAI API** - AI対話機能
-- **Pydantic** - データバリデーション
+- **FastAPI 0.115.6** - 高性能 Python Web フレームワーク
+- **Uvicorn 0.34.0** - ASGIサーバー
+- **Supabase 2.15.0** - BaaS (PostgreSQL)
+- **OpenAI API 1.102.0** - AI対話機能（GPT-4）
+- **Pydantic 2.10.6** - データバリデーション
+- **PyJWT 2.10.1** - JWT認証
+- **bcrypt 4.3.0** - パスワードハッシュ化
 
 ### DevOps & Infrastructure
 - **Docker & Docker Compose** - コンテナ化
@@ -154,9 +179,10 @@ learning-assistant/
 
 ## 📞 サポート
 
-- **Issues**: [GitHub Issues](https://github.com/your-username/learning-assistant/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/your-username/learning-assistant/discussions)
-- **Email**: koutakado9@gmail.com
+- **Issues**: [GitHub Issues](https://github.com/your-username/tanqmates/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-username/tanqmates/discussions)
+- **Documentation**: [Wiki](https://github.com/your-username/tanqmates/wiki)
+- **Email**: support@tanqmates.com
 
 ---
 

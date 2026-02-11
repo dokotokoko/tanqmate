@@ -1,4 +1,5 @@
 import React, { useState, useEffect, memo, useCallback } from 'react';
+import { tokenManager } from '../../utils/tokenManager';
 import {
   Box,
   Typography,
@@ -107,7 +108,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
       setIsLoading(true);
       setError(null);
       
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       if (!token) {
         throw new Error('認証トークンが見つかりません。');
       }
@@ -141,7 +142,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
       setIsLoading(true);
       setError(null);
       
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}/memos`, {
         headers: {
@@ -166,7 +167,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
   const fetchMemo = async (projectId: number, memoId: number) => {
     try {
       setIsLoading(true);
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         headers: {
@@ -202,7 +203,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
       const title = lines[0] || '無題のメモ';
       const content = lines.slice(2).join('\n');
       
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       
       if (viewMode === 'memo-create') {
@@ -257,7 +258,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
     if (!selectedProject || !confirm('このメモを削除しますか？')) return;
     
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         method: 'DELETE',
@@ -294,7 +295,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
     hypothesis?: string;
   }) => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       
       const response = await fetch(`${apiBaseUrl}/projects`, {
@@ -326,7 +327,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
     hypothesis?: string;
   }) => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
@@ -357,7 +358,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
     if (!confirm('このプロジェクトを削除しますか？')) return;
 
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
@@ -453,10 +454,10 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
             sx={{
               width,
               height: '100vh',
-              backgroundColor: 'background.paper',
+              backgroundColor: '#FFFDF7',
               borderLeft: 1,
-              borderColor: 'divider',
-              boxShadow: '-2px 0 10px rgba(0,0,0,0.1)',
+              borderColor: '#F0E8D8',
+              boxShadow: '-2px 0 20px rgba(45, 42, 38, 0.06)',
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
@@ -470,32 +471,55 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
             <Box sx={{ 
               p: 2, 
               borderBottom: 1, 
-              borderColor: 'divider',
+              borderColor: '#F0E8D8',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
+              backgroundColor: '#FFFDF7',
             }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 {viewMode !== 'projects' && (
-                  <IconButton onClick={handleBack} size="small">
+                  <IconButton 
+                    onClick={handleBack} 
+                    size="small"
+                    sx={{
+                      borderRadius: '8px',
+                      color: '#9E9891',
+                      '&:hover': {
+                        backgroundColor: '#FFF6E0',
+                        color: '#6B6560',
+                      }
+                    }}
+                  >
                     <ArrowBack />
                   </IconButton>
                 )}
-                <Typography variant="h6" fontWeight={600}>
+                <Typography variant="h6" fontWeight={600} sx={{ color: '#2D2A26' }}>
                   {viewMode === 'projects' ? 'ダッシュボード' : 
                    viewMode === 'project-detail' ? selectedProject?.theme :
                    viewMode === 'memo-create' ? '新しいメモ' :
                    selectedMemo?.title}
                 </Typography>
               </Box>
-              <IconButton onClick={onToggle} size="small">
+              <IconButton 
+                onClick={onToggle} 
+                size="small"
+                sx={{
+                  borderRadius: '8px',
+                  color: '#9E9891',
+                  '&:hover': {
+                    backgroundColor: '#FFF6E0',
+                    color: '#6B6560',
+                  }
+                }}
+              >
                 <ChevronLeft />
               </IconButton>
             </Box>
 
             {/* Breadcrumbs */}
             {viewMode !== 'projects' && (
-              <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: 'divider' }}>
+              <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: '#F0E8D8', backgroundColor: '#FFFDF7' }}>
                 <Breadcrumbs separator="›" aria-label="breadcrumb">
                   <Link
                     component="button"
@@ -504,7 +528,15 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                       setViewMode('projects');
                       setSelectedProject(null);
                     }}
-                    sx={{ cursor: 'pointer' }}
+                    sx={{ 
+                      cursor: 'pointer',
+                      color: '#6B6560',
+                      textDecoration: 'none',
+                      '&:hover': {
+                        color: '#FF8C5A',
+                        textDecoration: 'underline'
+                      }
+                    }}
                   >
                     プロジェクト
                   </Link>
@@ -513,13 +545,21 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                       component="button"
                       variant="body2"
                       onClick={() => viewMode !== 'project-detail' && setViewMode('project-detail')}
-                      sx={{ cursor: viewMode === 'project-detail' ? 'default' : 'pointer' }}
+                      sx={{ 
+                        cursor: viewMode === 'project-detail' ? 'default' : 'pointer',
+                        color: '#6B6560',
+                        textDecoration: 'none',
+                        '&:hover': {
+                          color: '#FF8C5A',
+                          textDecoration: 'underline'
+                        }
+                      }}
                     >
                       {selectedProject.theme}
                     </Link>
                   )}
                   {(viewMode === 'memo-detail' || viewMode === 'memo-create') && (
-                    <Typography variant="body2" color="text.primary">
+                    <Typography variant="body2" sx={{ color: '#2D2A26' }}>
                       {viewMode === 'memo-create' ? '新しいメモ' : selectedMemo?.title}
                     </Typography>
                   )}
@@ -528,7 +568,18 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
             )}
 
             {/* Content */}
-            <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
+            <Box sx={{ 
+              flex: 1, 
+              overflow: 'auto', 
+              p: 3,
+              backgroundColor: '#FFFDF7',
+              // スクロールバーを非表示
+              '&::-webkit-scrollbar': {
+                display: 'none',
+              },
+              '-ms-overflow-style': 'none',
+              'scrollbar-width': 'none',
+            }}>
               {isLoading ? (
                 <Box>
                   {[1, 2, 3].map((i) => (
@@ -549,25 +600,48 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                     onClick={() => setIsCreateDialogOpen(true)}
                     sx={{
                       mb: 2,
-                      background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
+                      background: 'linear-gradient(45deg, #FF8C5A, #FF7A42)',
+                      borderRadius: '12px',
+                      boxShadow: '0 2px 12px rgba(255, 140, 90, 0.2)',
+                      textTransform: 'none',
+                      fontWeight: 500,
                       '&:hover': {
-                        background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
+                        background: 'linear-gradient(45deg, #FF7A42, #FF6B35)',
+                        boxShadow: '0 4px 20px rgba(255, 140, 90, 0.3)',
+                        transform: 'translateY(-1px)',
                       },
                     }}
                   >
                     新しいプロジェクト
                   </Button>
 
-                  <Divider sx={{ mb: 2 }} />
+                  <Divider sx={{ 
+                    mb: 2,
+                    borderColor: '#F0E8D8',
+                    opacity: 0.6
+                  }} />
 
-                  <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+                  <Typography variant="subtitle2" fontWeight={600} sx={{ 
+                    mb: 1,
+                    color: '#9E9891',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    fontSize: '11px'
+                  }}>
                     探究プロジェクト
                   </Typography>
 
                   {projects.length === 0 ? (
-                    <Card sx={{ textAlign: 'center', py: 3 }}>
-                      <DescriptionIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
-                      <Typography variant="body2" color="text.secondary">
+                    <Card sx={{ 
+                      textAlign: 'center', 
+                      py: 3,
+                      backgroundColor: '#FFF8E7',
+                      borderRadius: '12px',
+                      border: '1px solid #F0E8D8',
+                      boxShadow: '0 2px 12px rgba(45, 42, 38, 0.04)'
+                    }}>
+                      <DescriptionIcon sx={{ fontSize: 48, color: '#9E9891', mb: 1 }} />
+                      <Typography variant="body2" sx={{ color: '#9E9891' }}>
                         プロジェクトがありません
                       </Typography>
                     </Card>
@@ -579,25 +653,47 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                           disablePadding
                           sx={{ mb: 1 }}
                         >
-                          <Card sx={{ width: '100%' }}>
+                          <Card sx={{ 
+                            width: '100%',
+                            backgroundColor: '#FFF8E7',
+                            borderRadius: '12px',
+                            border: '1px solid #F0E8D8',
+                            boxShadow: '0 2px 12px rgba(45, 42, 38, 0.04)',
+                            '&:hover': {
+                              backgroundColor: '#FFF3D6',
+                              boxShadow: '0 4px 20px rgba(45, 42, 38, 0.06)',
+                            }
+                          }}>
                             <ListItemButton
                               onClick={() => handleProjectClick(project)}
-                              sx={{ p: 1.5 }}
+                              sx={{ 
+                                p: 1.5,
+                                borderRadius: '12px',
+                                '&:hover': {
+                                  backgroundColor: 'transparent'
+                                }
+                              }}
                             >
                               <Box sx={{ flex: 1 }}>
-                                <Typography variant="body1" fontWeight={500} noWrap>
+                                <Typography variant="body1" fontWeight={500} noWrap sx={{ color: '#2D2A26' }}>
                                   {project.theme}
                                 </Typography>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
                                   <CalendarIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                                  <Typography variant="caption" color="text.secondary">
+                                  <Typography variant="caption" sx={{ color: '#9E9891' }}>
                                     {new Date(project.updated_at).toLocaleDateString('ja-JP')}
                                   </Typography>
                                   {project.memo_count > 0 && (
                                     <Chip 
                                       label={`${project.memo_count} メモ`} 
                                       size="small" 
-                                      sx={{ ml: 1 }}
+                                      sx={{ 
+                                        ml: 1,
+                                        backgroundColor: '#FFFAED',
+                                        color: '#6B6560',
+                                        fontSize: '11px',
+                                        border: '1px solid #F0E8D8'
+                                      }}
                                     />
                                   )}
                                 </Box>
@@ -605,7 +701,15 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                               <IconButton
                                 size="small"
                                 onClick={(e) => handleMenuOpen(e, project)}
-                                sx={{ ml: 1 }}
+                                sx={{ 
+                                  ml: 1,
+                                  borderRadius: '8px',
+                                  color: '#9E9891',
+                                  '&:hover': {
+                                    backgroundColor: '#FFF6E0',
+                                    color: '#6B6560',
+                                  }
+                                }}
                               >
                                 <MoreIcon fontSize="small" />
                               </IconButton>
@@ -622,21 +726,41 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                   {selectedProject && (
                     <Box sx={{ mb: 2 }}>
                       {selectedProject.question && (
-                        <Box sx={{ mb: 1 }}>
-                          <Typography variant="caption" color="text.secondary">
+                        <Box sx={{ mb: 2 }}>
+                          <Typography variant="caption" sx={{ 
+                            color: '#9E9891',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px'
+                          }}>
                             探究の問い
                           </Typography>
-                          <Typography variant="body2">
+                          <Typography variant="body2" sx={{ 
+                            color: '#2D2A26',
+                            mt: 0.5,
+                            lineHeight: 1.6
+                          }}>
                             {selectedProject.question}
                           </Typography>
                         </Box>
                       )}
                       {selectedProject.hypothesis && (
                         <Box>
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" sx={{ 
+                            color: '#9E9891',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px'
+                          }}>
                             仮説
                           </Typography>
-                          <Typography variant="body2">
+                          <Typography variant="body2" sx={{ 
+                            color: '#2D2A26',
+                            mt: 0.5,
+                            lineHeight: 1.6
+                          }}>
                             {selectedProject.hypothesis}
                           </Typography>
                         </Box>
@@ -649,21 +773,54 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                     variant="outlined"
                     startIcon={<NoteAddIcon />}
                     onClick={handleCreateMemo}
-                    sx={{ mb: 2 }}
+                    sx={{ 
+                      mb: 2,
+                      borderRadius: '12px',
+                      borderColor: '#F0E8D8',
+                      color: '#6B6560',
+                      backgroundColor: '#FFFDF7',
+                      textTransform: 'none',
+                      fontWeight: 500,
+                      boxShadow: '0 2px 8px rgba(45, 42, 38, 0.04)',
+                      '&:hover': {
+                        borderColor: '#FF8C5A',
+                        color: '#FF8C5A',
+                        backgroundColor: '#FFF4EE',
+                        boxShadow: '0 4px 16px rgba(255, 140, 90, 0.1)',
+                        transform: 'translateY(-1px)',
+                      }
+                    }}
                   >
                     新しいメモを作成
                   </Button>
 
-                  <Divider sx={{ mb: 2 }} />
+                  <Divider sx={{ 
+                    mb: 2,
+                    borderColor: '#F0E8D8',
+                    opacity: 0.6
+                  }} />
 
-                  <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+                  <Typography variant="subtitle2" fontWeight={600} sx={{ 
+                    mb: 1,
+                    color: '#9E9891',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    fontSize: '11px'
+                  }}>
                     メモ一覧
                   </Typography>
 
                   {memos.length === 0 ? (
-                    <Card sx={{ textAlign: 'center', py: 3 }}>
-                      <DescriptionIcon sx={{ fontSize: 36, color: 'text.secondary', mb: 1 }} />
-                      <Typography variant="body2" color="text.secondary">
+                    <Card sx={{ 
+                      textAlign: 'center', 
+                      py: 3,
+                      backgroundColor: '#FFF8E7',
+                      borderRadius: '12px',
+                      border: '1px solid #F0E8D8',
+                      boxShadow: '0 2px 12px rgba(45, 42, 38, 0.04)'
+                    }}>
+                      <DescriptionIcon sx={{ fontSize: 36, color: '#9E9891', mb: 1 }} />
+                      <Typography variant="body2" sx={{ color: '#9E9891' }}>
                         メモがありません
                       </Typography>
                     </Card>
@@ -675,23 +832,47 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                           disablePadding
                           sx={{ mb: 1 }}
                         >
-                          <Card sx={{ width: '100%' }}>
+                          <Card sx={{ 
+                            width: '100%',
+                            backgroundColor: '#FFF8E7',
+                            borderRadius: '12px',
+                            border: '1px solid #F0E8D8',
+                            boxShadow: '0 2px 12px rgba(45, 42, 38, 0.04)',
+                            '&:hover': {
+                              backgroundColor: '#FFF3D6',
+                              boxShadow: '0 4px 20px rgba(45, 42, 38, 0.06)',
+                            }
+                          }}>
                             <ListItemButton
                               onClick={() => handleMemoClick(memo)}
-                              sx={{ p: 1.5 }}
+                              sx={{ 
+                                p: 1.5,
+                                borderRadius: '12px',
+                                '&:hover': {
+                                  backgroundColor: 'transparent'
+                                }
+                              }}
                             >
                               <Box sx={{ flex: 1 }}>
-                                <Typography variant="body2" fontWeight={500} noWrap>
+                                <Typography variant="body2" fontWeight={500} noWrap sx={{ color: '#2D2A26' }}>
                                   {memo.title}
                                 </Typography>
-                                <Typography variant="caption" color="text.secondary">
+                                <Typography variant="caption" sx={{ color: '#9E9891' }}>
                                   {new Date(memo.updated_at).toLocaleDateString('ja-JP')}
                                 </Typography>
                               </Box>
                               <IconButton
                                 size="small"
                                 onClick={(e) => handleMemoMenuOpen(e, memo)}
-                                sx={{ ml: 1 }}
+                                sx={{ 
+                                  ml: 1,
+                                  borderRadius: '8px',
+                                  color: '#9E9891',
+                                  '&:hover': {
+                                    backgroundColor: '#FFF6E0',
+                                    color: '#6B6560',
+                                  }
+                                }}
                               >
                                 <MoreIcon fontSize="small" />
                               </IconButton>
@@ -708,7 +889,14 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                   <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
                   </Box>
 
-                  <Paper sx={{ p: 2, height: 'calc(100vh - 280px)' }}>
+                  <Paper sx={{ 
+                    p: 3,
+                    height: 'calc(100vh - 280px)',
+                    backgroundColor: '#FFF8E7',
+                    borderRadius: '12px',
+                    border: '1px solid #F0E8D8',
+                    boxShadow: '0 2px 12px rgba(45, 42, 38, 0.04)'
+                  }}>
                     <MemoEditor
                       initialContent={memoContent}
                       onContentChange={(content) => {

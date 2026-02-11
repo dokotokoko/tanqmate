@@ -22,20 +22,11 @@ import {
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export interface ResponseStyle {
-  id: string;
-  label: string;
-  description: string;
-  icon: React.ReactNode;
-  color: string;
-  prompts?: string[]; // オプショナルなプロンプト例
-  customInstruction?: string; // カスタムスタイル用の指示
-}
+// Import types from shared types file
+import type { ResponseStyle, ResponseStyleSelectorProps } from './types';
 
-interface ResponseStyleSelectorProps {
-  selectedStyle: ResponseStyle | null;
-  onStyleChange: (style: ResponseStyle) => void;
-}
+// Re-export for backward compatibility
+export type { ResponseStyle };
 
 // 利用可能な応答スタイル
 const responseStyles: ResponseStyle[] = [

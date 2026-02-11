@@ -1,5 +1,6 @@
 // react-app/src/pages/GeneralInquiryPage.tsx
 import React, { useState, useEffect } from 'react';
+import { tokenManager } from '../utils/tokenManager';
 import { 
   Container, 
   Box, 
@@ -83,7 +84,7 @@ const GeneralInquiryPage: React.FC = () => {
   // AI応答の処理
   const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       
       if (!token) {
         throw new Error('認証トークンが見つかりません。再ログインしてください。');

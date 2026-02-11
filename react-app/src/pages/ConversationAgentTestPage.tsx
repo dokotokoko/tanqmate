@@ -1,5 +1,6 @@
 // react-app/src/pages/ConversationAgentTestPage.tsx
 import React, { useState, useEffect, useRef } from 'react';
+import { tokenManager } from '../utils/tokenManager';
 import {
   Box,
   Card,
@@ -61,7 +62,7 @@ const ConversationAgentTestPage: React.FC = () => {
       console.log('================== 対話エージェント処理開始 ==================');
       console.log('📝 ユーザーメッセージ:', message);
       
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       if (!token) {
         throw new Error('認証トークンが見つかりません');
       }

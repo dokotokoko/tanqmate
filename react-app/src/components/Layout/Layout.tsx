@@ -5,13 +5,6 @@ import {
   Box,
   Typography,
   IconButton,
-  Drawer,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  ListItemButton,
-  Divider,
   Avatar,
   useTheme,
   useMediaQuery,
@@ -20,24 +13,17 @@ import {
 } from '@mui/material';
 import {
   Menu as MenuIcon,
-  Chat as ChatIcon,
   Logout,
   ExpandMore,
-  Explore,
-  Psychology,
-  Dashboard as DashboardIcon,
 } from '@mui/icons-material';
 import { motion} from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useTutorialStore } from '../../stores/tutorialStore';
 import DashboardSidebar from './DashboardSidebar';
-// import QuestSuggestion from './QuestSuggestion'; // 一時的に非表示
-// import QuestBoardPage from '../../pages/QuestBoardPage'; // 一時的に非表示
+import LeftSidebar from './LeftSidebar';
 
-const drawerWidth = 280;
-const tabletDrawerWidth = 240;
-const collapsedDrawerWidth = 64;
+const leftSidebarWidth = 64; // Fixed width for new simple sidebar
 const defaultDashboardSidebarWidth = 350;
 const minDashboardSidebarWidth = 300;
 const minMainContentWidth = 600; // メインコンテンツ（中央のチャット）の最小幅
@@ -80,19 +66,9 @@ const Layout: React.FC = () => {
   };
   const { startTutorialManually } = useTutorialStore();
   
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [dashboardSidebarOpen, setDashboardSidebarOpen] = useState(!isMobile); // モバイルではデフォルトで非表示
   const [dashboardSidebarWidth, setDashboardSidebarWidth] = useState(defaultDashboardSidebarWidth);
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
-
-  const handleDrawerToggle = useCallback(() => {
-    setMobileOpen(prev => !prev);
-  }, []);
-
-  const handleSidebarToggle = useCallback(() => {
-    setSidebarOpen(prev => !prev);
-  }, []);
 
   const handleDashboardSidebarToggle = useCallback(() => {
     setDashboardSidebarOpen(prev => !prev);
@@ -112,13 +88,12 @@ const Layout: React.FC = () => {
     setUserMenuAnchor(null);
   };
 
-  // ウィンドウリサイズ時のサイドバー幅調整と画面サイズ変更時のサイドバー状態管理
+  // ウィンドウリサイズ時のダッシュボードサイドバー幅調整
   useEffect(() => {
     const handleWindowResize = () => {
       if (!dashboardSidebarOpen) return;
       
-      const currentLeftSidebarWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
-      const dynamicMaxWidth = window.innerWidth - currentLeftSidebarWidth - minMainContentWidth;
+      const dynamicMaxWidth = window.innerWidth - leftSidebarWidth - minMainContentWidth;
       
       // ダッシュボード幅が新しい最大幅を超えている場合は調整
       if (dashboardSidebarWidth > dynamicMaxWidth) {
@@ -128,10 +103,9 @@ const Layout: React.FC = () => {
 
     window.addEventListener('resize', handleWindowResize);
     return () => window.removeEventListener('resize', handleWindowResize);
-  }, [dashboardSidebarOpen, sidebarOpen, dashboardSidebarWidth]);
+  }, [dashboardSidebarOpen, dashboardSidebarWidth]);
 
   // 画面サイズが変わった時のダッシュボードサイドバー状態管理
-  // モバイル/デスクトップ切り替え時の処理（初回レンダリング時は除く）
   const [hasInitialized, setHasInitialized] = useState(false);
   useEffect(() => {
     if (!hasInitialized) {
@@ -360,59 +334,28 @@ const Layout: React.FC = () => {
   );
 
   return (
-    <LayoutContext.Provider value={{ sidebarOpen, onSidebarToggle: handleSidebarToggle }}>
-      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-        {/* Drawer */}
-        <Box
-          component="nav"
-          sx={{ 
-            width: { 
-              xs: 0,
-              sm: isTablet ? (sidebarOpen ? tabletDrawerWidth : collapsedDrawerWidth) : 0,
-              md: sidebarOpen ? drawerWidth : collapsedDrawerWidth
-            },
-            flexShrink: { sm: 0 },
-            transition: 'width 0.3s ease',
-          }}
-        >
-          <Drawer
-            variant="temporary"
-            open={mobileOpen}
-            onClose={handleDrawerToggle}
-            ModalProps={{
-              keepMounted: true, // Better open performance on mobile.
+    <LayoutContext.Provider value={{ sidebarOpen: true, onSidebarToggle: handleDashboardSidebarToggle }}>
+      <Box sx={{ display: 'flex', minHeight: '100vh', background: '#FFFAED' }}>
+        {/* New Left Sidebar */}
+        {!isMobile && (
+          <LeftSidebar 
+            onDashboardToggle={handleDashboardSidebarToggle}
+            onNewChat={() => {
+              navigate('/chat');
+              // URLパラメータでnewChatフラグを設定
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('newChatRequest'));
+              }, 100);
             }}
-            sx={{
-              display: { xs: 'block', sm: 'none' },
-              '& .MuiDrawer-paper': { 
-                boxSizing: 'border-box', 
-                width: drawerWidth,
-                border: 'none',
-                boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
-              },
+            onHistoryOpen={() => {
+              navigate('/chat');
+              // URLパラメータでhistoryOpenフラグを設定
+              setTimeout(() => {
+                window.dispatchEvent(new CustomEvent('historyOpenRequest'));
+              }, 100);
             }}
-          >
-            {fullDrawer}
-          </Drawer>
-          
-          <Drawer
-            variant="permanent"
-            sx={{
-              display: { xs: 'none', sm: 'block' },
-              '& .MuiDrawer-paper': { 
-                boxSizing: 'border-box', 
-                width: sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth,
-                border: 'none',
-                boxShadow: '2px 0 10px rgba(0,0,0,0.1)',
-                transition: 'width 0.3s ease',
-                overflowX: 'hidden',
-              },
-            }}
-            open
-          >
-            {sidebarOpen ? fullDrawer : collapsedDrawer}
-          </Drawer>
-        </Box>
+          />
+        )}
 
         {/* Main content - 中央のチャットエリア */}
         <Box
@@ -421,26 +364,40 @@ const Layout: React.FC = () => {
             flexGrow: 1,
             width: { 
               xs: '100%',
-              sm: (() => {
-                const leftWidth = sidebarOpen ? (isTablet ? tabletDrawerWidth : drawerWidth) : collapsedDrawerWidth;
-                const rightWidth = dashboardSidebarOpen ? dashboardSidebarWidth : 0;
-                return `calc(100% - ${leftWidth}px - ${rightWidth}px)`;
-              })()
+              sm: `calc(100% - ${leftSidebarWidth}px - ${dashboardSidebarOpen ? dashboardSidebarWidth : 0}px)`
             },
             minHeight: '100vh',
             transition: 'width 0.3s ease',
+            maxWidth: '900px',
+            margin: '0 auto',
+            paddingLeft: isMobile ? 0 : 0,
+            paddingRight: isMobile ? 0 : 0,
           }}
         >
           {/* モバイル用のメニューボタン */}
-          <Box sx={{ display: { xs: 'block', sm: 'none' }, p: 1 }}>
-            <IconButton
-              color="primary"
-              onClick={handleDrawerToggle}
-              sx={{ mb: 1 }}
-            >
-              <MenuIcon />
-            </IconButton>
-          </Box>
+          {isMobile && (
+            <Box sx={{ 
+              position: 'fixed', 
+              top: 16, 
+              left: 16, 
+              zIndex: 1000,
+              background: 'rgba(255, 255, 255, 0.9)',
+              borderRadius: '12px',
+              backdropFilter: 'blur(10px)'
+            }}>
+              <IconButton
+                onClick={handleDashboardSidebarToggle}
+                sx={{ 
+                  color: '#FF8C5A',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 140, 90, 0.1)',
+                  }
+                }}
+              >
+                <MenuIcon />
+              </IconButton>
+            </Box>
+          )}
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -461,25 +418,7 @@ const Layout: React.FC = () => {
           isMobile={isMobile}
         />
 
-        {/* ユーザーメニュー */}
-        <Menu
-          anchorEl={userMenuAnchor}
-          open={Boolean(userMenuAnchor)}
-          onClose={handleUserMenuClose}
-          anchorOrigin={{
-            vertical: 'top',
-            horizontal: 'center',
-          }}
-          transformOrigin={{
-            vertical: 'bottom',
-            horizontal: 'center',
-          }}
-        >
-          <MenuItem onClick={handleLogout}>
-            <Logout sx={{ mr: 1 }} />
-            ログアウト
-          </MenuItem>
-        </Menu>
+        {/* ユーザーメニューは一旦削除 - 必要に応じて後で追加 */}
       </Box>
     </LayoutContext.Provider>
   );

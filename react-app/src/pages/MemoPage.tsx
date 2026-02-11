@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react';
+import { tokenManager } from '../utils/tokenManager';
 import {
   Box,
   Container,
@@ -194,7 +195,7 @@ const MemoPage: React.FC = () => {
   // メモの取得
   const fetchMemo = async () => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
       const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         headers: {
@@ -261,7 +262,7 @@ const MemoPage: React.FC = () => {
   // プロジェクトの取得
   const fetchProject = async () => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
         headers: {
@@ -289,7 +290,7 @@ const MemoPage: React.FC = () => {
       // fetchMemoを内部で定義
       const fetchMemoLocal = async () => {
         try {
-          const token = localStorage.getItem('auth-token');
+          const token = tokenManager.getAccessToken();
           const apiBaseUrl = import.meta.env.VITE_API_URL || '/api';
           const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
             headers: {
@@ -365,7 +366,7 @@ const MemoPage: React.FC = () => {
       return;
     }
 
-    const token = localStorage.getItem('auth-token');
+    const token = tokenManager.getAccessToken();
     if (!token) {
       throw new Error('認証トークンが見つかりません');
     }

@@ -58,7 +58,8 @@ class ChatService(BaseService):
         project_id: Optional[str] = None,
         session_type: str = "general",
         response_style: Optional[str] = "auto",
-        custom_instruction: Optional[str] = None
+        custom_instruction: Optional[str] = None,
+        conversation_id: Optional[str] = None  # 既存の会話IDを受け取る
     ) -> Dict[str, Any]:
         """メインチャット処理（統合最適化版）"""
         start_time = time.time()
@@ -80,7 +81,12 @@ class ChatService(BaseService):
             context_builder = AsyncProjectContextBuilder(db_helper)
             
             # 会話IDを取得または作成
-            conversation_id = self.get_or_create_conversation_sync(session_type)
+            # 既存のconversation_idが渡された場合はそれを使用、なければ新規作成
+            if not conversation_id:
+                conversation_id = self.get_or_create_conversation_sync(session_type)
+            else:
+                # 既存のconversation_idが有効か確認
+                conversation_id = self.get_or_create_conversation_sync(session_type, existing_id=conversation_id)
             
             project_id, project_context, project, conversation_history = \
                 await parallel_fetch_context_and_history(
@@ -146,7 +152,8 @@ class ChatService(BaseService):
                 "project_id": project_id,
                 "metrics": metrics,
                 "agent_used": ai_response.get("agent_used", False),
-                "fallback_used": ai_response.get("fallback_used", False)
+                "fallback_used": ai_response.get("fallback_used", False),
+                "conversation_id": conversation_id  # 使用した会話IDを返す
             }
             
         except Exception as e:
@@ -212,7 +219,7 @@ class ChatService(BaseService):
                 llm_client.text("system", system_prompt),
                 llm_client.text("user", f"{context_data}\n\n{message}")
             ]
-            response_obj = await llm_client.generate_response_async(input_items)
+            response_obj = await llm_client.generate_response_async(input_items, status_callback=None)
 
             # Web検索実行確認のログ出力（Responseオブジェクトに対して行う）
             self.dump_response_events(response_obj)
@@ -220,70 +227,22 @@ class ChatService(BaseService):
             # Response APIのoutput_textを取得
             response = llm_client.extract_output_text(response_obj)
             
+            # フォールバック使用の確認
+            fallback_used = getattr(response_obj, 'fallback_used', False)
+            fallback_model = getattr(response_obj, 'fallback_model', None)
+            
             return {
                 "response": response,
                 "agent_used": False,
-                "fallback_used": False
+                "fallback_used": fallback_used,
+                "fallback_model": fallback_model
             }
             
         except Exception as e:
             self.logger.error(f"Async LLM error: {e}")
             raise
     
-    async def _process_with_sync_llm(
-        self,
-        message: str,
-        project_context: str,
-        conversation_history: List[Dict],
-        response_style: Optional[str] = "auto",
-        custom_instruction: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """同期LLMクライアントによる処理（最終フォールバック）"""
-        try:
-            import sys
-            #sys.path.append('C:\\Users\\kouta\\learning-assistant')
-            from module.llm_api import learning_plannner
-            from .response_styles import ResponseStyleManager
-            
-            context_data = self._build_context_data(project_context, conversation_history)
-            
-            # 応答スタイルに応じたシステムプロンプトを取得
-            if response_style == "custom" and custom_instruction:
-                # カスタムスタイルの場合は、プロンプトテンプレートに指示を埋め込む
-                system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
-            else:
-                system_prompt = ResponseStyleManager.get_system_prompt(response_style)
-            
-            # learning_plannnerクラスのインスタンスを作成
-            llm_instance = learning_plannner()
-            
-            # 同期処理を非同期コンテキストで実行
-            input_items = [
-                llm_instance.text("system", system_prompt),
-                llm_instance.text("user", f"{context_data}\n\n{message}")
-            ]
-            
-            response_obj = await asyncio.get_event_loop().run_in_executor(
-                None,
-                llm_instance.generate_response,
-                input_items
-            )
-
-            # Web検索実行確認のログ出力（Responseオブジェクトに対して行う）
-            self.dump_response_events(response_obj)
-            
-            # Response APIのoutput_textを取得
-            response = llm_instance.extract_output_text(response_obj)
-            
-            return {
-                "response": response,
-                "agent_used": False,
-                "fallback_used": True
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Sync LLM error: {e}")
-            raise Exception("All LLM processing methods failed")
+    # 同期フォールバック処理は削除 - 軽量モデル非同期フォールバックに統合済み
     
     def get_chat_history(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
         """チャット履歴取得"""
@@ -322,11 +281,25 @@ class ChatService(BaseService):
             self.logger.error(f"Failed to get chat history: {e}")
             return []
     
-    def get_or_create_conversation_sync(self, session_type: str = "general") -> str:
+    def get_or_create_conversation_sync(self, session_type: str = "general", existing_id: Optional[str] = None) -> str:
         """会話セッション管理"""
         try:
             if not self.user_id:
                 raise ValueError("User ID is required for conversation management")
+            
+            # 既存のIDが渡された場合、それが有効かチェック
+            if existing_id:
+                check_result = self.supabase.table("chat_conversations")\
+                    .select("id")\
+                    .eq("id", existing_id)\
+                    .eq("user_id", self.user_id)\
+                    .eq("is_active", True)\
+                    .limit(1)\
+                    .execute()
+                
+                if check_result.data:
+                    return existing_id
+                # 既存IDが無効な場合は、新規作成へ進む
             
             # 既存のアクティブな会話を検索
             result = self.supabase.table("chat_conversations")\

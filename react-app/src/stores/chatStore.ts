@@ -1,200 +1,414 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, subscribeWithSelector } from 'zustand/middleware';
+import { shallow } from 'zustand/shallow';
 
-interface ChatMessage {
+export interface QuestCard {
+  id: string;
+  label: string;
+  emoji: string;
+  color: 'teal' | 'yellow' | 'purple' | 'pink' | 'green';
+}
+
+export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  questCards?: QuestCard[];
+}
+
+export interface ResponseStyle {
+  id: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  color: string;
+  prompts?: string[];
+  customInstruction?: string;
+}
+
+interface ConversationState {
+  conversationId: string | null;
+  isLoading: boolean;
+  isStreaming: boolean;
+  streamingMessageId: string | null;
+  processingStatus: string | null;
+  fallbackUsed: boolean;
+  fallbackModel: string | null;
 }
 
 interface ChatState {
-  // チャットUI状態
-  isChatOpen: boolean;
-  isHydrated: boolean; // Zustand persistの復元完了フラグ
+  // Core message store - single source of truth
+  messages: Message[];
   
-  // 現在のコンテキスト
+  // Conversation management
+  conversation: ConversationState;
+  
+  // UI state
+  isChatOpen: boolean;
+  isHydrated: boolean;
+  isHistoryOpen: boolean;
+  
+  // Scroll behavior
+  isUserScrolling: boolean;
+  shouldAutoScroll: boolean;
+  
+  // Context management
   currentProjectId: string | null;
   currentMemoId: string | null;
   currentMemoTitle: string;
   currentMemoContent: string;
-  
-  // チャットセッションID（プロジェクト単位）
   chatPageId: string;
   
-  // メッセージ履歴（プロジェクトごと）
-  messageHistory: Record<string, ChatMessage[]>;
+  // Message actions - direct store management
+  addMessage: (message: Message) => void;
+  setMessages: (messages: Message[]) => void;
+  clearMessages: () => void;
+  updateMessage: (id: string, content: string) => void;
   
-  // Actions
+  // Conversation actions
+  setConversationId: (id: string | null) => void;
+  setLoading: (loading: boolean) => void;
+  setStreaming: (streaming: boolean, messageId?: string | null) => void;
+  setProcessingStatus: (status: string | null) => void;
+  setFallbackInfo: (used: boolean, model: string | null) => void;
+  
+  // UI actions
   setChatOpen: (open: boolean) => void;
   toggleChat: () => void;
+  setHistoryOpen: (open: boolean) => void;
+  
+  // Scroll actions
+  setUserScrolling: (scrolling: boolean) => void;
+  setShouldAutoScroll: (shouldScroll: boolean) => void;
+  
+  // Context actions
   setCurrentMemo: (projectId: string, memoId: string | null, title: string, content: string) => void;
   updateMemoContent: (title: string, content: string) => void;
   clearCurrentMemo: () => void;
   setCurrentProject: (projectId: string) => void;
-  
-  // メッセージ管理
-  addMessage: (projectId: string, message: ChatMessage) => void;
-  getMessages: (projectId: string) => ChatMessage[];
-  clearMessages: (projectId: string) => void;
 }
 
+// Selectors for performance optimization
+export interface ChatSelectors {
+  selectMessages: () => Message[];
+  selectConversation: () => ConversationState;
+  selectUIState: () => { isChatOpen: boolean; isHistoryOpen: boolean };
+  selectScrollState: () => { isUserScrolling: boolean; shouldAutoScroll: boolean };
+  selectCurrentMemo: () => { title: string; content: string; projectId: string | null; memoId: string | null };
+}
+
+// Utility functions for message management
+const normalizeMessage = (message: Message): Message => ({
+  ...message,
+  timestamp: message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp || Date.now()),
+});
+
+const sortMessages = (messages: Message[]): Message[] => {
+  return [...messages].sort((a, b) => {
+    const timeA = a.timestamp instanceof Date ? a.timestamp.getTime() : 0;
+    const timeB = b.timestamp instanceof Date ? b.timestamp.getTime() : 0;
+    return timeA - timeB;
+  });
+};
+
+const isDuplicateMessage = (existing: Message[], newMessage: Message): boolean => {
+  return existing.some(msg => {
+    // Same ID check
+    if (msg.id === newMessage.id) return true;
+    
+    // Same content and role within 1 second
+    if (msg.role === newMessage.role && msg.content === newMessage.content) {
+      const msgTime = msg.timestamp instanceof Date ? msg.timestamp.getTime() : 0;
+      const newMsgTime = newMessage.timestamp instanceof Date ? newMessage.timestamp.getTime() : 0;
+      const timeDiff = Math.abs(msgTime - newMsgTime);
+      return timeDiff < 1000; // Within 1 second
+    }
+    
+    return false;
+  });
+};
+
 export const useChatStore = create<ChatState>()(
-  persist(
-    (set, get) => ({
-      // 初期状態（persistから復元されるまでは閉じておく）
-      isChatOpen: false,
-      isHydrated: false,
-      currentProjectId: null,
-      currentMemoId: null,
-      currentMemoTitle: '',
-      currentMemoContent: '',
-      chatPageId: '',
-      messageHistory: {},
-
-      // チャット開閉
-      setChatOpen: (open: boolean) => set({ isChatOpen: open }),
-      
-      toggleChat: () => set((state) => ({ isChatOpen: !state.isChatOpen })),
-
-      // 現在のメモ設定（冪等化）
-      setCurrentMemo: (projectId: string, memoId: string | null, title: string, content: string) => {
-        const state = get();
-        const chatPageId = `project-${projectId}`;
+  subscribeWithSelector(
+    persist(
+      (set, get) => ({
+        // Core message state
+        messages: [],
         
-        // 等価チェック：同じ値なら更新しない
-        if (
-          state.currentProjectId === projectId &&
-          state.currentMemoId === memoId &&
-          state.currentMemoTitle === title &&
-          state.currentMemoContent === content &&
-          state.chatPageId === chatPageId
-        ) {
-          return; // 変更なしの場合は何もしない
-        }
+        // Conversation state
+        conversation: {
+          conversationId: null,
+          isLoading: false,
+          isStreaming: false,
+          streamingMessageId: null,
+          processingStatus: null,
+          fallbackUsed: false,
+          fallbackModel: null,
+        },
         
-        set({
-          currentProjectId: projectId,
-          currentMemoId: memoId,
-          currentMemoTitle: title,
-          currentMemoContent: content,
-          chatPageId,
-        });
-      },
-
-      // メモ内容のみ更新（冪等化）
-      updateMemoContent: (title: string, content: string) => {
-        const state = get();
+        // UI state
+        isChatOpen: false,
+        isHydrated: false,
+        isHistoryOpen: false,
         
-        // 等価チェック：同じ値なら更新しない
-        if (
-          state.currentMemoTitle === title &&
-          state.currentMemoContent === content
-        ) {
-          return; // 変更なしの場合は何もしない
-        }
+        // Scroll state
+        isUserScrolling: false,
+        shouldAutoScroll: true,
         
-        set({
-          currentMemoTitle: title,
-          currentMemoContent: content,
-        });
-      },
-
-      // メモクリア
-      clearCurrentMemo: () => {
-        set({
-          currentMemoId: null,
-          currentMemoTitle: '',
-          currentMemoContent: '',
-        });
-      },
-
-      // プロジェクト設定（メモ一覧ページ用・冪等化）
-      setCurrentProject: (projectId: string) => {
-        const state = get();
-        const chatPageId = `project-${projectId}`;
+        // Context state
+        currentProjectId: null,
+        currentMemoId: null,
+        currentMemoTitle: '',
+        currentMemoContent: '',
+        chatPageId: '',
         
-        // 等価チェック：同じ値なら更新しない
-        if (
-          state.currentProjectId === projectId &&
-          state.chatPageId === chatPageId
-        ) {
-          return; // 変更なしの場合は何もしない
-        }
-        
-        set({
-          currentProjectId: projectId,
-          chatPageId,
-          // メモ情報はクリアしない（メモ一覧に戻っても保持）
-        });
-      },
-
-      // メッセージ管理（重複防止機能付き）
-      addMessage: (projectId: string, message: ChatMessage) => {
-        set((state) => {
-          const existingMessages = state.messageHistory[projectId] || [];
-          
-          // 重複チェック：同じID、または同じ内容・役割・近い時間のメッセージがあれば追加しない
-          const isDuplicate = existingMessages.some(msg => {
-            // IDが同じ場合は重複
-            if (msg.id === message.id) return true;
+        // Message actions
+        addMessage: (message: Message) => {
+          set((state) => {
+            const normalized = normalizeMessage(message);
             
-            // 同じ役割・内容で、タイムスタンプが1秒以内なら重複とみなす
-            if (msg.role === message.role && msg.content === message.content) {
-              const msgTime = msg.timestamp instanceof Date ? msg.timestamp.getTime() : 0;
-              const newMsgTime = message.timestamp instanceof Date ? message.timestamp.getTime() : 0;
-              const timeDiff = Math.abs(msgTime - newMsgTime);
-              return timeDiff < 1000; // 1秒以内
+            // Check for duplicates
+            if (isDuplicateMessage(state.messages, normalized)) {
+              return state;
             }
             
-            return false;
-          });
-          
-          // 重複がなければ追加
-          if (!isDuplicate) {
+            // Add and sort messages
+            const newMessages = sortMessages([...state.messages, normalized]);
+            
             return {
-              messageHistory: {
-                ...state.messageHistory,
-                [projectId]: [...existingMessages, message],
-              },
+              messages: newMessages,
+              shouldAutoScroll: true, // Auto scroll on new message
             };
+          });
+        },
+        
+        setMessages: (messages: Message[]) => {
+          set(() => ({
+            messages: sortMessages(messages.map(normalizeMessage)),
+            shouldAutoScroll: true,
+          }));
+        },
+        
+        clearMessages: () => {
+          set(() => ({
+            messages: [],
+            shouldAutoScroll: true,
+            isUserScrolling: false,
+          }));
+        },
+        
+        updateMessage: (id: string, content: string) => {
+          set((state) => ({
+            messages: state.messages.map(msg => 
+              msg.id === id ? { ...msg, content } : msg
+            ),
+          }));
+        },
+        
+        // Conversation actions
+        setConversationId: (id: string | null) => {
+          set((state) => ({
+            conversation: {
+              ...state.conversation,
+              conversationId: id,
+            },
+          }));
+        },
+        
+        setLoading: (loading: boolean) => {
+          set((state) => ({
+            conversation: {
+              ...state.conversation,
+              isLoading: loading,
+            },
+          }));
+        },
+        
+        setStreaming: (streaming: boolean, messageId: string | null = null) => {
+          set((state) => ({
+            conversation: {
+              ...state.conversation,
+              isStreaming: streaming,
+              streamingMessageId: messageId,
+            },
+          }));
+        },
+
+        setProcessingStatus: (status: string | null) => {
+          set((state) => ({
+            conversation: {
+              ...state.conversation,
+              processingStatus: status,
+            },
+          }));
+        },
+
+        setFallbackInfo: (used: boolean, model: string | null) => {
+          set((state) => ({
+            conversation: {
+              ...state.conversation,
+              fallbackUsed: used,
+              fallbackModel: model,
+            },
+          }));
+        },
+        
+        // UI actions
+        setChatOpen: (open: boolean) => set({ isChatOpen: open }),
+        
+        toggleChat: () => set((state) => ({ isChatOpen: !state.isChatOpen })),
+        
+        setHistoryOpen: (open: boolean) => set({ isHistoryOpen: open }),
+        
+        // Scroll actions
+        setUserScrolling: (scrolling: boolean) => set({ isUserScrolling: scrolling }),
+        
+        setShouldAutoScroll: (shouldScroll: boolean) => set({ shouldAutoScroll: shouldScroll }),
+        
+        // Context actions (with idempotency)
+        setCurrentMemo: (projectId: string, memoId: string | null, title: string, content: string) => {
+          const state = get();
+          const chatPageId = `project-${projectId}`;
+          
+          // Idempotency check
+          if (
+            state.currentProjectId === projectId &&
+            state.currentMemoId === memoId &&
+            state.currentMemoTitle === title &&
+            state.currentMemoContent === content &&
+            state.chatPageId === chatPageId
+          ) {
+            return;
           }
           
-          // 重複の場合は何も変更しない
-          return state;
-        });
-      },
-
-      getMessages: (projectId: string) => {
-        const state = get();
-        return state.messageHistory[projectId] || [];
-      },
-
-      clearMessages: (projectId: string) => {
-        set((state) => ({
-          messageHistory: {
-            ...state.messageHistory,
-            [projectId]: [],
-          },
-        }));
-      },
-    }),
-    {
-      name: 'chat-storage',
-      // 永続化する項目
-      // 注: messageHistoryは意図的に永続化から除外
-      // リロード時は常にDBから最新の履歴を取得するため
-      partialize: (state) => ({
-        isChatOpen: state.isChatOpen,
-        currentProjectId: state.currentProjectId,
-        // messageHistory: state.messageHistory, // 永続化から除外（DBから取得）
+          set({
+            currentProjectId: projectId,
+            currentMemoId: memoId,
+            currentMemoTitle: title,
+            currentMemoContent: content,
+            chatPageId,
+          });
+        },
+        
+        updateMemoContent: (title: string, content: string) => {
+          const state = get();
+          
+          // Idempotency check
+          if (
+            state.currentMemoTitle === title &&
+            state.currentMemoContent === content
+          ) {
+            return;
+          }
+          
+          set({
+            currentMemoTitle: title,
+            currentMemoContent: content,
+          });
+        },
+        
+        clearCurrentMemo: () => {
+          set({
+            currentMemoId: null,
+            currentMemoTitle: '',
+            currentMemoContent: '',
+          });
+        },
+        
+        setCurrentProject: (projectId: string) => {
+          const state = get();
+          const chatPageId = `project-${projectId}`;
+          
+          // Idempotency check
+          if (
+            state.currentProjectId === projectId &&
+            state.chatPageId === chatPageId
+          ) {
+            return;
+          }
+          
+          set({
+            currentProjectId: projectId,
+            chatPageId,
+          });
+        },
       }),
-      onRehydrateStorage: () => (state) => {
-        // persistの復元が完了したらフラグを立てる
-        if (state) {
-          state.isHydrated = true;
-        }
-      },
-    }
+      {
+        name: 'chat-storage',
+        // Only persist UI state and context, not messages (loaded from DB)
+        partialize: (state) => ({
+          isChatOpen: state.isChatOpen,
+          currentProjectId: state.currentProjectId,
+          currentMemoId: state.currentMemoId,
+          currentMemoTitle: state.currentMemoTitle,
+          currentMemoContent: state.currentMemoContent,
+          chatPageId: state.chatPageId,
+          // conversationIdを永続化に追加
+          conversation: {
+            conversationId: state.conversation.conversationId,
+          },
+        }),
+        onRehydrateStorage: () => (state) => {
+          if (state) {
+            state.isHydrated = true;
+          }
+        },
+      }
+    )
   )
-); 
+);
+
+// Performance optimized selectors
+export const selectMessages = () => useChatStore((state) => state.messages, shallow);
+export const selectConversation = () => useChatStore((state) => state.conversation, shallow);
+export const selectUIState = () => useChatStore(
+  (state) => ({ 
+    isChatOpen: state.isChatOpen, 
+    isHistoryOpen: state.isHistoryOpen 
+  }), 
+  shallow
+);
+export const selectScrollState = () => useChatStore(
+  (state) => ({ 
+    isUserScrolling: state.isUserScrolling, 
+    shouldAutoScroll: state.shouldAutoScroll 
+  }), 
+  shallow
+);
+export const selectCurrentMemo = () => useChatStore(
+  (state) => ({
+    title: state.currentMemoTitle,
+    content: state.currentMemoContent,
+    projectId: state.currentProjectId,
+    memoId: state.currentMemoId,
+  }), 
+  shallow
+);
+
+// Action selectors (don't change frequently, can be used directly)
+export const selectMessageActions = () => useChatStore((state) => ({
+  addMessage: state.addMessage,
+  setMessages: state.setMessages,
+  clearMessages: state.clearMessages,
+  updateMessage: state.updateMessage,
+}));
+
+export const selectConversationActions = () => useChatStore((state) => ({
+  setConversationId: state.setConversationId,
+  setLoading: state.setLoading,
+  setStreaming: state.setStreaming,
+  setProcessingStatus: state.setProcessingStatus,
+  setFallbackInfo: state.setFallbackInfo,
+}));
+
+export const selectUIActions = () => useChatStore((state) => ({
+  setChatOpen: state.setChatOpen,
+  toggleChat: state.toggleChat,
+  setHistoryOpen: state.setHistoryOpen,
+}));
+
+export const selectScrollActions = () => useChatStore((state) => ({
+  setUserScrolling: state.setUserScrolling,
+  setShouldAutoScroll: state.setShouldAutoScroll,
+})); 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { tokenManager } from '../utils/tokenManager';
 import {
   Box,
   Container,
@@ -78,7 +79,7 @@ const ProjectPage: React.FC = () => {
   // プロジェクト情報の取得
   const fetchProject = async () => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
         headers: {
@@ -99,7 +100,7 @@ const ProjectPage: React.FC = () => {
   // メモ一覧の取得
   const fetchMemos = async () => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}/memos`, {
         headers: {
@@ -138,7 +139,7 @@ const ProjectPage: React.FC = () => {
   // プロジェクト更新の処理
   const updateProject = async (field: 'question' | 'hypothesis', value: string) => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const updateData = {
         theme: project!.theme,
         question: field === 'question' ? value : project!.question,
@@ -188,7 +189,7 @@ const ProjectPage: React.FC = () => {
   // 新規メモの作成（ワンクリック）
   const handleCreateMemo = async () => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/projects/${projectId}/memos`, {
         method: 'POST',
@@ -218,7 +219,7 @@ const ProjectPage: React.FC = () => {
     if (!confirm('このメモを削除しますか？')) return;
 
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         method: 'DELETE',

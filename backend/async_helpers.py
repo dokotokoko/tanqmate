@@ -6,6 +6,7 @@
 import asyncio
 import json
 import logging
+import time
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, timezone
 from supabase import Client
@@ -30,6 +31,7 @@ class AsyncDatabaseHelper:
         Returns:
             プロジェクト情報のDict、または None
         """
+        start_time = time.time()
         try:
             result = await asyncio.to_thread(
                 lambda: self.supabase.table('projects')
@@ -38,6 +40,9 @@ class AsyncDatabaseHelper:
                 .eq('user_id', user_id)
                 .execute()
             )
+            
+            response_time = time.time() - start_time
+            logger.info(f"🔷 DB Query [get_project_info]: 応答秒={response_time:.3f}s")
             
             if result.data:
                 return result.data[0]
@@ -58,6 +63,7 @@ class AsyncDatabaseHelper:
         Returns:
             プロジェクトID、または None
         """
+        start_time = time.time()
         try:
             result = await asyncio.to_thread(
                 lambda: self.supabase.table('memos')
@@ -66,6 +72,9 @@ class AsyncDatabaseHelper:
                 .eq('user_id', user_id)
                 .execute()
             )
+            
+            response_time = time.time() - start_time
+            logger.info(f"🔷 DB Query [get_memo_project_id]: 応答秒={response_time:.3f}s")
             
             if result.data and result.data[0].get('project_id'):
                 return result.data[0]['project_id']
@@ -85,6 +94,7 @@ class AsyncDatabaseHelper:
         Returns:
             最新のプロジェクトID、または None
         """
+        start_time = time.time()
         try:
             result = await asyncio.to_thread(
                 lambda: self.supabase.table('projects')
@@ -94,6 +104,9 @@ class AsyncDatabaseHelper:
                 .limit(1)
                 .execute()
             )
+            
+            response_time = time.time() - start_time
+            logger.info(f"🔷 DB Query [get_latest_project]: 応答秒={response_time:.3f}s")
             
             if result.data:
                 return result.data[0]['id']
@@ -118,6 +131,7 @@ class AsyncDatabaseHelper:
         Returns:
             対話履歴のリスト
         """
+        start_time = time.time()
         try:
             result = await asyncio.to_thread(
                 lambda: self.supabase.table("chat_logs")
@@ -127,6 +141,10 @@ class AsyncDatabaseHelper:
                 .limit(limit)
                 .execute()
             )
+            
+            response_time = time.time() - start_time
+            record_count = len(result.data) if result.data else 0
+            logger.info(f"🔷 DB Query [get_conversation_history]: 応答秒={response_time:.3f}s, 件数={record_count}")
             
             return result.data if result.data is not None else []
             
@@ -157,6 +175,7 @@ class AsyncDatabaseHelper:
         Returns:
             保存に成功したかどうか
         """
+        start_time = time.time()
         try:
             message_data = {
                 "user_id": user_id,
@@ -170,6 +189,10 @@ class AsyncDatabaseHelper:
             await asyncio.to_thread(
                 lambda: self.supabase.table("chat_logs").insert(message_data).execute()
             )
+            
+            response_time = time.time() - start_time
+            logger.info(f"🔷 DB Insert [save_chat_log]: 応答秒={response_time:.3f}s, sender={sender}")
+            
             return True
             
         except Exception as e:
@@ -272,6 +295,7 @@ async def parallel_fetch_context_and_history(
     Returns:
         (project_id, project_context, project, conversation_history) のタプル
     """
+    start_time = time.time()
     try:
         # プロジェクトコンテキスト構築と履歴取得を並列実行
         context_task = context_builder.build_context_from_page_id(page_id, user_id)
@@ -282,6 +306,9 @@ async def parallel_fetch_context_and_history(
             context_task,
             history_task
         )
+        
+        total_time = time.time() - start_time
+        logger.info(f"🔷 DB Parallel Fetch [context+history]: 応答秒={total_time:.3f}s, 履歴件数={len(conversation_history)}")
         
         return project_id, project_context, project, conversation_history
         
@@ -309,6 +336,7 @@ async def parallel_save_chat_logs(
     Returns:
         (user_save_success, ai_save_success) のタプル
     """
+    start_time = time.time()
     try:
         user_task = db_helper.save_chat_log(**user_message_data)
         ai_task = db_helper.save_chat_log(**ai_message_data)
@@ -318,6 +346,9 @@ async def parallel_save_chat_logs(
         
         user_success = results[0] if not isinstance(results[0], Exception) else False
         ai_success = results[1] if not isinstance(results[1], Exception) else False
+        
+        total_time = time.time() - start_time
+        logger.info(f"🔷 DB Parallel Save [chat_logs]: 応答秒={total_time:.3f}s, user_saved={user_success}, ai_saved={ai_success}")
         
         return user_success, ai_success
         

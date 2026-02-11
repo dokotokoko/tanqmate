@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { tokenManager } from '../utils/tokenManager';
 
 import { useParams, useNavigate } from 'react-router-dom';
 import { Box, Typography, Button, CircularProgress } from '@mui/material';
@@ -18,7 +19,7 @@ const MemoDetailPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       
       // Fetch memo
       const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -64,7 +65,7 @@ const MemoDetailPage: React.FC = () => {
   const handleSave = async (memoData: Partial<MultiMemo>) => {
     if (!id) return;
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/memos/${id}`, {
         method: 'PUT',

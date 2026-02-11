@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
-import AIChat from '../components/MemoChat/AIChat';
+import { AIChat, type ChatAPIRequest, type ChatAPIResponse } from '../components/MemoChat';
 import { useChatStore } from '../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../constants/aiMessages';
+import { tokenManager } from '../utils/tokenManager';
 
 const ChatPage: React.FC = () => {
   const { clearCurrentMemo } = useChatStore();
@@ -15,7 +16,7 @@ const ChatPage: React.FC = () => {
   // AI応答の処理
   const handleAIMessage = async (message: string, memoContent: string): Promise<string> => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       
       if (!token) {
         throw new Error('認証トークンが見つかりません。再ログインしてください。');
@@ -52,19 +53,17 @@ const ChatPage: React.FC = () => {
       height: '100vh', 
       display: 'flex', 
       flexDirection: 'column',
-      bgcolor: 'background.default',
+      background: '#FFFAED', // Soft butter background from mockup
     }}>
-      {/* Chat Header */}
+      {/* Chat Header - Simplified */}
       <Box sx={{ 
-        p: 2, 
-        borderBottom: 1, 
-        borderColor: 'divider',
-        bgcolor: 'background.paper',
+        textAlign: 'center',
+        p: 4,
       }}>
-        <Typography variant="h5" fontWeight={600}>
-          AIアシスタント
+        <Typography variant="h5" fontWeight={600} sx={{ color: '#2D2A26', fontSize: '20px' }}>
+          探Qメイト
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: '#6B6560', fontSize: '14px', mt: 0.5 }}>
           あなたの探究学習をサポートします
         </Typography>
       </Box>
@@ -72,7 +71,7 @@ const ChatPage: React.FC = () => {
       {/* Chat Content */}
       <Box sx={{ flex: 1, overflow: 'hidden' }}>
         <AIChat
-          title="AIアシスタント"
+          title="探Qメイト"
           persistentMode={true}
           loadHistoryFromDB={true}
           onMessageSend={handleAIMessage}
