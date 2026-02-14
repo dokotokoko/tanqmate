@@ -71,6 +71,14 @@ const responseStyles: ResponseStyle[] = [
     prompts: ['視野を広げて', '多角的に考えて'],
   },
   {
+    id: 'select',
+    label: 'サクサク進める',
+    description: 'クリックだけで探究が進む',
+    icon: <Speed />,
+    color: 'success',
+    prompts: ['次に何をすればいい？', '小さな一歩を教えて'],
+  },
+  {
     id: 'custom',
     label: 'カスタム',
     description: '自分で応答スタイルを指定',
@@ -89,16 +97,28 @@ const ResponseStyleSelector: React.FC<ResponseStyleSelectorProps> = ({
   const [customInstruction, setCustomInstruction] = useState('');
 
   const handleToggle = () => {
-    setIsOpen(!isOpen);
+    const newIsOpen = !isOpen;
+    setIsOpen(newIsOpen);
+
+    // トグルをONにした時、選択されていなければデフォルトスタイルを自動選択
+    if (newIsOpen && !selectedStyle && typeof onStyleChange === 'function') {
+      onStyleChange(responseStyles[0]); // デフォルトは「考えを整理する」
+    }
   };
 
   const handleStyleSelect = (style: ResponseStyle) => {
+    console.log('🎨 ResponseStyleSelector: スタイル選択', style.id, style.label);
     if (style.id === 'custom') {
       // カスタムスタイルの場合はインライン入力を表示
       setShowCustomInput(true);
       setCustomInstruction(selectedStyle?.customInstruction || '');
     } else {
-      onStyleChange(style);
+      console.log('🎨 ResponseStyleSelector: onStyleChange呼び出し', style.id);
+      if (typeof onStyleChange === 'function') {
+        onStyleChange(style);
+      } else {
+        console.error('onStyleChange is not a function', onStyleChange);
+      }
       setShowCustomInput(false);
       // スタイル選択後は自動で閉じる
       setTimeout(() => setIsOpen(false), 300);
@@ -116,7 +136,9 @@ const ResponseStyleSelector: React.FC<ResponseStyleSelectorProps> = ({
       color: 'secondary',
       customInstruction: customInstruction,
     };
-    onStyleChange(customStyle);
+    if (typeof onStyleChange === 'function') {
+      onStyleChange(customStyle);
+    }
     setShowCustomInput(false);
     setTimeout(() => setIsOpen(false), 300);
   };

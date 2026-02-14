@@ -21,34 +21,22 @@ const ChatPage: React.FC = () => {
   return (
     <Box sx={{ 
       height: '100vh', 
+      width: '100%', // 全幅を明示的に指定
       display: 'flex', 
       flexDirection: 'column',
       background: '#FFFAED', // Soft butter background from mockup
+      position: 'relative',
+      overflow: 'hidden', // ChatPage自体はオーバーフローを隠す
     }}>
-      {/* Chat Header - Simplified */}
-      <Box sx={{ 
-        textAlign: 'center',
-        p: 4,
-      }}>
-        <Typography variant="h5" fontWeight={600} sx={{ color: '#2D2A26', fontSize: '20px' }}>
-          探Qメイト
-        </Typography>
-        <Typography variant="body2" sx={{ color: '#6B6560', fontSize: '14px', mt: 0.5 }}>
-          あなたの探究学習をサポートします
-        </Typography>
-      </Box>
-
-      {/* Chat Content */}
-      <Box sx={{ flex: 1, overflow: 'hidden' }}>
-        <AIChat
-          title="探Qメイト"
-          persistentMode={true}
-          loadHistoryFromDB={true}
-          // onMessageSend を削除して、AIChatコンポーネント内蔵のAPI処理を使用
-          // これによりクエストカード機能が有効になる
-          initialMessage={AI_INITIAL_MESSAGE}
-        />
-      </Box>
+      {/* Chat Content - 全幅で配置 */}
+      <AIChat
+        persistentMode={true}
+        loadHistoryFromDB={true}
+        // onMessageSend を削除して、AIChatコンポーネント内蔵のAPI処理を使用
+        // これによりクエストカード機能が有効になる
+        initialMessage={AI_INITIAL_MESSAGE}
+        // Remove title to hide the header completely
+      />
     </Box>
   );
 };

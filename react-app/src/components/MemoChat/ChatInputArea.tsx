@@ -49,8 +49,8 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
 
   return (
     <Box sx={{ 
-      position: 'fixed',
-      bottom: 24,
+      position: 'absolute',
+      bottom: 20,
       left: '50%',
       transform: 'translateX(-50%)',
       width: 'calc(100% - 48px)',

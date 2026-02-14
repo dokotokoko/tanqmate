@@ -39,7 +39,7 @@ const FAQSection: React.FC = () => {
   const faqs: FAQItem[] = [
     {
       question: '利用するために料金は必要ですか？',
-      answer: '現在はベータ版として提供しているため、無料でご利用いただけます。ただし、今後のアップデートによって、変更される可能性がございます。。',
+      answer: '基本的には学校単位での利用形態となっております。現在はトライアル期間なので、お問い合わせフォームからご相談いただき、学校ごとに調整させていただいております。',
     },
     {
       question: 'AIが答えを教えることはありますか？',
@@ -202,7 +202,23 @@ const FAQSection: React.FC = () => {
                 mb: 3,
               }}
             >
-              ご不明な点がございましたら、お気軽にお問い合わせください。
+              ご不明な点がございましたら、
+              <Typography
+                component="a"
+                href="https://forms.gle/K9u31TJYHcFzY3Fn9"
+                sx={{
+                  color: 'primary.main',
+                  textDecoration: 'underline',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  '&:hover': {
+                    color: 'primary.dark',
+                  },
+                }}
+              >
+                こちらのフォーム
+              </Typography>
+              よりお気軽にお問い合わせください。
               探究の伴走の経験が豊富な開発者が責任をもって対応いたします。
             </Typography>
             <Typography
@@ -212,7 +228,7 @@ const FAQSection: React.FC = () => {
                 fontWeight: 600,
               }}
             >
-              お問い合わせ: support@tanqmate.com
+              お問い合わせ: koutakado9@gmail.com
             </Typography>
           </Box>
         </motion.div>

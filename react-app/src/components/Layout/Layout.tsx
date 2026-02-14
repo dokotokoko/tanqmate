@@ -158,10 +158,12 @@ const Layout: React.FC = () => {
             },
             minHeight: '100vh',
             transition: 'width 0.3s ease',
-            maxWidth: '900px',
-            margin: '0 auto',
-            paddingLeft: isMobile ? 0 : 0,
-            paddingRight: isMobile ? 0 : 0,
+            // maxWidth制限を削除して全幅使用
+            // margin: '0 auto'も削除
+            paddingLeft: 0,
+            paddingRight: 0,
+            position: 'relative', // スクロール領域のための位置指定
+            overflow: 'hidden', // 子要素でスクロールを管理
           }}
         >
           {/* モバイル用のメニューボタン */}

@@ -118,61 +118,34 @@ const MessageItem = memo(({ message, isLast, onQuestCardClick }: {
 
 MessageItem.displayName = 'MessageItem';
 
-// Optimized ChatMessageList using Zustand selectors
-const ChatMessageList = forwardRef<HTMLDivElement, Omit<ChatMessageListProps, 'messages' | 'isLoading'> & {
+// Optimized ChatMessageList using Zustand selectors  
+const ChatMessageList: React.FC<{
   isInitializing?: boolean;
   onQuestCardClick: (cardId: string, cardLabel: string) => void;
-  onScroll?: () => void;
-}>(
-  ({ 
+}> = ({ 
     isInitializing = false,
-    isUserScrolling, 
-    shouldAutoScroll, 
-    onQuestCardClick,
-    onScroll 
-  }, ref) => {
+    onQuestCardClick
+  }) => {
     // Use Zustand selectors for optimal re-render behavior
     const messages = selectMessages();
-    const messagesEndRef = useRef<HTMLDivElement>(null);
-    const previousMessageCountRef = useRef(0);
-
-    // 自動スクロール処理
-    const scrollToBottomIfNeeded = useCallback(() => {
-      // メッセージが新しく追加された場合かつ、ユーザーがスクロール中でない、かつ自動スクロールが有効な場合のみ実行
-      if (messages.length > previousMessageCountRef.current && !isUserScrolling && shouldAutoScroll) {
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }, 100);
-      }
-      previousMessageCountRef.current = messages.length;
-    }, [messages, isUserScrolling, shouldAutoScroll]);
-
-    // メッセージ変更時のスクロール
-    useEffect(() => {
-      if (messages.length > previousMessageCountRef.current) {
-        scrollToBottomIfNeeded();
-        previousMessageCountRef.current = messages.length;
-      }
-    }, [messages, scrollToBottomIfNeeded]);
 
     return (
-      <Box 
-        ref={ref}
-        sx={{ 
-          flex: 1, 
-          overflow: 'auto',
-          p: '32px 24px',
-          paddingBottom: '140px', // フローティング入力島のためのスペース
-          // スクロールバーを非表示
-          '&::-webkit-scrollbar': {
-            display: 'none',
-          },
-          '-ms-overflow-style': 'none',
-          'scrollbar-width': 'none',
-        }}
-        onScroll={onScroll}
-      >
-        <List sx={{ py: 0 }}>
+      <Box sx={{
+        width: '100%',
+        minHeight: 'calc(100vh - 180px)',
+        display: 'flex',
+        justifyContent: 'center', // 中央揃え
+      }}>
+        <List 
+          sx={{ 
+            padding: '32px 24px',
+            paddingBottom: '40px',
+            margin: 0,
+            width: '100%',
+            maxWidth: '900px', // コンテンツの最大幅を制限
+            boxSizing: 'border-box', // paddingを含めたwidth計算
+          }}
+        >
           {/* 初期化中の特別なローディング表示 */}
           {isInitializing && messages.length === 0 && (
             <Box sx={{ 
@@ -209,11 +182,9 @@ const ChatMessageList = forwardRef<HTMLDivElement, Omit<ChatMessageListProps, 'm
           {/* Optimized loading indicator */}
           <LoadingIndicator />
         </List>
-        <div ref={messagesEndRef} />
       </Box>
     );
-  }
-);
+};
 
 ChatMessageList.displayName = 'ChatMessageList';
 

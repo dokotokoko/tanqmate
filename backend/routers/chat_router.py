@@ -39,7 +39,16 @@ class ChatResponse(BaseModel):
     metrics: Optional[dict] = None
     agent_used: Optional[bool] = False
     fallback_used: Optional[bool] = False
+    
     conversation_id: Optional[str] = None  # 使用された会話IDを返す
+
+    # 質問明確化機能用フィールド
+    is_clarification: Optional[bool] = False  # 明確化質問かどうか
+    clarification_questions: Optional[List[str]] = None  # 構造化された質問リスト
+    suggestion_options: Optional[List[str]] = None  # クリック可能な選択肢
+
+    # 応答スタイル表示用フィールド
+    response_style_used: Optional[str] = None  # 使用された応答スタイル
 
 class ChatHistoryResponse(BaseModel):
     message: str
@@ -84,7 +93,12 @@ async def chat_with_ai(
     chat_service: ChatService = Depends(get_chat_service)
 ):
     """AIとのチャット（統合最適化版）"""
-    
+
+    # デバッグログ: response_styleの確認
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"🎯 Received response_style: {chat_data.response_style}")
+
     # メッセージ長制限
     MAX_MESSAGE_LENGTH = int(os.environ.get("MAX_CHAT_MESSAGE_LENGTH", "2000"))
     if len(chat_data.message) > MAX_MESSAGE_LENGTH:
@@ -110,7 +124,11 @@ async def chat_with_ai(
             metrics=result.get("metrics"),
             agent_used=result.get("agent_used", False),
             fallback_used=result.get("fallback_used", False),
-            conversation_id=result.get("conversation_id")  # 会話IDを返す
+            conversation_id=result.get("conversation_id"),  # 会話IDを返す
+            is_clarification=result.get("is_clarification", False),
+            clarification_questions=result.get("clarification_questions"),
+            suggestion_options=result.get("suggestion_options"),
+            response_style_used=result.get("response_style_used")
         )
         
     except Exception as e:
