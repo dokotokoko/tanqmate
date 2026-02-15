@@ -7,12 +7,29 @@ export interface QuestCard {
   color: 'teal' | 'yellow' | 'purple' | 'pink' | 'green';
 }
 
+export interface WebSource {
+  url: string;
+  title?: string;
+  snippet?: string;
+  domain?: string;
+  favicon?: string;
+  type?: 'web_search' | 'citation';
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date | string | undefined | null;
   questCards?: QuestCard[];
+  sources?: WebSource[];  // WebSearch結果
+  chunks?: string[];
+  isSplit?: boolean;
+  originalLength?: number;
+  is_clarification?: boolean;
+  clarification_questions?: string[];
+  suggestion_options?: string[];
+  response_style_used?: string;
 }
 
 export interface ResponseStyle {

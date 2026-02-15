@@ -527,7 +527,9 @@ const AIChat: React.FC<AIChatProps> = ({
                 suggestion_options: result.suggestion_options || [],
                 response_style_used: result.response_style_used,
                 // クエストカードも追加
-                questCards: result.quest_cards || undefined,
+                questCards: result.questCards || result.quest_cards || undefined,
+                // WebSearchソースを追加
+                sources: result.sources || undefined,
               };
               addMessage(assistantMessage);
 
@@ -691,7 +693,8 @@ const AIChat: React.FC<AIChatProps> = ({
                 isSplit: true,
                 originalLength: result.original_length,
                 timestamp: new Date(),
-                questCards: result.quest_cards || undefined,
+                questCards: result.questCards || result.quest_cards || undefined,
+                sources: result.sources || undefined,
               };
               
               // 統一されたフックでAI応答を追加
@@ -718,7 +721,8 @@ const AIChat: React.FC<AIChatProps> = ({
                 role: 'assistant',
                 content: result.response,
                 timestamp: new Date(),
-                questCards: result.quest_cards || undefined,
+                questCards: result.questCards || result.quest_cards || undefined,
+                sources: result.sources || undefined,
               };
               
               // 統一されたフックでAI応答を追加

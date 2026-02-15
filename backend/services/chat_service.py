@@ -16,6 +16,7 @@ from async_helpers import (
 )
 
 from prompt.prompt import RESPONSE_STYLE_PROMPTS
+from .websearch_extractor import WebSearchExtractor
 
 # turn_indexバグ修正を一時的に無効化のためコメントアウト
 # from async_helpers_turn_index import (
@@ -259,6 +260,9 @@ class ChatService(BaseService):
             # Web検索実行確認のログ出力（Responseオブジェクトに対して行う）
             self.dump_response_events(response_obj)
             
+            # WebSearch結果を抽出
+            web_search_results = WebSearchExtractor.extract_web_search_results(response_obj)
+            
             # Response APIのoutput_textを取得
             response = llm_client.extract_output_text(response_obj)
             
@@ -329,6 +333,11 @@ class ChatService(BaseService):
                 "fallback_model": fallback_model,
                 "response_style_used": response_style  # 使用した応答スタイルを記録
             }
+            
+            # WebSearch結果がある場合は追加
+            if web_search_results:
+                result["sources"] = web_search_results
+                self.logger.info(f"🔍 WebSearch results included: {len(web_search_results)} sources")
             
             # クエストカードがある場合は追加
             if quest_cards:

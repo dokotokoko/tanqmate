@@ -1,4 +1,4 @@
-import React, { lazy, Suspense } from 'react';
+import React, { lazy, Suspense, useMemo } from 'react';
 import {
   ListItem,
   Avatar,
@@ -6,6 +6,8 @@ import {
   Typography,
 } from '@mui/material';
 import { motion } from 'framer-motion';
+import MarkdownRenderer from './MarkdownRenderer';
+import { SourceCardList, type WebSource } from './SourceCard';
 
 // Lazy load QuestCards for better performance with error handling
 const QuestCards = lazy(() => import('./QuestCards').catch(err => {
@@ -15,6 +17,7 @@ const QuestCards = lazy(() => import('./QuestCards').catch(err => {
 
 // Import types from shared types file
 import type { QuestCard, Message, ChatMessageProps } from './types';
+
 
 // Time formatting utility
 const formatTime = (timestamp: Date | string | undefined | null) => {
@@ -62,6 +65,66 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   isLast,
   onQuestCardClick,
 }) => {
+  // URLとソース情報を抽出する関数
+  const extractSourcesFromContent = (content: string): { cleanContent: string; sources: WebSource[] } => {
+    const sources: WebSource[] = [];
+    let cleanContent = content;
+    
+    // 出典番号付きURL形式 [1] https://example.com を検出
+    const citationPattern = /\[(\d+)\]\s*(https?:\/\/[^\s]+)/g;
+    const citations = [...content.matchAll(citationPattern)];
+    
+    citations.forEach((match) => {
+      const [fullMatch, number, url] = match;
+      sources.push({
+        title: `参考資料 ${number}`,
+        url: url,
+        snippet: ''
+      });
+      // URLを削除してクリーンなコンテンツを作成
+      cleanContent = cleanContent.replace(fullMatch, `[${number}]`);
+    });
+    
+    // プレーンなURL（出典番号なし）も検出
+    const urlPattern = /(?<!\[\d+\]\s*)https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)/gi;
+    const plainUrls = [...cleanContent.matchAll(urlPattern)];
+    
+    plainUrls.forEach((match) => {
+      const url = match[0];
+      // 既に出典として処理済みでないか確認
+      if (!sources.some(s => s.url === url)) {
+        sources.push({
+          title: new URL(url).hostname.replace('www.', ''),
+          url: url,
+          snippet: ''
+        });
+      }
+    });
+    
+    return { cleanContent, sources };
+  };
+  
+  // メッセージコンテンツとソースを処理
+  const { cleanContent, extractedSources } = useMemo(
+    () => {
+      const result = extractSourcesFromContent(message.content);
+      return { cleanContent: result.cleanContent, extractedSources: result.sources };
+    },
+    [message.content]
+  );
+  
+  // メッセージに含まれるsourcesと抽出されたソースを統合
+  const allSources = useMemo(() => {
+    const sources = [...(message.sources || []), ...extractedSources];
+    // 重複を削除
+    const uniqueSources = sources.reduce((acc: WebSource[], source) => {
+      if (!acc.some(s => s.url === source.url)) {
+        acc.push(source);
+      }
+      return acc;
+    }, []);
+    return uniqueSources;
+  }, [message.sources, extractedSources]);
   return (
     <>
       <motion.div
@@ -147,15 +210,28 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
                 lineHeight: 1.7,
               }}
             >
-              <Typography 
-                variant="body1" 
-                sx={{ 
-                  whiteSpace: 'pre-wrap',
-                  lineHeight: 1.6,
-                }}
-              >
-                {message.content}
-              </Typography>
+              {/* Markdownレンダリングを使用 */}
+              {message.role === 'assistant' ? (
+                <MarkdownRenderer 
+                  content={cleanContent}
+                  sources={allSources}
+                />
+              ) : (
+                <Typography 
+                  variant="body1" 
+                  sx={{ 
+                    whiteSpace: 'pre-wrap',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {message.content}
+                </Typography>
+              )}
+              
+              {/* ソースカード表示（AIメッセージのみ） */}
+              {message.role === 'assistant' && allSources.length > 0 && (
+                <SourceCardList sources={allSources} />
+              )}
               
               {/* クエストカード表示 */}
               {message.questCards && message.questCards.length > 0 && (

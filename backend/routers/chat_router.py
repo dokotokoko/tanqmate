@@ -33,6 +33,15 @@ class ChatMessage(BaseModel):
     custom_instruction: Optional[str] = None  # カスタムスタイル用の指示
     conversation_id: Optional[str] = None  # 既存の会話IDを受け取る
 
+class WebSource(BaseModel):
+    """WebSearch結果のソース情報"""
+    url: str
+    title: Optional[str] = None
+    snippet: Optional[str] = None
+    domain: Optional[str] = None
+    favicon: Optional[str] = None
+    type: Optional[str] = "web_search"  # web_search or citation
+
 class ChatResponse(BaseModel):
     response: str
     project_id: Optional[str] = None
@@ -49,6 +58,9 @@ class ChatResponse(BaseModel):
 
     # 応答スタイル表示用フィールド
     response_style_used: Optional[str] = None  # 使用された応答スタイル
+    
+    # WebSearch結果
+    sources: Optional[List[WebSource]] = None  # WebSearchで参照したソース
 
 class ChatHistoryResponse(BaseModel):
     message: str
@@ -128,7 +140,8 @@ async def chat_with_ai(
             is_clarification=result.get("is_clarification", False),
             clarification_questions=result.get("clarification_questions"),
             suggestion_options=result.get("suggestion_options"),
-            response_style_used=result.get("response_style_used")
+            response_style_used=result.get("response_style_used"),
+            sources=result.get("sources")  # WebSearch結果を返す
         )
         
     except Exception as e:
