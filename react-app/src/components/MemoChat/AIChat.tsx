@@ -514,7 +514,7 @@ const AIChat: React.FC<AIChatProps> = ({
     message: string,
     responseStyleId: string | null,
     customInstruction: string | undefined
-  ): Promise<{ response: string; response_style_used?: string }> => {
+  ): Promise<{ response: string; response_style_used?: string; suggestion_options?: string[] }> => {
     const token = localStorage.getItem('auth-token');
     if (!token) {
       throw new Error('認証トークンが見つかりません');
@@ -549,6 +549,8 @@ const AIChat: React.FC<AIChatProps> = ({
     const decoder = new TextDecoder();
     let fullResponse = '';
     let responseStyleUsed: string | undefined;
+    let suggestionOptions: string[] | undefined;
+    let parsedMessage: string | undefined;
 
     setIsStreaming(true);
     setStreamingContent('');
@@ -571,6 +573,13 @@ const AIChat: React.FC<AIChatProps> = ({
               setStreamingContent(fullResponse);
             } else if (data.done) {
               responseStyleUsed = data.response_style_used;
+              // selectスタイルの場合、パース済みデータを取得
+              if (data.suggestion_options) {
+                suggestionOptions = data.suggestion_options;
+              }
+              if (data.parsed_message) {
+                parsedMessage = data.parsed_message;
+              }
             } else if (data.error) {
               throw new Error(data.error);
             }
@@ -586,8 +595,9 @@ const AIChat: React.FC<AIChatProps> = ({
     }
 
     return {
-      response: fullResponse,
+      response: parsedMessage || fullResponse,
       response_style_used: responseStyleUsed,
+      suggestion_options: suggestionOptions,
     };
   };
 
@@ -668,6 +678,7 @@ const AIChat: React.FC<AIChatProps> = ({
               content: streamResult.response,
               timestamp: new Date(),
               response_style_used: streamResult.response_style_used,
+              suggestion_options: streamResult.suggestion_options || [],
             };
 
             addMessage(assistantMessage);

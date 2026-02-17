@@ -1,6 +1,7 @@
 # routers/chat_router.py - チャット関連ルーター
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional
 from services.chat_service import ChatService
@@ -9,6 +10,7 @@ from services.base import ServiceManager
 from routers.auth_router import get_current_user, get_supabase_client
 import time
 import os
+import json
 
 # ルーター初期化
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -131,6 +133,51 @@ async def chat_with_ai(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Chat processing failed: {str(e)}"
         )
+
+
+@router.post("/stream", dependencies=[Depends(chat_rate_limiter)])
+async def chat_with_ai_stream(
+    chat_data: ChatMessage,
+    current_user_id: int = Depends(get_current_user),
+    chat_service: ChatService = Depends(get_chat_service)
+):
+    """AIとのストリーミングチャット（SSE）"""
+
+    import logging
+    logger = logging.getLogger(__name__)
+
+    MAX_MESSAGE_LENGTH = int(os.environ.get("MAX_CHAT_MESSAGE_LENGTH", "2000"))
+    if len(chat_data.message) > MAX_MESSAGE_LENGTH:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Message too long. Maximum {MAX_MESSAGE_LENGTH} characters allowed."
+        )
+
+    async def event_generator():
+        try:
+            async for data in chat_service.process_chat_message_streaming(
+                message=chat_data.message,
+                user_id=current_user_id,
+                project_id=chat_data.project_id,
+                session_type=chat_data.session_type,
+                response_style=chat_data.response_style,
+                custom_instruction=chat_data.custom_instruction
+            ):
+                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            logger.error(f"ストリーミングエラー: {e}")
+            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
 
 @router.get("/history", response_model=List[ChatHistoryResponse])
 async def get_chat_history(

@@ -297,7 +297,128 @@ class ChatService(BaseService):
         except Exception as e:
             self.logger.error(f"Async LLM error: {e}")
             raise
-    
+
+    async def process_chat_message_streaming(
+        self,
+        message: str,
+        user_id: int,
+        project_id: Optional[str] = None,
+        session_type: str = "general",
+        response_style: Optional[str] = "auto",
+        custom_instruction: Optional[str] = None
+    ):
+        """ストリーミングチャット処理（SSE用async generator）
+
+        Yields:
+            dict: {"chunk": str} or {"done": True, "response_style_used": str}
+        """
+        try:
+            from module.llm_api import get_async_llm_client
+            from .response_styles import ResponseStyleManager
+            from async_helpers import AsyncDatabaseHelper, AsyncProjectContextBuilder
+
+            db_helper = AsyncDatabaseHelper(self.supabase)
+            context_builder = AsyncProjectContextBuilder(db_helper)
+
+            conversation_id = self.get_or_create_conversation_sync(session_type)
+
+            project_id_result, project_context, project, conversation_history = \
+                await parallel_fetch_context_and_history(
+                    db_helper,
+                    context_builder,
+                    project_id or "",
+                    conversation_id,
+                    user_id,
+                    self.history_limit_default
+                )
+
+            pool_size = int(os.environ.get("LLM_POOL_SIZE", "5"))
+            llm_client = get_async_llm_client(pool_size=pool_size)
+            if not llm_client:
+                yield {"error": "LLMクライアントが利用できません"}
+                return
+
+            context_data = self._build_context_data(project_context, conversation_history)
+
+            if response_style == "custom" and custom_instruction:
+                system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
+            else:
+                system_prompt = ResponseStyleManager.get_system_prompt(response_style)
+
+            is_deep_thinking = response_style in ["research", "deepen"]
+            max_tokens = None if is_deep_thinking else int(os.environ.get("DEFAULT_MAX_TOKENS", "300"))
+
+            input_items = [
+                llm_client.text("system", system_prompt),
+                llm_client.text("user", f"{context_data}\n\n{message}")
+            ]
+
+            self.logger.info(f"🌊 ストリーミング開始: user={user_id}, style={response_style}")
+
+            # researchモードのみweb_searchを有効化
+            use_web_search = is_deep_thinking
+            full_response = ""
+
+            async for chunk in llm_client.generate_response_streaming(
+                input_items, max_tokens=max_tokens, use_web_search=use_web_search
+            ):
+                full_response += chunk
+                yield {"chunk": chunk}
+
+            self.logger.info(f"✅ ストリーミング完了: response_len={len(full_response)}")
+
+            # selectスタイルの場合はJSON応答をパースして構造化データを返す
+            done_event = {"done": True, "response_style_used": response_style}
+            if response_style == "select":
+                self.logger.info(f"🎮 Select style streaming完了、JSONパース開始...")
+                try:
+                    cleaned = full_response.replace('{{', '{').replace('}}', '}')
+                    json_start = cleaned.find('{')
+                    json_end = cleaned.rfind('}') + 1
+                    if json_start != -1 and json_end > json_start:
+                        parsed = json.loads(cleaned[json_start:json_end])
+                        message_text = parsed.get('message', '')
+                        action_options = parsed.get('action_options', [])[:3]
+                        self.logger.info(f"✅ Select streaming JSON parsed: message={message_text[:50]}..., options={action_options}")
+                        done_event["suggestion_options"] = action_options
+                        done_event["parsed_message"] = message_text
+                except Exception as parse_error:
+                    self.logger.warning(f"Select streaming JSON parse failed: {parse_error}")
+
+            # ログ保存（バックグラウンド）
+            context_log = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "project_id": project_id_result
+            }
+            # ログにはパース済みメッセージを保存（あれば）
+            saved_message = done_event.get("parsed_message", full_response)
+            user_msg = {
+                "user_id": user_id,
+                "page_id": project_id_result or "",
+                "sender": "user",
+                "message": message,
+                "conversation_id": conversation_id,
+                "context_data": context_log
+            }
+            ai_msg = {
+                "user_id": user_id,
+                "page_id": project_id_result or "",
+                "sender": "ai",
+                "message": saved_message,
+                "conversation_id": conversation_id,
+                "context_data": context_log
+            }
+            asyncio.create_task(parallel_save_chat_logs(db_helper, user_msg, ai_msg))
+
+            if conversation_id:
+                asyncio.create_task(self._update_conversation_timestamp_async(conversation_id))
+
+            yield done_event
+
+        except Exception as e:
+            self.logger.error(f"ストリーミングエラー: {e}")
+            yield {"error": str(e)}
+
     async def _process_with_sync_llm(
         self,
         message: str,
