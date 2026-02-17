@@ -22,6 +22,7 @@ from routers.theme_router import router as theme_router
 from routers.conversation_agent_router import router as conversation_agent_router
 from routers.conversations_router import router as conversations_router
 from routers.metrics_router import router as metrics_router, debug_router
+from routers.lab_router import router as lab_router
 
 # LLMクライアントをインポート
 from module.llm_api import get_async_llm_client
@@ -82,6 +83,7 @@ app.include_router(conversations_router)  # 会話管理関連
 app.include_router(metrics_router)        # メトリクス関連
 app.include_router(debug_router)          # デバッグ関連
 app.include_router(inquiry_router)        # 探究学習API（既存）
+app.include_router(lab_router)            # 探Q LAB（統計・進捗・パーソナリティ）
 
 # 基本エンドポイント
 @app.get("/")

@@ -26,6 +26,7 @@ import {
   Explore,
   Psychology,
   Dashboard as DashboardIcon,
+  Science as ScienceIcon,
 } from '@mui/icons-material';
 import { motion} from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
@@ -159,6 +160,7 @@ const Layout: React.FC = () => {
 
   const mainListItems: MenuItem[] = useMemo(() => [
     { text: 'AIチャット', icon: <ChatIcon />, path: '/chat', tutorialId: 'ai-chat-button' },
+    { text: '探Q LAB', icon: <ScienceIcon />, path: '/lab' },
     //{ text: '探究テーマを見つける・探す', icon: <Explore />, path: '/framework-games/theme-deep-dive' },
     { text: 'ダッシュボード', icon: <DashboardIcon />, path: '#', action: handleDashboardSidebarToggle },
     //{ text: '対話エージェント検証', icon: <Psychology />, path: '/conversation-agent-test' },
