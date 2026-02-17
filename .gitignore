@@ -147,3 +147,6 @@ Thumbs.db
 *.srl
 
 certs/**
+
+# 素材フォルダ（ローカルのみ）
+x_sozai/
