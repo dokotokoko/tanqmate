@@ -120,13 +120,19 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
         credentials: 'include',
       });
 
+      if (response.status === 401) {
+        useAuthStore.getState().logout();
+        window.location.href = '/login';
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(`プロジェクトの取得に失敗しました (${response.status})`);
       }
-      
+
       const data = await response.json();
       setProjects(data);
-      
+
     } catch (error) {
       console.error('プロジェクト取得エラー:', error);
       setError(error instanceof Error ? error.message : 'プロジェクトの取得でエラーが発生しました');

@@ -134,6 +134,7 @@ Thumbs.db
 .streamlit/
 
 .claude
+CLAUDE.md
 
 # TLS / certs
 *.key

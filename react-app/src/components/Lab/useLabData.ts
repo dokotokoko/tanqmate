@@ -1,6 +1,7 @@
 // components/Lab/useLabData.ts - 探Q LAB用データフック
 
 import { useState, useEffect, useCallback } from 'react';
+import { useAuthStore } from '../../stores/authStore';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || '/api';
 
@@ -83,6 +84,13 @@ export function useLabData() {
         fetch(`${API_BASE}/lab/progress`, { headers }),
         fetch(`${API_BASE}/lab/personality`, { headers }),
       ]);
+
+      // 401の場合はログアウトしてログイン画面へ
+      if (statsRes.status === 401 || progressRes.status === 401 || personalityRes.status === 401) {
+        useAuthStore.getState().logout();
+        window.location.href = '/login';
+        return;
+      }
 
       if (!statsRes.ok || !progressRes.ok || !personalityRes.ok) {
         throw new Error('データの取得に失敗しました');
