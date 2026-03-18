@@ -63,9 +63,12 @@ class ChatResponse(BaseModel):
     sources: Optional[List[WebSource]] = None  # WebSearchで参照したソース
 
 class ChatHistoryResponse(BaseModel):
-    message: str
-    response: str
+    """統一チャット履歴レスポンス"""
+    id: str
+    role: str  # "user" or "assistant"
+    content: str
     timestamp: str
+    conversation_id: Optional[str] = None
 
 # 依存関数
 def get_chat_service(current_user_id: int = Depends(get_current_user)) -> ChatService:
@@ -164,11 +167,14 @@ async def get_chat_history(
     """
     try:
         history = chat_service.get_chat_history(current_user_id, limit)
+        # サービスから返される統一フォーマットをそのまま使用
         return [
             ChatHistoryResponse(
-                message=item["message"],
-                response=item["response"],
-                timestamp=item["timestamp"]
+                id=item["id"],
+                role=item["role"],
+                content=item["content"],
+                timestamp=item["timestamp"],
+                conversation_id=item.get("conversation_id")
             )
             for item in history
         ]

@@ -438,34 +438,33 @@ class ChatService(BaseService):
     # 同期フォールバック処理は削除 - 軽量モデル非同期フォールバックに統合済み
     
     def get_chat_history(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
-        """チャット履歴取得"""
+        """チャット履歴取得 - 統一フォーマットで返す"""
         try:
             limit = min(limit, 100)  # 最大100件
             
             result = self.supabase.table("chat_logs")\
-                .select("id, message, sender, created_at")\
+                .select("id, message, sender, created_at, conversation_id")\
                 .eq("user_id", user_id)\
-                .order("created_at", desc=True)\
+                .order("created_at", desc=False)\
                 .limit(limit)\
                 .execute()
             
-            # ユーザーメッセージとAI応答をペアにして返す
+            # 統一フォーマットに変換
             history = []
-            for i, log in enumerate(result.data):
-                if log["sender"] == "user":
-                    # 次のレコードがAI応答かチェック
-                    ai_response = ""
-                    if i + 1 < len(result.data) and result.data[i + 1]["sender"] == "ai":
-                        ai_response = result.data[i + 1]["message"]
-                    
-                    history.append({
-                        "id": log["id"],
-                        "message": log["message"],
-                        "response": ai_response,
-                        "timestamp": log["created_at"],
-                        "sender": log["sender"],
-                        "created_at": log["created_at"]
-                    })
+            for log in result.data:
+                # DBのsender値を統一roleに変換
+                # DB: "user" -> "user", "ai" -> "assistant"
+                role = "user" if log["sender"] == "user" else "assistant"
+                
+                history.append({
+                    "id": str(log["id"]),
+                    "role": role,  # 統一: roleフィールドを使用
+                    "content": log["message"],  # 統一: contentフィールドを使用
+                    "timestamp": log["created_at"],  # そのままtimestampとして使用
+                    "conversation_id": log.get("conversation_id"),
+                    # デバッグ用: 元のsender値も保持
+                    "_original_sender": log["sender"]
+                })
             
             return history
             

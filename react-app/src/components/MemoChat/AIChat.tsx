@@ -276,11 +276,15 @@ const AIChat: React.FC<AIChatProps> = ({
 
       if (response.ok) {
         const history = await response.json();
-        const historyMessages: Message[] = history.map((item: any, index: number) => ({
-          id: item.id ? item.id.toString() : `history-${index}-${Date.now()}`,
-          role: item.sender === 'user' ? 'user' : 'assistant',
-          content: item.message || '',
-          timestamp: item.created_at ? new Date(item.created_at) : new Date(),
+        console.log('📊 取得した履歴データ (最初の3件):', history.slice(0, 3));
+        
+        // APIが統一フォーマットで返すため、シンプルな変換のみ
+        const historyMessages: Message[] = history.map((item: any) => ({
+          id: item.id,
+          role: item.role as 'user' | 'assistant',  // APIが保証
+          content: item.content,  // APIが統一済み
+          timestamp: new Date(item.timestamp),  // timestamp形式も統一済み
+          conversation_id: item.conversation_id,
         }));
 
         // ダッシュボードの場合は空の履歴

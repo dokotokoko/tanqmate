@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from 'react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from './stores/authStore';
 import { useThemeStore } from './stores/themeStore';
+import { createMuiTheme } from './styles/design-system';
 
 // 重要なページは静的インポート（初期ロードに必要）
 import LoginPage from './pages/LoginPage';
@@ -53,85 +54,9 @@ function App() {
   const { user, isLoading } = useAuthStore();
   const { isDarkMode, primaryColor } = useThemeStore();
 
-  const theme = createTheme({
-    palette: {
-      mode: isDarkMode ? 'dark' : 'light',
-      primary: {
-        main: primaryColor,
-        light: isDarkMode ? '#FFCC80' : '#FFD54F',
-        dark: '#FF8F00',
-      },
-      secondary: {
-        main: '#FF8A65',
-        light: '#FFAB91',
-        dark: '#FF5722',
-      },
-      background: {
-        default: '#FFF9C4', // より明るいパステルクリーム色
-        paper: isDarkMode ? '#1e1e1e' : '#FFFDE7',
-      },
-    },
-    typography: {
-      fontFamily: '"Noto Sans JP", "Roboto", "Helvetica", "Arial", sans-serif',
-      h1: {
-        fontSize: '2.5rem',
-        fontWeight: 600,
-        lineHeight: 1.2,
-      },
-      h2: {
-        fontSize: '2rem',
-        fontWeight: 600,
-        lineHeight: 1.3,
-      },
-      body1: {
-        fontSize: '1rem',
-        lineHeight: 1.6,
-      },
-    },
-    shape: {
-      borderRadius: 14,
-    },
-    components: {
-      MuiButton: {
-        styleOverrides: {
-          root: {
-            textTransform: 'none',
-            borderRadius: 14,
-            fontWeight: 600,
-            padding: '10px 24px',
-            transition: 'all 0.3s ease',
-            '&:hover': {
-              transform: 'translateY(-2px)',
-              boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-            },
-          },
-        },
-      },
-      MuiCard: {
-        styleOverrides: {
-          root: {
-            boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-            borderRadius: 16.8,
-          },
-        },
-      },
-      MuiTextField: {
-        styleOverrides: {
-          root: {
-            '& .MuiOutlinedInput-root': {
-              borderRadius: 14,
-              transition: 'all 0.3s ease',
-              '&:hover': {
-                '& .MuiOutlinedInput-notchedOutline': {
-                  borderColor: primaryColor,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
+  // デザインシステムからテーマを生成
+  const themeConfig = createMuiTheme(isDarkMode);
+  const theme = createTheme(themeConfig);
 
   if (isLoading) {
     return <LoadingScreen />;
