@@ -61,6 +61,9 @@ class ChatResponse(BaseModel):
     
     # WebSearch結果
     sources: Optional[List[WebSource]] = None  # WebSearchで参照したソース
+    
+    # クエストカード
+    quest_cards: Optional[List[dict]] = None  # クエストカード（行動提案）
 
 class ChatHistoryResponse(BaseModel):
     """統一チャット履歴レスポンス"""
@@ -144,7 +147,8 @@ async def chat_with_ai(
             clarification_questions=result.get("clarification_questions"),
             suggestion_options=result.get("suggestion_options"),
             response_style_used=result.get("response_style_used"),
-            sources=result.get("sources")  # WebSearch結果を返す
+            sources=result.get("sources"),  # WebSearch結果を返す
+            quest_cards=result.get("quest_cards")  # クエストカードを返す
         )
         
     except Exception as e:

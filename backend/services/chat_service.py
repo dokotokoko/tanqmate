@@ -160,7 +160,9 @@ class ChatService(BaseService):
                 "clarification_questions": ai_response.get("clarification_questions"),
                 "suggestion_options": ai_response.get("suggestion_options"),
                 # 応答スタイル表示用フィールド
-                "response_style_used": ai_response.get("response_style_used")
+                "response_style_used": ai_response.get("response_style_used"),
+                # クエストカード
+                "quest_cards": ai_response.get("quest_cards")
             }
             
         except Exception as e:
@@ -248,7 +250,7 @@ class ChatService(BaseService):
             # 長考モード: research, deepen → 制限なし（従来通り）
             # 通常モード: organize, expand, ideas → 300トークン（約400文字）
             is_deep_thinking = response_style in ["research", "deepen"]
-            max_tokens = None if is_deep_thinking else int(os.environ.get("DEFAULT_MAX_TOKENS", "300"))
+            max_tokens = None if is_deep_thinking else int(os.environ.get("DEFAULT_MAX_TOKENS", "600"))
 
             # llm_clientのgenerate_response_asyncメソッドを呼び出す
             input_items = [
