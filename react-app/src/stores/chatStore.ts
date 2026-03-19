@@ -15,6 +15,10 @@ export interface Message {
   content: string;
   timestamp: Date;
   questCards?: QuestCard[];
+  // DB同期用のフィールド
+  conversation_id?: string;
+  db_id?: string | number;
+  sources?: any[];
 }
 
 export interface ResponseStyle {
@@ -107,10 +111,35 @@ export interface ChatSelectors {
 }
 
 // Utility functions for message management
-const normalizeMessage = (message: Message): Message => ({
-  ...message,
-  timestamp: message.timestamp instanceof Date ? message.timestamp : new Date(message.timestamp || Date.now()),
-});
+const normalizeMessage = (message: any): Message => {
+  // timestampの正規化
+  let timestamp: Date;
+  if (!message.timestamp) {
+    timestamp = new Date();
+  } else if (message.timestamp instanceof Date) {
+    timestamp = message.timestamp;
+  } else if (typeof message.timestamp === 'string') {
+    timestamp = new Date(message.timestamp);
+  } else {
+    timestamp = new Date();
+  }
+  
+  // 無効な日付の場合は現在時刻を使用
+  if (isNaN(timestamp.getTime())) {
+    timestamp = new Date();
+  }
+  
+  return {
+    id: message.id || `msg-${Date.now()}-${Math.random()}`,
+    role: message.role as 'user' | 'assistant',
+    content: message.content || '',
+    timestamp,
+    questCards: message.questCards,
+    conversation_id: message.conversation_id,
+    db_id: message.db_id,
+    sources: message.sources,
+  };
+};
 
 const sortMessages = (messages: Message[]): Message[] => {
   return [...messages].sort((a, b) => {
@@ -192,10 +221,28 @@ export const useChatStore = create<ChatState>()(
         },
         
         setMessages: (messages: Message[]) => {
-          set(() => ({
-            messages: sortMessages(messages.map(normalizeMessage)),
-            shouldAutoScroll: true,
-          }));
+          set(() => {
+            // 重複除去と正規化
+            const normalized = messages.map(normalizeMessage);
+            const uniqueMessages = normalized.reduce((acc: Message[], msg) => {
+              // DB IDがある場合はそれで判定、なければIDで判定
+              const isDuplicate = acc.some(existing => {
+                if (msg.db_id && existing.db_id) {
+                  return msg.db_id === existing.db_id;
+                }
+                return existing.id === msg.id;
+              });
+              if (!isDuplicate) {
+                acc.push(msg);
+              }
+              return acc;
+            }, []);
+            
+            return {
+              messages: sortMessages(uniqueMessages),
+              shouldAutoScroll: true,
+            };
+          });
         },
         
         clearMessages: () => {

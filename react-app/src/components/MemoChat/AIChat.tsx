@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import { tokenManager } from '../../utils/tokenManager';
+import { messageService } from '../../services/messageService';
 import {
   Box,
   CircularProgress,
@@ -243,73 +244,42 @@ const AIChat: React.FC<AIChatProps> = ({
   }, [forceRefresh, clearMessages]);
 
 
-  // 対話履歴読み込み関数（イベント駆動）
+  // 対話履歴読み込み関数（Single Source of Truth実装）
   const loadChatHistory = useCallback(async () => {
-    // ページリロードの検出
-    const isPageReload = performance.navigation?.type === 1 || 
-                        (performance.getEntriesByType?.('navigation')[0] as any)?.type === 'reload';
-    
-    // リロード時は履歴読み込みフラグをリセットして最新データを取得
-    if (isPageReload && historyLoaded) {
-      setHistoryLoaded(false);
-      // リロード時は既存のメッセージをクリアして最新を取得
-      clearMessages();
-      return; // 次のレンダリングサイクルで再度呼ばれる
-    }
-    
     if (!loadHistoryFromDB || historyLoaded) return;
 
     try {
-      // 認証トークンを取得
-      const token = tokenManager.getAccessToken();
-      if (!token) return;
-
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      // グローバルチャット履歴を取得
-      const historyUrl = `${apiBaseUrl}/chat/history`;
-      const response = await fetch(historyUrl, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-      });
-
-      if (response.ok) {
-        const history = await response.json();
-        console.log('📊 取得した履歴データ (最初の3件):', history.slice(0, 3));
+      console.log('🔄 Loading chat history from DB...');
+      
+      // messageServiceを使用してDBから履歴を取得
+      const historyMessages = await messageService.fetchChatHistory(50);
+      
+      if (isDashboard) {
+        // ダッシュボードの場合は初期メッセージのみ
+        const initialMessage: Message = {
+          id: `initial-${Date.now()}`,
+          role: 'assistant',
+          content: getDefaultInitialMessage(),
+          timestamp: new Date(),
+          questCards: getDefaultQuestCards(),
+        };
+        setMessages([initialMessage]);
+      } else {
+        // DBからの履歴を唯一の信頼できるソースとして設定
+        setMessages(historyMessages);
         
-        // APIが統一フォーマットで返すため、シンプルな変換のみ
-        const historyMessages: Message[] = history.map((item: any) => ({
-          id: item.id,
-          role: item.role as 'user' | 'assistant',  // APIが保証
-          content: item.content,  // APIが統一済み
-          timestamp: new Date(item.timestamp),  // timestamp形式も統一済み
-          conversation_id: item.conversation_id,
-        }));
-
-        // ダッシュボードの場合は空の履歴
-        if (isDashboard) {
-          // ダッシュボードは初期メッセージのみ表示
-          const initialMessage: Message = {
-            id: `initial-${Date.now()}`,
-            role: 'assistant',
-            content: getDefaultInitialMessage(),
-            timestamp: new Date(),
-            questCards: getDefaultQuestCards(),
-          };
-          setMessages([initialMessage]);
-        } else {
-          // その他は全てグローバル履歴を表示
-          setMessages(historyMessages);
+        // 会話IDが含まれている場合は設定
+        if (historyMessages.length > 0 && historyMessages[0].conversation_id) {
+          setConversationId(historyMessages[0].conversation_id);
         }
-        
-        setHistoryLoaded(true);
       }
+      
+      setHistoryLoaded(true);
     } catch (error) {
       console.error('対話履歴の読み込みエラー:', error);
       setHistoryLoaded(true); // エラーでも処理を続行
     }
-  }, [isDashboard, loadHistoryFromDB, historyLoaded, clearMessages, setMessages]);
+  }, [isDashboard, loadHistoryFromDB, historyLoaded, setMessages, setConversationId]);
 
   // 初期メッセージ設定関数（イベント駆動）
   const loadInitialMessages = useCallback(async () => {
@@ -810,16 +780,19 @@ const AIChat: React.FC<AIChatProps> = ({
     setHistoryOpen(false);
   };
 
-  // コンポーネントマウント時のリセット処理
+  // ページリロード検出と履歴リセット
   useEffect(() => {
-    // コンポーネントが新規マウントされた場合（リロード含む）
-    // historyLoadedフラグをリセットして最新データの取得を可能にする
-    const isFirstMount = !historyLoaded && messages.length === 0;
-    if (isFirstMount && loadHistoryFromDB) {
-      // 初回マウント時は履歴読み込みフラグをリセット
+    // ページリロードの検出
+    const isPageReload = performance.navigation?.type === 1 || 
+                        (performance.getEntriesByType?.('navigation')[0] as any)?.type === 'reload';
+    
+    if (isPageReload && loadHistoryFromDB) {
+      console.log('🔄 ページリロードを検出: 履歴を再読み込みします');
+      // リロード時は履歴フラグとメッセージをリセットして最新データを取得
       setHistoryLoaded(false);
+      clearMessages();
     }
-  }, []); // 空の依存配列で初回マウント時のみ実行
+  }, []); // 初回マウント時のみ実行
 
   // 初期化とクリーンアップ
   useEffect(() => {
