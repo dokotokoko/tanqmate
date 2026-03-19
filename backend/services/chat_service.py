@@ -9,6 +9,7 @@ import json
 import uuid
 import logging
 from .base import BaseService
+from .conversation_manager import ConversationManager
 from async_helpers import (
     parallel_fetch_context_and_history,
     parallel_save_chat_logs,
@@ -31,6 +32,7 @@ class ChatService(BaseService):
         super().__init__(supabase_client, user_id)
         self.history_limit_default = int(os.environ.get("CHAT_HISTORY_LIMIT_DEFAULT", "50"))
         self.history_limit_max = int(os.environ.get("CHAT_HISTORY_LIMIT_MAX", "100"))
+        self.conversation_manager = ConversationManager(supabase_client)
     
     def get_service_name(self) -> str:
         return "ChatService"
@@ -439,14 +441,37 @@ class ChatService(BaseService):
     
     # 同期フォールバック処理は削除 - 軽量モデル非同期フォールバックに統合済み
     
-    def get_chat_history(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
-        """チャット履歴取得 - 統一フォーマットで返す"""
+    def get_chat_history(self, user_id: int, conversation_id: str = None, limit: int = 20) -> List[Dict[str, Any]]:
+        """チャット履歴取得 - 統一フォーマットで返す
+        
+        Args:
+            user_id: ユーザーID
+            conversation_id: 会話ID（指定されない場合は最新のアクティブな会話を取得）
+            limit: 取得件数の上限
+        
+        Returns:
+            統一フォーマットの履歴リスト
+        """
         try:
             limit = min(limit, 100)  # 最大100件
             
-            result = self.supabase.table("chat_logs")\
+            # conversation_idが指定されていない場合、最新のアクティブな会話を取得
+            if not conversation_id:
+                conversation_id = self.conversation_manager.get_active_conversation(user_id)
+                if not conversation_id:
+                    # アクティブな会話がない場合は空のリストを返す
+                    return []
+            
+            # 特定の会話のメッセージのみ取得
+            query = self.supabase.table("chat_logs")\
                 .select("id, message, sender, created_at, conversation_id")\
-                .eq("user_id", user_id)\
+                .eq("user_id", user_id)
+            
+            # conversation_idでフィルタリング
+            if conversation_id:
+                query = query.eq("conversation_id", conversation_id)
+            
+            result = query\
                 .order("created_at", desc=False)\
                 .limit(limit)\
                 .execute()
@@ -476,47 +501,20 @@ class ChatService(BaseService):
             return []
     
     def get_or_create_conversation_sync(self, session_type: str = "general", existing_id: Optional[str] = None) -> str:
-        """会話セッション管理"""
+        """会話セッション管理（ConversationManagerに委譲）"""
         try:
             if not self.user_id:
                 raise ValueError("User ID is required for conversation management")
             
             # 既存のIDが渡された場合、それが有効かチェック
-            if existing_id:
-                check_result = self.supabase.table("chat_conversations")\
-                    .select("id")\
-                    .eq("id", existing_id)\
-                    .eq("user_id", self.user_id)\
-                    .eq("is_active", True)\
-                    .limit(1)\
-                    .execute()
-                
-                if check_result.data:
-                    return existing_id
-                # 既存IDが無効な場合は、新規作成へ進む
+            if existing_id and self.conversation_manager.validate_conversation(self.user_id, existing_id):
+                return existing_id
             
-            # 既存のアクティブな会話を検索
-            result = self.supabase.table("chat_conversations")\
-                .select("id")\
-                .eq("user_id", self.user_id)\
-                .eq("is_active", True)\
-                .order("updated_at", desc=True)\
-                .limit(1)\
-                .execute()
-            
-            if result.data:
-                return result.data[0]["id"]
-            
-            # 新しい会話を作成
-            new_conversation = self.supabase.table("chat_conversations").insert({
-                "user_id": self.user_id,
-                "title": f"AIチャットセッション - {session_type}",
-                "is_active": True,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }).execute()
-            
-            return new_conversation.data[0]["id"]
+            # ConversationManagerを使用して会話を取得または作成
+            return self.conversation_manager.get_or_create_active_conversation(
+                self.user_id, 
+                session_type
+            )
             
         except Exception as e:
             self.logger.error(f"Conversation management error: {e}")

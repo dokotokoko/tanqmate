@@ -71,19 +71,6 @@ def get_chat_history(self, user_id: int, conversation_id: str = None, limit: int
         .execute()
 ```
 
-#### 2. conversation_id の必須化
-```sql
--- データベースの制約を追加
-ALTER TABLE chat_logs 
-ALTER COLUMN conversation_id SET NOT NULL;
-
--- 外部キー制約を追加
-ALTER TABLE chat_logs 
-ADD CONSTRAINT fk_conversation 
-FOREIGN KEY (conversation_id) 
-REFERENCES chat_conversations(id);
-```
-
 ### 中期的改善（優先度: 中）
 
 #### 1. 会話管理の一元化
@@ -151,22 +138,14 @@ class ConversationManager:
 
 ## 実装優先度
 
-1. **即座に対応すべき項目**（1-2日）
+1. **即座に対応すべき項目**
    - 履歴取得APIで`conversation_id`によるフィルタリング実装
    - フロントエンドでの`conversation_id`確認ロジック追加
-
-2. **次のスプリントで対応**（1週間）
-   - データベース制約の追加
    - 会話管理の一元化
 
-3. **将来的な機能拡張**（1ヶ月以降）
+2. **将来的な機能拡張**
    - 会話のグループ化
    - 高度な検索機能
-
-## 関連Issue
-- メッセージ表示のバグ修正
-- API レスポンスフォーマットの統一
-- データフローアーキテクチャの改善
 
 ## 参考資料
 - 現在の実装: `backend/services/chat_service.py:477-522`
