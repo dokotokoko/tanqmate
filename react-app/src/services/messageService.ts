@@ -132,8 +132,10 @@ export class MessageService {
   /**
    * DBから会話履歴を取得
    * 唯一の信頼できるデータソース
+   * @param limit 取得件数の上限
+   * @param conversationId 会話ID（オプション）。指定しない場合は最新のアクティブな会話を取得
    */
-  async fetchChatHistory(limit: number = 50): Promise<Message[]> {
+  async fetchChatHistory(limit: number = 50, conversationId?: string): Promise<Message[]> {
     try {
       const token = tokenManager.getAccessToken();
       if (!token) {
@@ -141,7 +143,16 @@ export class MessageService {
         return [];
       }
 
-      const response = await fetch(`${this.apiBaseUrl}/chat/history?limit=${limit}`, {
+      // URLパラメータ構築
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+      });
+      
+      if (conversationId) {
+        params.append('conversation_id', conversationId);
+      }
+
+      const response = await fetch(`${this.apiBaseUrl}/chat/history?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },

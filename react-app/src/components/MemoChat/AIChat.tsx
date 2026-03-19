@@ -251,8 +251,8 @@ const AIChat: React.FC<AIChatProps> = ({
     try {
       console.log('🔄 Loading chat history from DB...');
       
-      // messageServiceを使用してDBから履歴を取得
-      const historyMessages = await messageService.fetchChatHistory(50);
+      // conversation_idがあれば指定して履歴を取得、なければ最新のアクティブな会話を取得
+      const historyMessages = await messageService.fetchChatHistory(50, conversation.conversationId || undefined);
       
       if (isDashboard) {
         // ダッシュボードの場合は初期メッセージのみ

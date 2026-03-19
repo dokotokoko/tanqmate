@@ -1,6 +1,6 @@
 # routers/chat_router.py - チャット関連ルーター
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from pydantic import BaseModel
 from typing import List, Optional
 from services.chat_service import ChatService
@@ -155,7 +155,8 @@ async def chat_with_ai(
 
 @router.get("/history", response_model=List[ChatHistoryResponse])
 async def get_chat_history(
-    limit: int = 20,
+    conversation_id: Optional[str] = Query(None, description="会話ID（オプション）"),
+    limit: int = Query(20, description="取得件数の上限", ge=1, le=100),
     current_user_id: int = Depends(get_current_user),
     chat_service: ChatService = Depends(get_chat_service)
 ):
@@ -164,9 +165,13 @@ async def get_chat_history(
     
     認証が必要です。リクエストヘッダーにAuthorizationを含めてください:
     Authorization: Bearer <your_jwt_token>
+    
+    Args:
+        conversation_id: 会話ID（オプション）。指定しない場合は最新のアクティブな会話を取得
+        limit: 取得件数の上限（デフォルト: 20、最大: 100）
     """
     try:
-        history = chat_service.get_chat_history(current_user_id, limit)
+        history = chat_service.get_chat_history(current_user_id, conversation_id, limit)
         # サービスから返される統一フォーマットをそのまま使用
         return [
             ChatHistoryResponse(
