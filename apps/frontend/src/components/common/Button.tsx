@@ -15,28 +15,13 @@ const StyledButton = styled(MuiButton)<{ variant?: string }>(({ theme, variant }
     textTransform: 'none' as const,
     fontWeight: 600,
     borderRadius: borderRadius.button,
-    transition: transitions.preset.smooth,
+    transition: 'transform 60ms ease-out, box-shadow 100ms ease-out',
     position: 'relative' as const,
-    overflow: 'hidden',
+    transformStyle: 'preserve-3d' as const,
     
     '&:disabled': {
       opacity: 0.5,
       cursor: 'not-allowed',
-    },
-    
-    '&::before': {
-      content: '""',
-      position: 'absolute',
-      top: 0,
-      left: '-100%',
-      width: '100%',
-      height: '100%',
-      background: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent)',
-      transition: 'left 0.5s',
-    },
-    
-    '&:hover::before': {
-      left: '100%',
     },
   };
 
@@ -49,13 +34,14 @@ const StyledButton = styled(MuiButton)<{ variant?: string }>(({ theme, variant }
       
       '&:hover': {
         background: colors.primary[600],
-        transform: 'translateY(-2px)',
+        transform: 'scale(1.01)',
         boxShadow: shadows.md,
       },
       
       '&:active': {
-        transform: 'translateY(0)',
-        boxShadow: shadows.sm,
+        transform: 'scale(0.97)',
+        boxShadow: shadows.xs,
+        transition: 'transform 0ms, box-shadow 0ms',
       },
     },
     secondary: {
@@ -66,13 +52,14 @@ const StyledButton = styled(MuiButton)<{ variant?: string }>(({ theme, variant }
       
       '&:hover': {
         background: colors.secondary[600],
-        transform: 'translateY(-2px)',
+        transform: 'scale(1.01)',
         boxShadow: shadows.md,
       },
       
       '&:active': {
-        transform: 'translateY(0)',
-        boxShadow: shadows.sm,
+        transform: 'scale(0.97)',
+        boxShadow: shadows.xs,
+        transition: 'transform 0ms, box-shadow 0ms',
       },
     },
     outline: {
@@ -83,11 +70,13 @@ const StyledButton = styled(MuiButton)<{ variant?: string }>(({ theme, variant }
       '&:hover': {
         background: colors.primary[50],
         borderColor: colors.primary[600],
-        transform: 'translateY(-1px)',
+        transform: 'scale(1.01)',
       },
       
       '&:active': {
-        transform: 'translateY(0)',
+        transform: 'scale(0.97)',
+        background: colors.primary[100],
+        transition: 'transform 0ms',
       },
     },
     ghost: {
@@ -111,13 +100,14 @@ const StyledButton = styled(MuiButton)<{ variant?: string }>(({ theme, variant }
       
       '&:hover': {
         background: colors.error.dark,
-        transform: 'translateY(-2px)',
+        transform: 'scale(1.01)',
         boxShadow: shadows.md,
       },
       
       '&:active': {
-        transform: 'translateY(0)',
-        boxShadow: shadows.sm,
+        transform: 'scale(0.97)',
+        boxShadow: shadows.xs,
+        transition: 'transform 0ms, box-shadow 0ms',
       },
     },
   };
@@ -161,6 +151,7 @@ const Button: React.FC<ButtonProps> = ({
       variant={variant}
       disabled={disabled || isLoading}
       fullWidth={fullWidth}
+      disableRipple // MUIのリップルエフェクトを無効化
       sx={{
         ...sizeStyles[size],
         ...(fullWidth && { width: '100%' }),

@@ -72,25 +72,31 @@ export const SuggestionChips: React.FC<SuggestionChipsProps> = ({
         return (
         <motion.div
           key={index}
-          initial={{ opacity: 0, y: 20, scale: 0.8 }}
+          initial={{ opacity: 0, y: 10, scale: 0.9 }}
           animate={{
             opacity: 1,
             y: 0,
             scale: 1,
             ...(isJustClicked && {
-              scale: [1, 1.2, 1],
-              rotate: [0, 5, -5, 0],
+              scale: [1, 1.1, 0.95, 1],
+              y: [0, -2, 0],
             }),
           }}
           transition={{
-            delay: index * 0.08,
-            duration: 0.4,
+            delay: index * 0.03,
+            duration: 0.25,
             type: 'spring',
-            stiffness: 260,
-            damping: 20
+            stiffness: 400,
+            damping: 25
           }}
-          whileHover={{ scale: disabled || isCompleted ? 1 : 1.05 }}
-          whileTap={{ scale: disabled || isCompleted ? 1 : 0.95 }}
+          whileHover={{ 
+            scale: disabled || isCompleted ? 1 : 1.02,
+            transition: { duration: 0.08 }
+          }}
+          whileTap={{ 
+            scale: disabled || isCompleted ? 1 : 0.96,
+            transition: { duration: 0 }
+          }}
         >
           <Box sx={{ position: 'relative' }}>
             <Chip

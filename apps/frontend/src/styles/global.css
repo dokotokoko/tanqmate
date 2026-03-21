@@ -234,14 +234,32 @@ a:hover {
   animation: spin 1s linear infinite;
 }
 
-/* 波紋効果 */
+/* 改善された波紋効果 */
 @keyframes ripple {
   0% {
     transform: scale(0);
-    opacity: 1;
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 0.4;
   }
   100% {
-    transform: scale(4);
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+/* よりスムーズな波紋効果 */
+@keyframes ripple-smooth {
+  0% {
+    transform: scale(0) translate(-50%, -50%);
+    opacity: 0.6;
+  }
+  40% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: scale(3) translate(-50%, -50%);
     opacity: 0;
   }
 }
@@ -249,19 +267,21 @@ a:hover {
 .ripple-effect {
   position: relative;
   overflow: hidden;
+  transform: translateZ(0); /* ハードウェアアクセラレーション */
 }
 
 .ripple-effect::after {
   content: '';
   position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
+  top: var(--ripple-y, 50%);
+  left: var(--ripple-x, 50%);
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.6);
-  transform: translate(-50%, -50%);
-  animation: ripple 0.6s ease-out;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.5) 0%, rgba(255, 255, 255, 0.2) 40%, transparent 70%);
+  transform-origin: center;
+  animation: ripple-smooth 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
 }
 
 /* ツールチップ */

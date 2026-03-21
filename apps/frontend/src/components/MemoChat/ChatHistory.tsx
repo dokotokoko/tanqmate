@@ -18,6 +18,8 @@ import {
   Paper,
   Tooltip,
   CircularProgress,
+  Menu,
+  MenuItem,
 } from '@mui/material';
 import {
   History as HistoryIcon,
@@ -42,6 +44,11 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    mouseX: number;
+    mouseY: number;
+    conversationId: string;
+  } | null>(null);
 
   // 会話リストを取得
   const fetchConversations = async () => {
@@ -210,6 +217,34 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
     return date.toLocaleDateString('ja-JP');
   };
 
+  // コンテキストメニューを開く
+  const handleContextMenu = (event: React.MouseEvent, conversationId: string) => {
+    event.preventDefault();
+    setContextMenu(
+      contextMenu === null
+        ? {
+            mouseX: event.clientX - 2,
+            mouseY: event.clientY - 4,
+            conversationId,
+          }
+        : null,
+    );
+  };
+
+  // コンテキストメニューを閉じる
+  const handleCloseContextMenu = () => {
+    setContextMenu(null);
+  };
+
+  // 削除を実行
+  const handleDeleteFromMenu = () => {
+    if (contextMenu) {
+      setConversationToDelete(contextMenu.conversationId);
+      setDeleteDialogOpen(true);
+      handleCloseContextMenu();
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       fetchConversations();
@@ -285,73 +320,147 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
                 <ListItem
                   key={conversation.id}
                   sx={{
-                    backgroundColor: selectedConversation === conversation.id ? 'action.selected' : 'transparent',
+                    px: 1,
+                    py: 0.25,
                   }}
+                  onContextMenu={(e) => handleContextMenu(e, conversation.id)}
                 >
                   <ListItemButton
                     onClick={() => handleConversationSelect(conversation)}
-                    sx={{ borderRadius: 1 }}
+                    selected={selectedConversation === conversation.id}
+                    disableRipple
+                    sx={{
+                      borderRadius: '8px',
+                      py: 1,
+                      px: 1.5,
+                      minHeight: 'auto',
+                      transition: 'background 80ms ease-out, transform 60ms ease-out',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      '&:hover': {
+                        backgroundColor: 'action.hover',
+                      },
+                      '&:active': {
+                        transform: 'scale(0.985)',
+                        backgroundColor: 'action.selected',
+                        transition: 'background 0ms, transform 0ms',
+                      },
+                      '&.Mui-selected': {
+                        backgroundColor: 'action.selected',
+                        '&:hover': {
+                          backgroundColor: 'action.selected',
+                        },
+                        '&::before': {
+                          content: '""',
+                          position: 'absolute',
+                          left: 0,
+                          top: '20%',
+                          bottom: '20%',
+                          width: '2px',
+                          backgroundColor: 'primary.main',
+                          borderRadius: '0 2px 2px 0',
+                        },
+                      },
+                    }}
                   >
-                    <Box sx={{ flex: 1, pr: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                        <ChatIcon sx={{ fontSize: '1rem', mr: 1, color: 'primary.main' }} />
-                        <Box sx={{ flex: 1 }}>
-                          <Typography variant="body2" fontWeight="medium">
-                            {getDisplayTitle(conversation)}
-                          </Typography>
-                        </Box>
-                        <Chip
-                          label={conversation.message_count}
-                          size="small"
-                          variant="outlined"
-                          sx={{ fontSize: '0.7rem', height: '20px' }}
-                        />
+                    <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                      {/* タイトル行（アイコン、タイトル、日付） */}
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <ChatIcon sx={{ fontSize: '1rem', color: 'primary.main', flexShrink: 0 }} />
+                        <Typography 
+                          variant="body2" 
+                          fontWeight="medium"
+                          sx={{ 
+                            flex: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap'
+                          }}
+                        >
+                          {getDisplayTitle(conversation)}
+                        </Typography>
+                        <Typography 
+                          variant="caption" 
+                          color="text.disabled"
+                          sx={{ flexShrink: 0 }}
+                        >
+                          {formatTime(conversation.updated_at)}
+                        </Typography>
                       </Box>
-                      <Box>
-                        {conversation.last_message && (
+                      
+                      {/* 最後のメッセージ（存在する場合） */}
+                      {conversation.last_message && (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box sx={{ width: '1rem', flexShrink: 0 }} /> {/* アイコン分のスペーサー */}
                           <Typography
                             variant="caption"
                             color="text.secondary"
                             sx={{
                               display: '-webkit-box',
-                              WebkitLineClamp: 2,
+                              WebkitLineClamp: 1,
                               WebkitBoxOrient: 'vertical',
                               overflow: 'hidden',
-                              lineHeight: 1.2,
-                              mb: 0.5,
+                              lineHeight: 1.3,
+                              flex: 1,
                             }}
                           >
                             {conversation.last_message}
                           </Typography>
-                        )}
-                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
-                          <ScheduleIcon sx={{ fontSize: '0.8rem', mr: 0.5, color: 'text.disabled' }} />
-                          <Typography variant="caption" color="text.disabled">
-                            {formatTime(conversation.updated_at)}
-                          </Typography>
+                          <Chip
+                            label={conversation.message_count}
+                            size="small"
+                            variant="outlined"
+                            sx={{ 
+                              fontSize: '0.65rem', 
+                              height: '16px',
+                              '& .MuiChip-label': {
+                                px: 0.5,
+                              }
+                            }}
+                          />
                         </Box>
-                      </Box>
+                      )}
                     </Box>
                   </ListItemButton>
-                  <Tooltip title="この会話を削除">
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConversationToDelete(conversation.id);
-                        setDeleteDialogOpen(true);
-                      }}
-                      sx={{ ml: 1 }}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
                 </ListItem>
               ))}
             </List>
           )}
         </Box>
       </Paper>
+
+      {/* 右クリックメニュー */}
+      <Menu
+        open={contextMenu !== null}
+        onClose={handleCloseContextMenu}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          contextMenu !== null
+            ? { top: contextMenu.mouseY, left: contextMenu.mouseX }
+            : undefined
+        }
+        sx={{
+          '& .MuiPaper-root': {
+            minWidth: 120,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          }
+        }}
+      >
+        <MenuItem 
+          onClick={handleDeleteFromMenu}
+          sx={{
+            fontSize: '0.875rem',
+            color: 'error.main',
+            '&:hover': {
+              backgroundColor: 'error.light',
+              color: 'error.contrastText',
+            }
+          }}
+        >
+          <DeleteIcon sx={{ fontSize: '1rem', mr: 1 }} />
+          削除
+        </MenuItem>
+      </Menu>
 
       {/* 会話削除確認ダイアログ */}
       <Dialog
