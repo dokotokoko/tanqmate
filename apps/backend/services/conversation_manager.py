@@ -36,7 +36,7 @@ class ConversationManager:
                 .select("id, updated_at")\
                 .eq("user_id", user_id)\
                 .eq("is_active", True)\
-                .order("updated_at", desc=True)\
+                .order("updated_at.desc")\
                 .limit(1)\
                 .execute()
             
@@ -93,7 +93,7 @@ class ConversationManager:
         try:
             new_conversation = self.supabase.table("chat_conversations").insert({
                 "user_id": user_id,
-                "title": f"AIチャットセッション - {session_type}",
+                "title": "untitled",  # デフォルトをuntitledに設定
                 "is_active": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat()
@@ -170,7 +170,7 @@ class ConversationManager:
                 .select("id")\
                 .eq("user_id", user_id)\
                 .eq("is_active", True)\
-                .order("updated_at", desc=True)\
+                .order("updated_at.desc")\
                 .limit(1)\
                 .execute()
             
@@ -181,3 +181,32 @@ class ConversationManager:
         except Exception as e:
             self.logger.error(f"アクティブ会話取得エラー: {e}")
             return None
+    
+    async def update_conversation_title(self, conversation_id: str, title: str, user_id: str, first_message: str = None) -> bool:
+        """
+        会話のタイトルを更新する
+        """
+        try:
+            update_data = {
+                "title": title,
+                "updated_at": datetime.now().isoformat()
+            }
+            
+            # first_messageも更新する場合
+            if first_message:
+                update_data["first_message"] = first_message
+            
+            result = self.supabase.table("conversations")\
+                .update(update_data)\
+                .eq("id", conversation_id)\
+                .eq("user_id", user_id)\
+                .execute()
+            
+            if result.data:
+                self.logger.info(f"会話タイトル更新成功: {conversation_id} -> {title}")
+                return True
+            return False
+            
+        except Exception as e:
+            self.logger.error(f"会話タイトル更新エラー: {e}")
+            return False

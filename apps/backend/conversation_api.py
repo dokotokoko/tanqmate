@@ -92,11 +92,9 @@ class ConversationManager:
         try:
             conversation_data = {
                 "user_id": user_id,
-                "metadata": json.dumps(metadata or {}, ensure_ascii=False)
+                "metadata": json.dumps(metadata or {}, ensure_ascii=False),
+                "title": title if title else "untitled"  # デフォルトをuntitledに設定
             }
-            
-            if title:
-                conversation_data["title"] = title
             
             # 同期的なSupabase呼び出しを非同期ラップ
             result = await asyncio.to_thread(

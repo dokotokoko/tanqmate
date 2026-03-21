@@ -472,7 +472,7 @@ class ChatService(BaseService):
                 query = query.eq("conversation_id", conversation_id)
             
             result = query\
-                .order("created_at", desc=False)\
+                .order("created_at")\
                 .limit(limit)\
                 .execute()
             

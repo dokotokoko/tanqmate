@@ -199,7 +199,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
 
   // タイトル表示用の関数
   const getDisplayTitle = (conversation: ConversationData): string => {
-    if (conversation.title) {
+    if (conversation.title && conversation.title !== 'untitled') {
       return conversation.title;
     }
     return '無題の会話';
