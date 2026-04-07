@@ -1,306 +1,561 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { AuthError, Session, User } from '@supabase/supabase-js';
+import { supabase, isSupabaseConfigured, supabaseConfigError } from '../lib/supabase';
+import { API_BASE_URL } from '../config/api';
 import { tokenManager, type TokenData } from '../utils/tokenManager';
 
-interface User {
+export interface ProfileData {
   id: string;
-  username: string;
+  username?: string;
+  name?: string;
+  role: 'student' | 'teacher';
+  school_id: string | null;
+  school_code_locked?: boolean;
   email?: string;
   created_at?: string;
+  updated_at?: string;
+  legacy_user_id?: number;
+}
+
+type AuthenticatedUser = User & { username?: string };
+
+interface AuthResult {
+  success: boolean;
+  error?: AuthError;
+  message?: string;
+  requiresEmailConfirmation?: boolean;
 }
 
 interface AuthState {
-  user: User | null;
+  user: AuthenticatedUser | null;
+  session: Session | null;
+  profile: ProfileData | null;
+  userRole: 'student' | 'teacher' | null;
   isLoading: boolean;
   isInitialized: boolean;
-  isFirstLogin: boolean;
-  lastLoginTime: Date | null;
-  loginCount: number;
+  error: AuthError | null;
+  migrationStatus: 'none' | 'pending' | 'completed';
   registrationMessage: string | null;
-  tokenData: TokenData | null;
-  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (username: string, password: string, confirmPassword: string) => Promise<{ success: boolean; error?: string; message?: string }>;
-  logout: () => void;
+
+  isAuthenticated: () => boolean;
+  getAccessToken: () => string | null;
   initialize: () => Promise<void>;
-  markFirstLoginComplete: () => void;
-  isNewUser: () => boolean;
+  signUp: (email: string, password: string, metadata?: Record<string, any>) => Promise<AuthResult>;
+  signIn: (email: string, password: string) => Promise<AuthResult>;
+  signInWithGoogle: () => Promise<AuthResult>;
+  signOut: () => Promise<void>;
+  logout: () => void;
+  resetPassword: (email: string) => Promise<AuthResult>;
+  updateUser: (updates: { email?: string; password?: string; data?: Record<string, any> }) => Promise<AuthResult>;
+  refreshSession: () => Promise<boolean>;
+  getProfile: () => Promise<ProfileData | null>;
+  fetchProfile: () => Promise<ProfileData | null>;
+  setMigrationStatus: (status: 'none' | 'pending' | 'completed') => void;
+  clearError: () => void;
   clearRegistrationMessage: () => void;
-  refreshToken: () => Promise<boolean>;
-  isTokenValid: () => boolean;
+
+  // Legacy compatibility for older UI.
+  login: (username: string, password: string) => Promise<AuthResult>;
+  register: (username: string, password: string, confirmPassword: string) => Promise<AuthResult>;
 }
+
+const createAuthError = (message: string): AuthError => ({ message } as AuthError);
+
+const buildRedirectUrl = (path: string) => {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${window.location.origin}${normalizedPath}`;
+};
+
+const getTokenDataFromSession = (session: Session): TokenData => ({
+  access_token: session.access_token,
+  refresh_token: session.refresh_token,
+  expires_at: session.expires_at ? session.expires_at * 1000 : Date.now() + (session.expires_in || 3600) * 1000,
+  token_type: session.token_type,
+});
+
+const enrichUser = (user: User, profile?: Partial<ProfileData> | null): AuthenticatedUser => ({
+  ...user,
+  username: profile?.username || user.user_metadata?.username || user.email?.split('@')[0] || user.id,
+});
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
-      user: null,
-      isLoading: false,
-      isInitialized: false,
-      isFirstLogin: true,
-      lastLoginTime: null,
-      loginCount: 0,
-      registrationMessage: null,
-      tokenData: null,
+    (set, get) => {
+      let authSubscription: { unsubscribe: () => void } | null = null;
 
-      initialize: async () => {
-        const { user } = get();
-        
-        // トークンマネージャーのイベントハンドラーを設定
-        tokenManager.setEventHandlers({
-          onTokenRefresh: (newTokens) => {
-            set({ tokenData: newTokens });
-          },
-          onTokenExpired: () => {
-            // トークン期限切れ時の自動ログアウト
-            get().logout();
-          },
-          onError: (error) => {
-            console.error('Token manager error:', error);
-          },
-        });
-
-        // 既存のトークンがある場合は読み込み
-        const existingTokens = tokenManager.getTokens();
-        if (existingTokens) {
-          set({ tokenData: existingTokens });
+      const syncTokenState = (session: Session | null) => {
+        if (session) {
+          tokenManager.saveTokens(getTokenDataFromSession(session));
+        } else {
+          tokenManager.clearTokens();
         }
+      };
 
-        if (user) {
-          // トークンの有効性をチェック
-          if (tokenManager.isTokenValid()) {
-            // トークンが有効な場合は更新が必要かチェック
-            if (tokenManager.shouldRefreshToken()) {
-              await get().refreshToken();
-            }
-          } else {
-            // トークンが無効な場合はログアウト
-            get().logout();
-          }
-        }
-        
-        set({ isInitialized: true });
-      },
-
-      markFirstLoginComplete: () => {
-        set({ isFirstLogin: false });
-      },
-
-      isNewUser: () => {
-        const { loginCount, isFirstLogin } = get();
-        return isFirstLogin || loginCount <= 1;
-      },
-
-      login: async (username: string, password: string) => {
-        set({ isLoading: true });
-        
+      const fetchProfileViaBackend = async (accessToken: string): Promise<ProfileData | null> => {
         try {
-          // バックエンドAPIを使用してログイン
-          const apiBaseUrl = (import.meta as any).env?.VITE_API_URL || '/api';
-          const response = await fetch(`${apiBaseUrl}/auth/login`, {
-            method: 'POST',
+          const response = await fetch(`${API_BASE_URL}/auth/profile`, {
             headers: {
-              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
             },
-            credentials: 'include',
-            body: JSON.stringify({
-              username: username,
-              password: password,
-            }),
           });
 
           if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            set({ isLoading: false });
-            return { 
-              success: false, 
-              error: errorData.detail || 'ログインに失敗しました'
-            };
+            return null;
           }
 
-          const data = await response.json();
-          
-          const user: User = {
-            id: data.user.id.toString(),
-            username: data.user.username,
-          };
-
-          // トークン情報をチェックして保存（15分有効期限対応）
-          console.debug('Login response data:', {
-            hasAccessToken: !!data.access_token,
-            hasRefreshToken: !!data.refresh_token,
-            hasExpiresAt: !!data.expires_at,
-            hasExpiresIn: !!data.expires_in,
-            hasToken: !!data.token,
-            tokenType: data.token_type,
-            expiresIn: data.expires_in
-          });
-          let tokenData: TokenData | null = null;
-          
-          if (data.access_token && data.refresh_token && (data.expires_at || data.expires_in)) {
-            // 新しいトークンシステム（15分有効期限 + ローテーション対応）
-            const expiresAt = data.expires_at || (Date.now() + (data.expires_in * 1000));
-            tokenData = {
-              access_token: data.access_token,
-              refresh_token: data.refresh_token,
-              expires_at: expiresAt,
-              token_type: data.token_type || 'Bearer',
-            };
-            tokenManager.saveTokens(tokenData);
-          } else if (data.token && typeof data.token === 'string' && data.token.split('.').length === 3) {
-            // 旧システムとの互換性のため（有効なJWTトークンのみ）
-            localStorage.setItem('auth-token', data.token);
-          } else {
-            // 有効なトークンが受信できない場合はエラー
-            console.error('No valid token received from server');
-            throw new Error('Authentication failed: No valid token received');
-          }
-
-          // ログイン情報を更新
-          const { loginCount } = get();
-          const currentTime = new Date();
-          
-          set({ 
-            user, 
-            isLoading: false,
-            lastLoginTime: currentTime,
-            loginCount: loginCount + 1,
-            tokenData,
-          });
-          
-          return { success: true };
-
+          const payload = await response.json();
+          return payload.profile as ProfileData;
         } catch (error) {
-          set({ isLoading: false });
-          return { 
-            success: false, 
-            error: `ログインエラー: ${error instanceof Error ? error.message : '不明なエラー'}` 
-          };
+          console.error('[Auth] Backend profile fetch failed:', error);
+          return null;
         }
-      },
+      };
 
-      register: async (username: string, password: string, confirmPassword: string) => {
-        set({ isLoading: true });
-
-        if (password !== confirmPassword) {
-          set({ isLoading: false });
-          return { success: false, error: 'パスワードが一致しません' };
-        }
-
-        if (!username.trim() || !password.trim()) {
-          set({ isLoading: false });
-          return { success: false, error: 'ユーザー名とパスワードを入力してください' };
-        }
-
+      const fetchProfileForUser = async (user: User): Promise<ProfileData | null> => {
         try {
-          // バックエンドAPIにユーザー登録リクエストを送信
-          const apiBaseUrl = (import.meta as any).env?.VITE_API_URL || '/api';
-          
-          const response = await fetch(`${apiBaseUrl}/auth/register`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            credentials: 'include',
-            body: JSON.stringify({
-              username: username,
-              password: password,
-              confirm_password: confirmPassword,
-            }),
-          });
-
-          // 201 (Created) も成功として扱う
-          if (!response.ok && response.status !== 201) {
-            const errorData = await response.json().catch(() => ({}));
-            set({ isLoading: false });
-            
-            // 特殊なケース：ユーザー名が既に使用されている場合でも、
-            // 実際にはアカウントが作成されている可能性がある
-            if (response.status === 400 && errorData.detail?.includes('既に使用されています')) {
-              // この場合、アカウントは既に作成されている可能性が高い
-              return { 
-                success: true, 
-                message: '🎉 アカウント登録が完了しました！ログインしてください。'
-              };
+          const session = get().session || (await supabase.auth.getSession()).data.session;
+          const accessToken = session?.access_token;
+          if (accessToken) {
+            const backendProfile = await fetchProfileViaBackend(accessToken);
+            if (backendProfile) {
+              return backendProfile;
             }
-            
-            return { 
-              success: false, 
-              error: errorData.detail || 'ユーザー登録に失敗しました'
-            };
           }
 
-          const data = await response.json();
-          
-          const message = data.message || 'ユーザー登録が完了しました';
-          set({ 
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .maybeSingle();
+
+          if (error) {
+            throw error;
+          }
+
+          if (data) {
+            return data as ProfileData;
+          }
+
+          const newProfile: ProfileData = {
+            id: user.id,
+            email: user.email || '',
+            username: user.user_metadata?.username || user.email?.split('@')[0] || user.id,
+            role: 'student',
+            school_id: null,
+          };
+
+          const { data: createdProfile, error: createError } = await supabase
+            .from('profiles')
+            .insert(newProfile)
+            .select()
+            .single();
+
+          if (createError) {
+            throw createError;
+          }
+
+          return createdProfile as ProfileData;
+        } catch (error) {
+          console.error('[Auth] Failed to fetch profile:', error);
+          return {
+            id: user.id,
+            email: user.email || '',
+            username: user.user_metadata?.username || user.email?.split('@')[0] || user.id,
+            role: 'student',
+            school_id: null,
+            school_code_locked: false,
+          };
+        }
+      };
+
+      const applySessionState = async (session: Session | null) => {
+        if (!session) {
+          syncTokenState(null);
+          set({
+            user: null,
+            session: null,
+            profile: null,
+            userRole: null,
             isLoading: false,
-            registrationMessage: message 
+            isInitialized: true,
+            error: null,
+            migrationStatus: 'none',
           });
-          
-          return { 
-            success: true,
-            message: message
-          };
-
-        } catch (error) {
-          set({ isLoading: false });
-          return { 
-            success: false, 
-            error: `登録エラー: ${error instanceof Error ? error.message : '不明なエラー'}` 
-          };
+          return;
         }
-      },
 
-      logout: () => {
-        // トークンマネージャーでトークンをクリア
-        tokenManager.clearTokens();
-        
-        // 旧システムのトークンもクリア
-        localStorage.removeItem('auth-token');
-        
-        // 状態をリセット
-        set({ 
-          user: null,
-          tokenData: null,
+        const profile = await fetchProfileForUser(session.user);
+        syncTokenState(session);
+        set({
+          user: enrichUser(session.user, profile),
+          session,
+          profile,
+          userRole: profile?.role || 'student',
+          isLoading: false,
+          isInitialized: true,
+          error: null,
         });
-      },
+      };
 
-      refreshToken: async (): Promise<boolean> => {
-        try {
-          const newTokens = await tokenManager.refreshToken();
-          if (newTokens) {
-            // ローテーションされたトークンを状態に更新
-            set({ tokenData: newTokens });
-            return true;
+      return {
+        user: null,
+        session: null,
+        profile: null,
+        userRole: null,
+        isLoading: false,
+        isInitialized: false,
+        error: null,
+        migrationStatus: 'none',
+        registrationMessage: null,
+
+        isAuthenticated: () => Boolean(get().user && get().session),
+
+        getAccessToken: () => {
+          const session = get().session;
+          return session?.access_token || tokenManager.getAccessToken();
+        },
+
+        initialize: async () => {
+          const state = get();
+          if (state.isInitialized || state.isLoading) {
+            return;
           }
-          return false;
-        } catch (error) {
-          console.error('Token refresh failed in authStore:', error);
-          // リフレッシュ失敗時はログアウト
-          get().logout();
-          return false;
-        }
-      },
 
-      isTokenValid: (): boolean => {
-        return tokenManager.isTokenValid();
-      },
+          if (!isSupabaseConfigured) {
+            set({
+              error: createAuthError(supabaseConfigError || 'Supabase is not configured'),
+              isInitialized: true,
+              isLoading: false,
+            });
+            return;
+          }
 
-      clearRegistrationMessage: () => {
-        set({ registrationMessage: null });
-      },
-    }),
+          set({ isLoading: true, error: null });
+
+          try {
+            const {
+              data: { session },
+              error,
+            } = await supabase.auth.getSession();
+
+            if (error) {
+              throw error;
+            }
+
+            await applySessionState(session);
+
+            if (!authSubscription) {
+              const {
+                data: { subscription },
+              } = supabase.auth.onAuthStateChange(async (_event: string, nextSession: Session | null) => {
+                await applySessionState(nextSession);
+              });
+
+              authSubscription = subscription;
+              window.__supabaseAuthSubscription = subscription;
+            }
+          } catch (error) {
+            console.error('[Auth] Initialization error:', error);
+            set({
+              error: error as AuthError,
+              isInitialized: true,
+              isLoading: false,
+            });
+          }
+        },
+
+        signUp: async (email, password, metadata = {}) => {
+          set({ isLoading: true, error: null, registrationMessage: null });
+
+          try {
+            const username = metadata.username || email.split('@')[0];
+            const { data, error } = await supabase.auth.signUp({
+              email,
+              password,
+              options: {
+                data: {
+                  username,
+                  ...metadata,
+                },
+              },
+            });
+
+            if (error) {
+              throw error;
+            }
+
+            if (data.user) {
+              const profile = await fetchProfileForUser(data.user);
+              if (data.session) {
+                syncTokenState(data.session);
+                set({
+                  user: enrichUser(data.user, profile),
+                  session: data.session,
+                  profile,
+                  userRole: profile?.role || 'student',
+                  isLoading: false,
+                  error: null,
+                  registrationMessage: null,
+                });
+                return { success: true, requiresEmailConfirmation: false };
+              }
+            }
+
+            const message = '確認メールを送信しました。メールのリンクから登録を完了してください。';
+            set({
+              isLoading: false,
+              registrationMessage: message,
+            });
+            return {
+              success: true,
+              message,
+              requiresEmailConfirmation: true,
+            };
+          } catch (error) {
+            const authError = error as AuthError;
+            set({ isLoading: false, error: authError });
+            return { success: false, error: authError };
+          }
+        },
+
+        signIn: async (email, password) => {
+          set({ isLoading: true, error: null });
+
+          try {
+            const { data, error } = await supabase.auth.signInWithPassword({
+              email,
+              password,
+            });
+
+            if (error) {
+              throw error;
+            }
+
+            await applySessionState(data.session);
+            return { success: true };
+          } catch (error) {
+            const authError = error as AuthError;
+            set({ isLoading: false, error: authError });
+            return { success: false, error: authError };
+          }
+        },
+
+        signInWithGoogle: async () => {
+          set({ isLoading: true, error: null });
+
+          try {
+            const { error } = await supabase.auth.signInWithOAuth({
+              provider: 'google',
+              options: {
+                redirectTo: buildRedirectUrl('/auth/callback'),
+                queryParams: {
+                  access_type: 'offline',
+                  prompt: 'consent',
+                },
+              },
+            });
+
+            if (error) {
+              throw error;
+            }
+
+            return { success: true };
+          } catch (error) {
+            const authError = error as AuthError;
+            set({ isLoading: false, error: authError });
+            return { success: false, error: authError };
+          }
+        },
+
+        signOut: async () => {
+          set({ isLoading: true, error: null });
+
+          try {
+            const { error } = await supabase.auth.signOut();
+            if (error) {
+              throw error;
+            }
+          } catch (error) {
+            set({ error: error as AuthError });
+          } finally {
+            syncTokenState(null);
+            set({
+              user: null,
+              session: null,
+              profile: null,
+              userRole: null,
+              isLoading: false,
+              isInitialized: true,
+              migrationStatus: 'none',
+              registrationMessage: null,
+            });
+          }
+        },
+
+        logout: () => {
+          void get().signOut();
+        },
+
+        resetPassword: async (email) => {
+          set({ isLoading: true, error: null });
+
+          try {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+              redirectTo: buildRedirectUrl('/auth/callback?type=recovery'),
+            });
+
+            if (error) {
+              throw error;
+            }
+
+            set({ isLoading: false });
+            return { success: true };
+          } catch (error) {
+            const authError = error as AuthError;
+            set({ isLoading: false, error: authError });
+            return { success: false, error: authError };
+          }
+        },
+
+        updateUser: async (updates) => {
+          set({ isLoading: true, error: null });
+
+          try {
+            const { data, error } = await supabase.auth.updateUser(updates);
+            if (error) {
+              throw error;
+            }
+
+            if (data.user) {
+              const profile = await fetchProfileForUser(data.user);
+              set({
+                user: enrichUser(data.user, profile),
+                profile,
+                userRole: profile?.role || 'student',
+                isLoading: false,
+              });
+            } else {
+              set({ isLoading: false });
+            }
+
+            return { success: true };
+          } catch (error) {
+            const authError = error as AuthError;
+            set({ isLoading: false, error: authError });
+            return { success: false, error: authError };
+          }
+        },
+
+        refreshSession: async () => {
+          try {
+            const {
+              data: { session },
+              error,
+            } = await supabase.auth.refreshSession();
+
+            if (error) {
+              throw error;
+            }
+
+            await applySessionState(session);
+            return Boolean(session);
+          } catch (error) {
+            set({ error: error as AuthError });
+            return false;
+          }
+        },
+
+        getProfile: async () => {
+          const currentUser = get().user;
+          if (!currentUser) {
+            return null;
+          }
+
+          const profile = await fetchProfileForUser(currentUser);
+          set({
+            profile,
+            user: enrichUser(currentUser, profile),
+            userRole: profile?.role || 'student',
+          });
+          return profile;
+        },
+
+        fetchProfile: async () => get().getProfile(),
+
+        setMigrationStatus: (migrationStatus) => {
+          set({ migrationStatus });
+        },
+
+        clearError: () => {
+          set({ error: null });
+        },
+
+        clearRegistrationMessage: () => {
+          set({ registrationMessage: null });
+        },
+
+        login: async (username, password) => {
+          if (username.includes('@')) {
+            return get().signIn(username, password);
+          }
+
+          try {
+            const { data, error } = await supabase
+              .from('profiles')
+              .select('email')
+              .eq('username', username)
+              .maybeSingle();
+
+            if (error || !data?.email) {
+              const authError = createAuthError('メールアドレスまたはユーザー名が見つかりません');
+              set({ error: authError });
+              return { success: false, error: authError };
+            }
+
+            return get().signIn(data.email, password);
+          } catch (error) {
+            const authError = error as AuthError;
+            set({ error: authError });
+            return { success: false, error: authError };
+          }
+        },
+
+        register: async (username, password, confirmPassword) => {
+          if (password !== confirmPassword) {
+            const authError = createAuthError('パスワードが一致しません');
+            set({ error: authError });
+            return { success: false, error: authError };
+          }
+
+          if (!username.includes('@')) {
+            const authError = createAuthError('新規登録にはメールアドレスを入力してください');
+            set({ error: authError });
+            return { success: false, error: authError };
+          }
+
+          return get().signUp(username, password);
+        },
+      };
+    },
     {
       name: 'auth-storage',
-      partialize: (state) => ({ 
-        user: state.user, 
-        isFirstLogin: state.isFirstLogin,
-        lastLoginTime: state.lastLoginTime,
-        loginCount: state.loginCount,
-        // tokenDataは別途tokenManagerで管理されるため除外
+      partialize: (state) => ({
+        migrationStatus: state.migrationStatus,
+        registrationMessage: state.registrationMessage,
       }),
     }
   )
 );
 
-// 初期化処理
-useAuthStore.getState().initialize(); 
+declare global {
+  interface Window {
+    __supabaseAuthSubscription?: { unsubscribe: () => void };
+  }
+}
+
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    void useAuthStore.getState().initialize();
+  }, 0);
+}

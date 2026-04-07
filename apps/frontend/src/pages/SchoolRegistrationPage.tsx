@@ -22,36 +22,40 @@ import {
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStoreV2 } from '../stores/authStoreV2';
-import { supabase } from '../lib/supabase';
+import { API_BASE_URL } from '../config/api';
+import { useAuthStore } from '../stores/authStore';
 
 const SchoolRegistrationPage = () => {
   const navigate = useNavigate();
-  const { user, session } = useAuthStoreV2();
+  const { user, getAccessToken } = useAuthStore();
   const [activeStep, setActiveStep] = useState(0);
   const [schoolCode, setSchoolCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [schoolInfo, setSchoolInfo] = useState<{ id: string; name: string } | null>(null);
-  const [profileInfo, setProfileInfo] = useState<{ role: string; school_id: string | null } | null>(null);
-
   useEffect(() => {
     // プロフィール情報を確認
-    checkProfile();
+    void checkProfile();
   }, [user]);
 
   const checkProfile = async () => {
     if (!user) return;
     
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('role, school_id')
-        .eq('id', user.id)
-        .single();
-      
+      const token = getAccessToken();
+      const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = await response.json();
+      const data = payload.profile;
       if (data) {
-        setProfileInfo(data);
         // 既に学校が設定されている場合はダッシュボードへ
         if (data.school_id) {
           navigate('/dashboard');
@@ -67,20 +71,25 @@ const SchoolRegistrationPage = () => {
     setError('');
     
     try {
-      // 学校コードで学校を検索
-      const { data, error } = await supabase
-        .from('schools')
-        .select('id, name')
-        .eq('school_code', schoolCode)
-        .single();
-      
-      if (error || !data) {
+      const token = getAccessToken();
+      const response = await fetch(`${API_BASE_URL}/auth/verify-school-code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ school_code: schoolCode }),
+      });
+
+      if (!response.ok) {
         setError('学校コードが見つかりませんでした。正しいコードを入力してください。');
         setIsLoading(false);
         return;
       }
+
+      const payload = await response.json();
       
-      setSchoolInfo(data);
+      setSchoolInfo(payload.school);
       setActiveStep(1);
     } catch (err) {
       setError('エラーが発生しました。もう一度お試しください。');
@@ -96,16 +105,20 @@ const SchoolRegistrationPage = () => {
     setError('');
     
     try {
-      // プロフィールを更新
-      const { error } = await supabase
-        .from('profiles')
-        .update({ 
-          school_id: schoolInfo.id,
-          // roleはデフォルトで'student'が設定されているはず
-        })
-        .eq('id', user.id);
-      
-      if (error) {
+      const token = getAccessToken();
+      const response = await fetch(`${API_BASE_URL}/auth/onboarding`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+          school_code: schoolCode,
+        }),
+      });
+
+      if (!response.ok) {
         setError('プロフィールの更新に失敗しました。');
         setIsLoading(false);
         return;
@@ -263,8 +276,8 @@ const SchoolRegistrationPage = () => {
         }}
       >
         <Alert severity="warning">
-          ログインが必要です。
-          <Button onClick={() => navigate('/auth-v2')}>
+            ログインが必要です。
+          <Button onClick={() => navigate('/signin')}>
             ログインページへ
           </Button>
         </Alert>
@@ -301,7 +314,7 @@ const SchoolRegistrationPage = () => {
             </Typography>
             
             <Stepper activeStep={activeStep} orientation="vertical">
-              {steps.map((step, index) => (
+              {steps.map((step) => (
                 <Step key={step.label}>
                   <StepLabel>{step.label}</StepLabel>
                   <StepContent>

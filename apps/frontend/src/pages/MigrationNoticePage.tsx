@@ -37,19 +37,17 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { useAuthStoreV2 } from '../stores/authStoreV2';
 
 const MigrationNoticePage = () => {
   const navigate = useNavigate();
-  const v1Auth = useAuthStore();
-  const v2Auth = useAuthStoreV2();
+  const auth = useAuthStore();
   
   const [activeStep, setActiveStep] = useState(0);
   const [migrationData, setMigrationData] = useState({
     email: '',
     password: '',
     confirmPassword: '',
-    oldUsername: v1Auth.user?.username || '',
+    oldUsername: auth.user?.username || '',
     oldPassword: '',
     migrateProjects: true,
     migrateMemos: true,
@@ -78,7 +76,7 @@ const MigrationNoticePage = () => {
 
     try {
       // 新アカウントの作成
-      const result = await v2Auth.signUp(migrationData.email, migrationData.password, {
+      const result = await auth.signUp(migrationData.email, migrationData.password, {
         legacy_username: migrationData.oldUsername,
       });
 
@@ -110,7 +108,7 @@ const MigrationNoticePage = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${v2Auth.session?.access_token}`,
+          'Authorization': `Bearer ${auth.session?.access_token}`,
         },
         body: JSON.stringify({
           username: migrationData.oldUsername,
@@ -128,7 +126,7 @@ const MigrationNoticePage = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${v2Auth.session?.access_token}`,
+          'Authorization': `Bearer ${auth.session?.access_token}`,
         },
         body: JSON.stringify({
           include_projects: migrationData.migrateProjects,
@@ -148,13 +146,13 @@ const MigrationNoticePage = () => {
       
       // 移行完了
       setMigrationProgress(100);
-      v2Auth.setMigrationStatus('completed');
+      auth.setMigrationStatus('completed');
       setMigrationStatus('success');
       handleNext();
       
       // 3秒後にダッシュボードへリダイレクト
       setTimeout(() => {
-        v1Auth.logout(); // 旧システムからログアウト
+        auth.logout();
         navigate('/dashboard');
       }, 3000);
       
@@ -209,7 +207,7 @@ const MigrationNoticePage = () => {
 
           <Alert severity="info" sx={{ mb: 3 }}>
             <Typography variant="body2">
-              現在ログイン中のユーザー: <strong>{v1Auth.user?.username}</strong>
+              現在ログイン中のユーザー: <strong>{auth.user?.username || auth.user?.email || '未設定'}</strong>
             </Typography>
           </Alert>
 
@@ -400,7 +398,7 @@ const MigrationNoticePage = () => {
             <Button
               variant="outlined"
               onClick={() => {
-                v2Auth.setMigrationStatus('completed');
+                auth.setMigrationStatus('completed');
                 navigate('/dashboard');
               }}
               disabled={migrationStatus === 'processing'}

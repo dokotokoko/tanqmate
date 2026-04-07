@@ -22,7 +22,7 @@ import {
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { useAuthStoreV2 } from '../stores/authStoreV2';
+import { useAuthStore } from '../stores/authStore';
 
 const SignInPage = () => {
   const navigate = useNavigate();
@@ -36,7 +36,7 @@ const SignInPage = () => {
     password: '',
   });
 
-  const { signIn, signInWithGoogle, isLoading, error, clearError, getProfile } = useAuthStoreV2();
+  const { signIn, signInWithGoogle, isLoading, error, clearError, getProfile } = useAuthStore();
 
   const validateForm = () => {
     const errors = {

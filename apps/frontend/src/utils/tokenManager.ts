@@ -1,10 +1,8 @@
 /**
- * 短命アクセストークン（15分）対応のトークンマネージャー
- * - アクセストークン: 15分有効
- * - リフレッシュ間隔: 5分前に事前更新（15-5=10分）
- * - ローテーション対応: 新しいrefresh_tokenも受け取り保存
- * - チェック間隔: 30秒（15分トークンに対応）
+ * Supabaseセッション互換のトークンマネージャー
  */
+
+import { supabase } from '../lib/supabase';
 
 export interface TokenData {
   access_token: string;
@@ -26,7 +24,7 @@ class TokenManager {
   
   private tokens: TokenData | null = null;
   private eventHandlers: TokenEventHandlers = {};
-  private refreshTimer: NodeJS.Timeout | null = null;
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
   private isRefreshing = false;
   private refreshPromise: Promise<TokenData | null> | null = null;
 
@@ -55,6 +53,26 @@ class TokenManager {
         // 既に期限切れの場合は削除
         if (this.tokens && this.isTokenExpired()) {
           this.clearTokens();
+        }
+      }
+
+      if (!this.tokens) {
+        const supabaseStorageKey = Object.keys(localStorage).find((key) => key.startsWith('sb-') && key.endsWith('-auth-token'));
+        if (supabaseStorageKey) {
+          const rawSession = localStorage.getItem(supabaseStorageKey);
+          if (rawSession) {
+            const parsed = JSON.parse(rawSession);
+            const session = parsed?.currentSession;
+            if (session?.access_token) {
+              this.tokens = {
+                access_token: session.access_token,
+                refresh_token: session.refresh_token,
+                expires_at: session.expires_at ? session.expires_at * 1000 : Date.now() + (session.expires_in || 3600) * 1000,
+                token_type: session.token_type,
+              };
+              this.saveTokensToStorage();
+            }
+          }
         }
       }
     } catch (error) {
@@ -207,7 +225,7 @@ class TokenManager {
   clearTokens(): void {
     this.tokens = null;
     this.saveTokensToStorage();
-    this.stopPeriodicCheck();
+    this.startPeriodicCheck();
   }
 
   /**
@@ -242,51 +260,27 @@ class TokenManager {
    * 実際のトークンリフレッシュ処理
    */
   private async performTokenRefresh(): Promise<TokenData | null> {
-    if (!this.tokens?.refresh_token) {
-      throw new Error('No refresh token available');
-    }
-
     try {
-      const apiBaseUrl = (import.meta as any).env?.VITE_API_URL || '/api';
-      
-      const response = await fetch(`${apiBaseUrl}/auth/refresh`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
-        body: JSON.stringify({
-          refresh_token: this.tokens.refresh_token,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Token refresh failed');
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error || !data.session) {
+        throw error || new Error('Token refresh failed');
       }
 
-      const data = await response.json();
+      const expiresAt = data.session.expires_at
+        ? data.session.expires_at * 1000
+        : Date.now() + (data.session.expires_in || 3600) * 1000;
 
-      // 新しいトークン形式に対応（ローテーション対応）
-      // expires_inからexpires_atを計算（サーバーは秒単位で返す）
-      const expiresAt = Date.now() + (data.expires_in || 900) * 1000; // デフォルト15分
-      
       const newTokens: TokenData = {
-        access_token: data.access_token,
-        refresh_token: data.refresh_token || this.tokens.refresh_token, // ローテーションされた場合は新しいtoken、されない場合は既存を維持
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
         expires_at: expiresAt,
-        token_type: data.token_type || 'Bearer',
+        token_type: data.session.token_type || 'Bearer',
       };
 
-      // トークンを保存してイベント通知
       this.saveTokens(newTokens);
-      
       return newTokens;
-
     } catch (error) {
       console.error('Token refresh request failed:', error);
-      
-      // リフレッシュに失敗した場合はトークンを無効化
       this.handleTokenExpired();
       throw error;
     }

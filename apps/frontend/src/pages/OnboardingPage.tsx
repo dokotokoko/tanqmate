@@ -12,23 +12,20 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Collapse,
-  Chip,
 } from '@mui/material';
 import {
   Person,
   School,
   CheckCircle,
-  ExpandMore,
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
-import { useAuthStoreV2 } from '../stores/authStoreV2';
+import { API_BASE_URL } from '../config/api';
+import { useAuthStore } from '../stores/authStore';
 
 const OnboardingPage = () => {
   const navigate = useNavigate();
-  const { user } = useAuthStoreV2();
+  const { user, getAccessToken } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -88,18 +85,23 @@ const OnboardingPage = () => {
     setError(null);
 
     try {
-      const { data, error } = await supabase
-        .from('schools')
-        .select('id, name')
-        .eq('school_code', code)
-        .single();
+      const token = getAccessToken();
+      const response = await fetch(`${API_BASE_URL}/auth/verify-school-code`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ school_code: code }),
+      });
 
-      if (error || !data) {
+      if (!response.ok) {
         setFormErrors(prev => ({ ...prev, schoolCode: '学校コードが正しくありません' }));
         setShowClassInfo(false);
         setSchoolInfo(null);
       } else {
-        setSchoolInfo(data);
+        const payload = await response.json();
+        setSchoolInfo(payload.school);
         setShowClassInfo(true);
         setFormErrors(prev => ({ ...prev, schoolCode: '' }));
       }
@@ -151,35 +153,40 @@ const OnboardingPage = () => {
     setError(null);
 
     try {
-      const updateData: any = {
+      const token = getAccessToken();
+      const requestBody: Record<string, unknown> = {
         name: formData.name,
       };
 
       if (schoolInfo) {
-        updateData.school_id = schoolInfo.id;
-        updateData.school_code_locked = true;
-        updateData.grade = formData.grade;
-        updateData.class_name = formData.className;
-        updateData.attendance_number = parseInt(formData.attendanceNumber);
+        requestBody.school_code = formData.schoolCode;
+        requestBody.grade = formData.grade;
+        requestBody.class_name = formData.className;
+        requestBody.attendance_number = parseInt(formData.attendanceNumber, 10);
       }
 
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update(updateData)
-        .eq('id', user?.id);
+      const response = await fetch(`${API_BASE_URL}/auth/onboarding`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(requestBody),
+      });
 
-      if (updateError) {
-        throw updateError;
+      if (!response.ok) {
+        throw new Error('プロフィールの更新に失敗しました');
       }
 
       setSuccess(true);
       
-      // roleを取得して適切なページへリダイレクト
-      const { data: updatedProfile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user?.id)
-        .single();
+      const profileResponse = await fetch(`${API_BASE_URL}/auth/profile`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const profilePayload = profileResponse.ok ? await profileResponse.json() : null;
+      const updatedProfile = profilePayload?.profile;
       
       setTimeout(() => {
         if (updatedProfile?.role === 'teacher') {

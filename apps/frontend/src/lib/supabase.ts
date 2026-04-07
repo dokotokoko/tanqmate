@@ -1,12 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+const supabasePublishableKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '').trim();
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabasePublishableKey);
+export const supabaseConfigError = isSupabaseConfigured
+  ? null
+  : 'Supabase environment variables are missing: VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY';
 
 console.log('[Supabase] Initializing with URL:', supabaseUrl ? supabaseUrl.substring(0, 30) + '...' : 'NOT SET');
 console.log('[Supabase] Publishable key:', supabasePublishableKey ? 'SET' : 'NOT SET');
 
-if (!supabaseUrl || !supabasePublishableKey) {
+if (!isSupabaseConfigured) {
   console.error('[Supabase] 環境変数が設定されていません。.envファイルを作成し、以下の変数を設定してください：\nVITE_SUPABASE_URL\nVITE_SUPABASE_PUBLISHABLE_KEY');
 }
 

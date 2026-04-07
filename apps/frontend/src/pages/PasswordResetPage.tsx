@@ -16,7 +16,7 @@ import {
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { useAuthStoreV2 } from '../stores/authStoreV2';
+import { useAuthStore } from '../stores/authStore';
 
 const PasswordResetPage = () => {
   const navigate = useNavigate();
@@ -24,7 +24,7 @@ const PasswordResetPage = () => {
   const [emailError, setEmailError] = useState('');
   const [emailSent, setEmailSent] = useState(false);
   
-  const { resetPassword, isLoading, error, clearError } = useAuthStoreV2();
+  const { resetPassword, isLoading, error, clearError } = useAuthStore();
 
   const validateEmail = () => {
     if (!email) {

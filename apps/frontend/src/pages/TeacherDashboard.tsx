@@ -20,12 +20,12 @@ import {
   AdminPanelSettings,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStoreV2 } from '../stores/authStoreV2';
-import { supabase } from '../lib/supabase';
+import { API_BASE_URL } from '../config/api';
+import { useAuthStore } from '../stores/authStore';
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
-  const { user, userRole, signOut } = useAuthStoreV2();
+  const { user, userRole, signOut, getAccessToken } = useAuthStore();
   const [profile, setProfile] = useState<any>(null);
   const [schoolInfo, setSchoolInfo] = useState<any>(null);
 
@@ -37,12 +37,19 @@ const TeacherDashboard = () => {
     if (!user) return;
 
     try {
-      // プロフィール情報取得
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*, schools(name)')
-        .eq('id', user.id)
-        .single();
+      const token = getAccessToken();
+      const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch profile');
+      }
+
+      const payload = await response.json();
+      const profileData = payload.profile;
 
       setProfile(profileData);
       if (profileData?.schools) {

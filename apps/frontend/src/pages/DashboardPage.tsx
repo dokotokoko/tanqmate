@@ -32,7 +32,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
 import { ja } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStoreV2 } from '../stores/authStoreV2';
+import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import CreateProjectDialog from '../components/Project/CreateProjectDialog';
 import EditProjectDialog from '../components/Project/EditProjectDialog';
@@ -55,7 +55,7 @@ const DashboardPage: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
-  const { user } = useAuthStoreV2();
+  const { user } = useAuthStore();
   const isNewUser = () => false; // v2では新規ユーザー判定を一旦無効化
   const { clearCurrentMemo } = useChatStore();
   
@@ -127,9 +127,9 @@ const DashboardPage: React.FC = () => {
       setIsLoading(true);
       setError(null);
       
-      // Supabase v2認証のセッションを取得
-      const authStoreV2 = useAuthStoreV2.getState();
-      const session = authStoreV2.session;
+      // Supabase認証のセッションを取得
+      const authStore = useAuthStore.getState();
+      const session = authStore.session;
       
       console.log('[DashboardPage] Current session state:', {
         hasSession: !!session,
@@ -180,8 +180,8 @@ const DashboardPage: React.FC = () => {
         isRedirecting.current = true;
         
         // Supabaseセッションをクリア
-        const authStoreV2 = useAuthStoreV2.getState();
-        await authStoreV2.signOut();
+        const authStore = useAuthStore.getState();
+        await authStore.signOut();
         
         navigate('/signin');
         return;
@@ -221,8 +221,8 @@ const DashboardPage: React.FC = () => {
     hypothesis?: string;
   }) => {
     try {
-      const authStoreV2 = useAuthStoreV2.getState();
-      const session = authStoreV2.session;
+      const authStore = useAuthStore.getState();
+      const session = authStore.session;
       
       if (!session || !session.access_token) {
         navigate('/signin');
@@ -260,8 +260,8 @@ const DashboardPage: React.FC = () => {
     hypothesis?: string;
   }) => {
     try {
-      const authStoreV2 = useAuthStoreV2.getState();
-      const session = authStoreV2.session;
+      const authStore = useAuthStore.getState();
+      const session = authStore.session;
       
       if (!session || !session.access_token) {
         navigate('/signin');
@@ -311,8 +311,8 @@ const DashboardPage: React.FC = () => {
     if (!confirm('このプロジェクトを削除しますか？関連するメモも全て削除されます。')) return;
 
     try {
-      const authStoreV2 = useAuthStoreV2.getState();
-      const session = authStoreV2.session;
+      const authStore = useAuthStore.getState();
+      const session = authStore.session;
       
       if (!session || !session.access_token) {
         navigate('/signin');

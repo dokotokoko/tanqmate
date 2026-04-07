@@ -23,12 +23,10 @@ import {
   Lock,
   Google,
   ArrowBack,
-  CheckCircle,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
-import { useAuthStoreV2 } from '../stores/authStoreV2';
-import { supabase } from '../lib/supabase';
+import { useAuthStore } from '../stores/authStore';
 
 const SignUpPage = () => {
   const navigate = useNavigate();
@@ -46,7 +44,7 @@ const SignUpPage = () => {
   });
   const [emailExists, setEmailExists] = useState(false);
 
-  const { signUp, signInWithGoogle, isLoading, error, clearError } = useAuthStoreV2();
+  const { signUp, signInWithGoogle, isLoading, error, clearError } = useAuthStore();
 
   const steps = ['メールアドレス入力', 'パスワード設定'];
 
@@ -57,18 +55,6 @@ const SignUpPage = () => {
       errors.email = 'メールアドレスを入力してください';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       errors.email = '有効なメールアドレスを入力してください';
-    } else {
-      // メールアドレスの重複チェック
-      const { data } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', formData.email)
-        .single();
-      
-      if (data) {
-        errors.email = 'このメールアドレスは既に登録されています';
-        setEmailExists(true);
-      }
     }
 
     setFormErrors(prev => ({ ...prev, email: errors.email }));
@@ -122,8 +108,9 @@ const SignUpPage = () => {
   const handleSignUp = async () => {
     const result = await signUp(formData.email, formData.password);
     if (result.success) {
-      // 登録成功後はonboardingページへ
-      navigate('/onboarding');
+      navigate(result.requiresEmailConfirmation ? '/signup/complete' : '/onboarding');
+    } else if (result.error?.message?.toLowerCase().includes('already') || result.error?.message?.includes('registered')) {
+      setEmailExists(true);
     }
   };
 

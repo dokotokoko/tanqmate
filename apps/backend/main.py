@@ -13,7 +13,6 @@ load_dotenv()
 
 # ルーターインポート
 from routers.auth_router import router as auth_router
-from routers.auth_router_v2 import router as auth_router_v2
 from routers.chat_router import router as chat_router
 from routers.project_router import router as project_router
 from routers.memo_router import router as memo_router
@@ -104,9 +103,7 @@ if service_manager:
         excluded_paths = [
             "/",
             "/health",
-            "/auth/login",
-            "/auth/register", 
-            "/auth/refresh",
+            "/auth/verify-school-code",
             "/docs",
             "/openapi.json",
             "/redoc"
@@ -132,7 +129,6 @@ else:
 
 # ルーター登録
 app.include_router(auth_router)           # 認証関連
-app.include_router(auth_router_v2)        # 新認証システム
 app.include_router(chat_router)           # チャット関連
 app.include_router(project_router)        # プロジェクト関連
 app.include_router(memo_router)           # メモ管理関連

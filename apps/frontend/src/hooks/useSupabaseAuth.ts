@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useAuthStoreV2 } from '../stores/authStoreV2';
+import { useAuthStore } from '../stores/authStore';
 
 /**
  * Supabase認証状態を管理するカスタムフック
@@ -28,7 +28,7 @@ export const useSupabaseAuth = () => {
     clearError,
     isAuthenticated,
     getAccessToken,
-  } = useAuthStoreV2();
+  } = useAuthStore();
 
   // セッションの自動更新を設定
   useEffect(() => {

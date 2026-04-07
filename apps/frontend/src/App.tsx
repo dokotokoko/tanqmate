@@ -3,20 +3,17 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { QueryClient, QueryClientProvider } from 'react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuthStoreV2 } from './stores/authStoreV2';
+import { useAuthStore } from './stores/authStore';
 import { useThemeStore } from './stores/themeStore';
 import { createMuiTheme } from './styles/design-system';
 
 // 重要なページは静的インポート（初期ロードに必要）
-import LoginPage from './pages/LoginPage';
-import LoginPageV2 from './pages/LoginPageV2';
 import MigrationNoticePage from './pages/MigrationNoticePage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 import DashboardPage from './pages/DashboardPage';
 import ChatPage from './pages/ChatPage';
 import Layout from './components/Layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
-import ProtectedRouteV2 from './components/ProtectedRouteV2';
 import LoadingScreen from './components/LoadingScreen';
 
 // 新しい認証ページ
@@ -68,24 +65,22 @@ const LazyWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 );
 
 function App() {
-  const v2Auth = useAuthStoreV2();
-  const { isDarkMode, primaryColor } = useThemeStore();
+  const auth = useAuthStore();
+  const { isDarkMode } = useThemeStore();
   
-  // v2認証のみを初期化
   React.useEffect(() => {
     console.log('[App] Initializing auth...');
-    v2Auth.initialize();
+    void auth.initialize();
   }, []); // 依存配列を空にして初回のみ実行
   
-  // v2認証のみを使用
-  const user = v2Auth.user;
-  const isLoading = v2Auth.isLoading || !v2Auth.isInitialized;
+  const user = auth.user;
+  const isLoading = auth.isLoading || !auth.isInitialized;
   
   console.log('[App] Auth state:', {
     hasUser: !!user,
     isLoading,
-    isInitialized: v2Auth.isInitialized,
-    v2Loading: v2Auth.isLoading
+    isInitialized: auth.isInitialized,
+    authLoading: auth.isLoading
   });
 
   // デザインシステムからテーマを生成
@@ -141,9 +136,9 @@ function App() {
               <Route 
                 path="/onboarding" 
                 element={
-                  <ProtectedRouteV2>
+                  <ProtectedRoute>
                     <LazyWrapper><OnboardingPage /></LazyWrapper>
-                  </ProtectedRouteV2>
+                  </ProtectedRoute>
                 } 
               />
               
@@ -151,9 +146,9 @@ function App() {
               <Route 
                 path="/signup/complete" 
                 element={
-                  <ProtectedRouteV2>
+                  <ProtectedRoute>
                     <LazyWrapper><SignUpCompletePage /></LazyWrapper>
-                  </ProtectedRouteV2>
+                  </ProtectedRoute>
                 } 
               />
               
@@ -183,7 +178,7 @@ function App() {
                 element={<Navigate to="/signin" replace />}
               />
               
-              {/* 旧auth-v2ページ（signinへリダイレクト） */}
+              {/* 旧認証パスはsigninへリダイレクト */}
               <Route 
                 path="/auth-v2" 
                 element={<Navigate to="/signin" replace />}
@@ -235,7 +230,7 @@ function App() {
               />
               
               {/* アプリケーション本体（認証必要） */}
-              <Route path="/app" element={<ProtectedRouteV2><Layout /></ProtectedRouteV2>}>
+              <Route path="/app" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route index element={<Navigate to="/student" replace />} />
               </Route>
               
@@ -245,9 +240,9 @@ function App() {
               <Route 
                 path="/teacher" 
                 element={
-                  <ProtectedRouteV2>
+                  <ProtectedRoute>
                     <LazyWrapper><TeacherDashboard /></LazyWrapper>
-                  </ProtectedRouteV2>
+                  </ProtectedRoute>
                 } 
               />
               
@@ -255,16 +250,16 @@ function App() {
               <Route 
                 path="/dashboard" 
                 element={
-                  <ProtectedRouteV2>
+                  <ProtectedRoute>
                     <LazyWrapper><DashboardPage /></LazyWrapper>
-                  </ProtectedRouteV2>
+                  </ProtectedRoute>
                 } 
               />
               
               {/* /studentは/dashboardへリダイレクト */}
               <Route path="/student" element={<Navigate to="/dashboard" replace />} />
               
-              <Route element={<ProtectedRouteV2><Layout /></ProtectedRouteV2>}>
+              <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
                 <Route path="chat" element={<ChatPage />} />
                 <Route path="home" element={<LazyWrapper><HomePage /></LazyWrapper>} />
                 <Route path="projects/:projectId" element={<LazyWrapper><ProjectPage /></LazyWrapper>} />
