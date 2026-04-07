@@ -1,0 +1,32 @@
+# FastAPI関連
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# データベース関連
+mysql-connector-python==9.2.0
+psycopg2-binary==2.9.10
+
+# AI関連
+openai==1.102.0
+tiktoken==0.8.0
+
+# ユーティリティ
+python-dotenv==1.0.1
+pydantic==2.10.6
+
+# 認証関連
+PyJWT==2.10.1
+bcrypt==4.3.0 
+supabase==2.15.0
+
+# セキュリティ・バリデーション関連
+email-validator==2.3.0
+passlib[bcrypt]==1.7.4
+
+# HTTP Client関連（Supabase API用）
+httpx==0.28.1
+aiohttp>=3.11.18,<4
+
+# 日付・時刻処理関連
+python-dateutil==2.9.0

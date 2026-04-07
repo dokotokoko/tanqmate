@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # Nginxリバースプロキシ
+  nginx:
+    build: ../nginx
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ../nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - app-network
+
+  # バックエンドAPI
+  backend:
+    build: ../apps/backend
+    env_file:
+      - ../.env
+    environment:
+      - ENVIRONMENT=development
+    volumes:
+      - ../apps/backend:/app
+      - ../apps/backend/module:/app/module
+      - ../schema:/app/schema
+    networks:
+      - app-network
+    mem_limit: 6g
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --timeout-keep-alive 120
+
+  # フロントエンド
+  frontend:
+    build:
+      context: ../apps/frontend
+      target: development
+    env_file:
+      - ../.env
+    environment:
+      - VITE_API_URL=/api
+      - NODE_OPTIONS=--max-old-space-size=4096
+    volumes:
+      - ../apps/frontend:/app
+      - node_modules:/app/node_modules
+    networks:
+      - app-network
+    mem_limit: 6g
+    command: npm run dev -- --host 0.0.0.0
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  node_modules: {}
