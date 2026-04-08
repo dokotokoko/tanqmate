@@ -49,8 +49,8 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     {
       icon: <ChatIcon />,
       label: 'チャット',
-      path: '/chat',
-      action: () => navigate('/chat')
+      path: '/app/chat',
+      action: () => navigate('/app/chat')
     },
     {
       icon: <FolderIcon />,

@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { QueryClient, QueryClientProvider } from 'react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -64,6 +64,16 @@ const LazyWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   </Suspense>
 );
 
+const LegacyProjectRedirect: React.FC = () => {
+  const { projectId } = useParams<{ projectId: string }>();
+  return <Navigate to={`/app/projects/${projectId}`} replace />;
+};
+
+const LegacyMemoRedirect: React.FC = () => {
+  const { projectId, memoId } = useParams<{ projectId: string; memoId: string }>();
+  return <Navigate to={`/app/projects/${projectId}/memos/${memoId}`} replace />;
+};
+
 function App() {
   const auth = useAuthStore();
   const { isDarkMode } = useThemeStore();
@@ -115,21 +125,21 @@ function App() {
               />
               
               {/* 新ログインページ */}
-              <Route 
-                path="/signin" 
+              <Route
+                path="/signin"
                 element={
-                  user ? <Navigate to="/dashboard" replace /> : 
+                  user ? <Navigate to="/app/dashboard" replace /> :
                   <LazyWrapper><SignInPage /></LazyWrapper>
-                } 
+                }
               />
               
               {/* 新規登録ページ */}
-              <Route 
-                path="/signup" 
+              <Route
+                path="/signup"
                 element={
-                  user ? <Navigate to="/dashboard" replace /> : 
+                  user ? <Navigate to="/app/dashboard" replace /> :
                   <LazyWrapper><SignUpPage /></LazyWrapper>
-                } 
+                }
               />
               
               {/* Onboardingページ */}
@@ -231,7 +241,14 @@ function App() {
               
               {/* アプリケーション本体（認証必要） */}
               <Route path="/app" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                <Route index element={<Navigate to="/student" replace />} />
+                <Route index element={<Navigate to="dashboard" replace />} />
+                <Route path="dashboard" element={<LazyWrapper><DashboardPage /></LazyWrapper>} />
+                <Route path="chat" element={<ChatPage />} />
+                <Route path="home" element={<LazyWrapper><HomePage /></LazyWrapper>} />
+                <Route path="projects/:projectId" element={<LazyWrapper><ProjectPage /></LazyWrapper>} />
+                <Route path="projects/:projectId/memos/:memoId" element={<LazyWrapper><MemoPage /></LazyWrapper>} />
+                <Route path="memos" element={<LazyWrapper><MultiMemoPage /></LazyWrapper>} />
+                <Route path="inquiry" element={<LazyWrapper><GeneralInquiryPage /></LazyWrapper>} />
               </Route>
               
               {/* InquiryExplorer - 一時的に無効化（メモリ削減のため） */}
@@ -247,35 +264,16 @@ function App() {
               />
               
               {/* ダッシュボード */}
-              <Route 
-                path="/dashboard" 
-                element={
-                  <ProtectedRoute>
-                    <LazyWrapper><DashboardPage /></LazyWrapper>
-                  </ProtectedRoute>
-                } 
-              />
+              <Route path="/dashboard" element={<Navigate to="/app/dashboard" replace />} />
               
               {/* /studentは/dashboardへリダイレクト */}
-              <Route path="/student" element={<Navigate to="/dashboard" replace />} />
-              
-              <Route element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-                <Route path="chat" element={<ChatPage />} />
-                <Route path="home" element={<LazyWrapper><HomePage /></LazyWrapper>} />
-                <Route path="projects/:projectId" element={<LazyWrapper><ProjectPage /></LazyWrapper>} />
-                <Route path="projects/:projectId/memos/:memoId" element={<LazyWrapper><MemoPage /></LazyWrapper>} />
-                <Route path="memos" element={<LazyWrapper><MultiMemoPage /></LazyWrapper>} />
-                <Route path="inquiry" element={<LazyWrapper><GeneralInquiryPage /></LazyWrapper>} />
-                {/* <Route path="quests" element={<QuestBoardPage />} /> 一時的に非表示 */}
-                {/* 不要なルートを一時的に無効化（メモリ削減のため）
-                <Route path="framework-games/theme-deep-dive" element={<LazyWrapper><ThemeDeepDiveGame /></LazyWrapper>} />
-                <Route path="conversation-agent-test" element={<LazyWrapper><ConversationAgentTestPage /></LazyWrapper>} />
-                <Route path="notification-demo" element={<LazyWrapper><NotificationDemoPage /></LazyWrapper>} />
-                <Route path="vibes-tanq/onboarding" element={<LazyWrapper><VibesTanqOnboarding /></LazyWrapper>} />
-                <Route path="vibes-tanq/dashboard" element={<LazyWrapper><VibesTanqDashboard /></LazyWrapper>} />
-                <Route path="step/:stepNumber" element={<LazyWrapper><StepPage /></LazyWrapper>} />
-                */}
-              </Route>
+              <Route path="/student" element={<Navigate to="/app/dashboard" replace />} />
+              <Route path="/chat" element={<Navigate to="/app/chat" replace />} />
+              <Route path="/home" element={<Navigate to="/app/home" replace />} />
+              <Route path="/projects/:projectId" element={<LegacyProjectRedirect />} />
+              <Route path="/projects/:projectId/memos/:memoId" element={<LegacyMemoRedirect />} />
+              <Route path="/memos" element={<Navigate to="/app/memos" replace />} />
+              <Route path="/inquiry" element={<Navigate to="/app/inquiry" replace />} />
               
               {/* 未定義ルートのフォールバック */}
               <Route path="*" element={<Navigate to="/" replace />} />

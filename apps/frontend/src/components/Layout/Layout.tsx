@@ -78,21 +78,21 @@ const Layout: React.FC = () => {
       <Box sx={{ display: 'flex', minHeight: '100vh', background: '#FFFAED' }}>
         {/* New Left Sidebar */}
         {!isMobile && (
-          <LeftSidebar
-            onDashboardToggle={handleDashboardSidebarToggle}
-            onNewChat={() => {
-              navigate('/chat');
-              // URLパラメータでnewChatフラグを設定
-              setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('newChatRequest'));
-              }, 100);
-            }}
-            onHistoryOpen={() => {
-              navigate('/chat');
-              // URLパラメータでhistoryOpenフラグを設定
-              setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('historyOpenRequest'));
-              }, 100);
+            <LeftSidebar
+              onDashboardToggle={handleDashboardSidebarToggle}
+              onNewChat={() => {
+                navigate('/app/chat');
+                // URLパラメータでnewChatフラグを設定
+                setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent('newChatRequest'));
+                }, 100);
+              }}
+              onHistoryOpen={() => {
+                navigate('/app/chat');
+                // URLパラメータでhistoryOpenフラグを設定
+                setTimeout(() => {
+                  window.dispatchEvent(new CustomEvent('historyOpenRequest'));
+                }, 100);
             }}
           />
         )}
