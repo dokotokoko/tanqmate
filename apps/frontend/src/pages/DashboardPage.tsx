@@ -1,44 +1,36 @@
-import React, { useState, useEffect, memo, useMemo, useCallback, useRef } from 'react';
-import { API_BASE_URL } from '../config/api';
+import React, { memo, useEffect, useState } from 'react';
 import {
+  Alert,
   Box,
-  Container,
-  Typography,
+  Button,
   Card,
   CardContent,
-  Button,
+  CircularProgress,
+  Container,
   IconButton,
+  ListItemIcon,
+  ListItemText,
   Menu,
   MenuItem,
-  Alert,
-  ListItemText,
-  ListItemIcon,
-  CircularProgress,
-  useTheme,
-  useMediaQuery,
+  Typography,
 } from '@mui/material';
 import {
   Add as AddIcon,
-  MoreVert as MoreIcon,
-  AccessTime as TimeIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  FolderOpen as FolderIcon,
-  Assignment as AssignmentIcon,
-  Description as DescriptionIcon,
   CalendarToday as CalendarIcon,
+  Delete as DeleteIcon,
+  Description as DescriptionIcon,
+  Edit as EditIcon,
+  MoreVert as MoreIcon,
 } from '@mui/icons-material';
-import { motion, AnimatePresence } from 'framer-motion';
-import { format } from 'date-fns';
-import { ja } from 'date-fns/locale';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../stores/authStore';
-import { useChatStore } from '../stores/chatStore';
 import CreateProjectDialog from '../components/Project/CreateProjectDialog';
 import EditProjectDialog from '../components/Project/EditProjectDialog';
-import SimpleTutorial from '../components/Tutorial/SimpleTutorial';
 import { simpleSteps } from '../components/Tutorial/DashboardTutorial';
-import { createDashboardTutorial } from '../components/Tutorial/DashboardTutorial';
+import SimpleTutorial from '../components/Tutorial/SimpleTutorial';
+import { API_BASE_URL } from '../config/api';
+import { useAuthStore } from '../stores/authStore';
+import { useChatStore } from '../stores/chatStore';
 
 interface Project {
   id: number;
@@ -47,18 +39,20 @@ interface Project {
   hypothesis?: string;
   created_at: string;
   updated_at: string;
-  memo_count: number;
+  memo_count?: number;
+}
+
+interface ProjectPayload {
+  theme: string;
+  question?: string;
+  hypothesis?: string;
 }
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
-  const { user } = useAuthStore();
-  const isNewUser = () => false; // v2では新規ユーザー判定を一旦無効化
+  const { user, getAccessToken } = useAuthStore();
   const { clearCurrentMemo } = useChatStore();
-  
+
   const [projects, setProjects] = useState<Project[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -66,176 +60,106 @@ const DashboardPage: React.FC = () => {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  
-  // SimpleTutorial用の状態管理
   const [showTutorial, setShowTutorial] = useState(false);
-  
-  // リダイレクト制御用
-  const isRedirecting = useRef(false);
 
-  // ユーザーID取得の共通関数
-  const getUserId = (): string | null => {
-    const authData = localStorage.getItem('auth-storage');
-    if (authData) {
-      try {
-        const parsed = JSON.parse(authData);
-        return parsed.state?.user?.id || null;
-      } catch (e) {
-        console.error('認証データの解析に失敗:', e);
-        return null;
-      }
+  const getTutorialStorageKey = () => {
+    if (!user?.id) {
+      return null;
     }
-    return null;
+    return `tutorial-shown-${user.id}`;
   };
 
-  // チュートリアル表示済みフラグの管理
-  const getTutorialShownFlag = (): boolean => {
-    const userId = getUserId();
-    if (!userId) return false;
-    
-    const flag = localStorage.getItem(`tutorial-shown-${userId}`);
-    return flag === 'true';
+  const hasShownTutorial = () => {
+    const key = getTutorialStorageKey();
+    return key ? localStorage.getItem(key) === 'true' : false;
   };
 
-  const setTutorialShownFlag = (): void => {
-    const userId = getUserId();
-    if (!userId) return;
-    
-    localStorage.setItem(`tutorial-shown-${userId}`, 'true');
-  };
-
-  // ダッシュボードページ初期化時の処理
-  useEffect(() => {
-    // メモ情報をクリアしてLayout.tsxのAIチャットを汎用モードにする
-    clearCurrentMemo();
-    
-    // 初回ログイン時かつチュートリアル未表示の場合のみチュートリアルを開始
-    if (isNewUser() && !getTutorialShownFlag()) {
-      setTimeout(() => {
-        setShowTutorial(true);
-        setTutorialShownFlag(); // フラグを設定
-      }, 1000);
+  const markTutorialShown = () => {
+    const key = getTutorialStorageKey();
+    if (key) {
+      localStorage.setItem(key, 'true');
     }
-  }, [clearCurrentMemo]);
+  };
 
-  // プロジェクト一覧の取得
+  const getAuthHeaders = () => {
+    const accessToken = getAccessToken();
+    if (!accessToken) {
+      throw new Error('認証セッションが見つかりません。再ログインしてください。');
+    }
+
+    return {
+      Authorization: `Bearer ${accessToken}`,
+    };
+  };
+
   const fetchProjects = async () => {
-    // すでにリダイレクト中の場合は何もしない
-    if (isRedirecting.current) return;
-    
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);
-      
-      // Supabase認証のセッションを取得
-      const authStore = useAuthStore.getState();
-      const session = authStore.session;
-      
-      console.log('[DashboardPage] Current session state:', {
-        hasSession: !!session,
-        hasAccessToken: !!session?.access_token,
-        tokenType: session?.token_type,
-        expiresAt: session?.expires_at
-      });
-      
-      if (!session || !session.access_token) {
-        console.error('No valid session found, redirecting to signin...');
-        isRedirecting.current = true;
-        navigate('/signin');
-        return;
-      }
 
-      // デバッグ：トークンの存在を確認
-      console.log('[DashboardPage] Sending request with token:', {
-        hasToken: !!session.access_token,
-        tokenPrefix: session.access_token ? session.access_token.substring(0, 20) + '...' : 'NO TOKEN',
-        endpoint: `${API_BASE_URL}/projects`
-      });
-      
       const response = await fetch(`${API_BASE_URL}/projects`, {
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        credentials: 'include',
+        headers: getAuthHeaders(),
       });
-
-      // デバッグ：レスポンスの詳細を確認
-      console.log('[DashboardPage] API Response:', {
-        status: response.status,
-        statusText: response.statusText,
-        headers: Object.fromEntries(response.headers.entries())
-      });
-      
-      if (response.status === 401 || response.status === 403) {
-        // エラーの詳細を取得
-        const errorBody = await response.text();
-        console.error('[DashboardPage] Authentication error details:', {
-          status: response.status,
-          body: errorBody
-        });
-        
-        // 認証エラーの場合はSupabaseセッションもクリアしてサインインページへ
-        console.error('Clearing session and redirecting to signin...');
-        isRedirecting.current = true;
-        
-        // Supabaseセッションをクリア
-        const authStore = useAuthStore.getState();
-        await authStore.signOut();
-        
-        navigate('/signin');
-        return;
-      }
 
       if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('認証の有効期限が切れています。再ログインしてください。');
+        }
         throw new Error(`プロジェクトの取得に失敗しました (${response.status})`);
       }
-      
-      const data = await response.json();
+
+      const data = (await response.json()) as Project[];
       setProjects(data);
-      
-    } catch (error) {
-      console.error('プロジェクト取得エラー:', error);
-      setError(error instanceof Error ? error.message : 'プロジェクトの取得でエラーが発生しました');
+    } catch (fetchError) {
+      console.error('プロジェクト取得エラー:', fetchError);
+      setError(
+        fetchError instanceof Error
+          ? fetchError.message
+          : 'プロジェクトの取得でエラーが発生しました'
+      );
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isRedirecting.current) return;
-    
+    clearCurrentMemo();
+  }, [clearCurrentMemo]);
+
+  useEffect(() => {
     if (!user) {
-      isRedirecting.current = true;
-      navigate('/signin');
       return;
     }
-    
-    fetchProjects();
-  }, [user, navigate]);
 
-  // プロジェクト作成の処理
-  const handleCreateProject = async (projectData: {
-    theme: string;
-    question?: string;
-    hypothesis?: string;
-  }) => {
+    void fetchProjects();
+
+    if (!hasShownTutorial()) {
+      const timerId = window.setTimeout(() => {
+        setShowTutorial(true);
+        markTutorialShown();
+      }, 1000);
+
+      return () => window.clearTimeout(timerId);
+    }
+
+    return undefined;
+  }, [user]);
+
+  const handleCreateProject = async (projectData: ProjectPayload) => {
     try {
-      const authStore = useAuthStore.getState();
-      const session = authStore.session;
-      
-      if (!session || !session.access_token) {
-        navigate('/signin');
-        return;
-      }
-      
+      setError(null);
+
       const response = await fetch(`${API_BASE_URL}/projects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          ...getAuthHeaders(),
         },
-        credentials: 'include',
         body: JSON.stringify(projectData),
       });
 
@@ -244,100 +168,95 @@ const DashboardPage: React.FC = () => {
         console.error('プロジェクト作成エラー:', errorText);
         throw new Error('プロジェクトの作成に失敗しました');
       }
-      
+
       await fetchProjects();
       setIsCreateDialogOpen(false);
-    } catch (error) {
-      console.error('Error creating project:', error);
-      setError(error instanceof Error ? error.message : 'プロジェクトの作成に失敗しました');
+    } catch (createError) {
+      console.error('プロジェクト作成エラー:', createError);
+      setError(
+        createError instanceof Error
+          ? createError.message
+          : 'プロジェクトの作成に失敗しました'
+      );
     }
   };
 
-  // プロジェクト編集の処理
-  const handleEditProject = async (projectId: number, projectData: {
-    theme: string;
-    question?: string;
-    hypothesis?: string;
-  }) => {
+  const handleEditProject = async (projectId: number, projectData: ProjectPayload) => {
     try {
-      const authStore = useAuthStore.getState();
-      const session = authStore.session;
-      
-      if (!session || !session.access_token) {
-        navigate('/signin');
-        return;
-      }
+      setError(null);
 
       const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          ...getAuthHeaders(),
         },
-        credentials: 'include',
         body: JSON.stringify(projectData),
       });
 
       if (!response.ok) {
         const errorText = await response.text();
         console.error('プロジェクト編集エラー:', errorText);
-        
-        if (response.status === 403) {
-          throw new Error('アクセス権限がありません。再ログインしてください。');
-        } else if (response.status === 404) {
-          throw new Error('プロジェクトが見つかりません。');
-        } else {
-          throw new Error(`プロジェクトの更新に失敗しました (エラーコード: ${response.status})`);
+
+        if (response.status === 401) {
+          throw new Error('認証の有効期限が切れています。再ログインしてください。');
         }
+        if (response.status === 403) {
+          throw new Error('このプロジェクトを編集する権限がありません。');
+        }
+        if (response.status === 404) {
+          throw new Error('プロジェクトが見つかりません。');
+        }
+
+        throw new Error(`プロジェクトの更新に失敗しました (${response.status})`);
       }
-      
-      // プロジェクト一覧を再読み込み
+
       await fetchProjects();
       setIsEditDialogOpen(false);
       setSelectedProject(null);
-      
-    } catch (error) {
-      console.error('プロジェクト編集でエラー:', error);
-      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        setError('サーバーに接続できません。バックエンドサーバーが起動しているか確認してください。');
-      } else {
-        setError(error instanceof Error ? error.message : 'プロジェクトの更新でエラーが発生しました');
-      }
+    } catch (editError) {
+      console.error('プロジェクト編集エラー:', editError);
+      setError(
+        editError instanceof Error
+          ? editError.message
+          : 'プロジェクトの更新に失敗しました'
+      );
     }
   };
 
-  // プロジェクト削除の処理
   const handleDeleteProject = async (projectId: number) => {
-    if (!confirm('このプロジェクトを削除しますか？関連するメモも全て削除されます。')) return;
+    if (!window.confirm('このプロジェクトを削除しますか？関連するメモも全て削除されます。')) {
+      return;
+    }
 
     try {
-      const authStore = useAuthStore.getState();
-      const session = authStore.session;
-      
-      if (!session || !session.access_token) {
-        navigate('/signin');
-        return;
-      }
-      
+      setError(null);
+
       const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        credentials: 'include',
+        headers: getAuthHeaders(),
       });
 
-      if (!response.ok) throw new Error('プロジェクトの削除に失敗しました');
-      
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('認証の有効期限が切れています。再ログインしてください。');
+        }
+        throw new Error('プロジェクトの削除に失敗しました');
+      }
+
       await fetchProjects();
       setMenuAnchor(null);
       setSelectedProject(null);
-    } catch (error) {
-      console.error('Error deleting project:', error);
+    } catch (deleteError) {
+      console.error('プロジェクト削除エラー:', deleteError);
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : 'プロジェクトの削除に失敗しました'
+      );
     }
   };
 
-  // プロジェクトメニューハンドラー
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, project: Project) => {
     event.stopPropagation();
     setMenuAnchor(event.currentTarget);
@@ -346,46 +265,26 @@ const DashboardPage: React.FC = () => {
 
   const handleMenuClose = () => {
     setMenuAnchor(null);
-    // selectedProject はここではクリアしない（ダイアログで使用するため）
   };
 
-  // ローディング状態
   if (isLoading) {
     return (
-      <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Typography>読み込み中...</Typography>
-      </Container>
-    );
-  }
-
-  // エラー状態
-  if (error) {
-    return (
-      <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Alert severity="error" sx={{ mb: 2 }}>
-          <Typography variant="h6">プロジェクトの読み込みに失敗しました</Typography>
-          <Typography variant="body2">{error}</Typography>
-        </Alert>
-        
-        <Button variant="contained" onClick={fetchProjects} sx={{ mr: 2 }}>
-          再試行
-        </Button>
-        
-        <Button variant="outlined" onClick={() => navigate('/signin')}>
-          ログイン画面へ
-        </Button>
+      <Container maxWidth="lg" sx={{ py: 6 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 240 }}>
+          <CircularProgress />
+        </Box>
       </Container>
     );
   }
 
   return (
     <>
-      <Container 
-        maxWidth="lg" 
-        sx={{ 
+      <Container
+        maxWidth="lg"
+        sx={{
           py: { xs: 2, sm: 4 },
-          px: { xs: 2, sm: 3 }
-        }} 
+          px: { xs: 2, sm: 3 },
+        }}
         data-tutorial="welcome-section"
       >
         <motion.div
@@ -393,187 +292,195 @@ const DashboardPage: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
+          <Box sx={{ mb: 4 }}>
+            <Typography
+              variant="h4"
+              sx={{
+                fontWeight: 600,
+                fontSize: { xs: '1.75rem', sm: '2.125rem' },
+              }}
+            >
+              ダッシュボード
+            </Typography>
+          </Box>
 
-        {/* タイトル */}
-        <Box sx={{ mb: 4 }}>
-          <Typography 
-            variant="h4" 
-            sx={{ 
-              fontWeight: 600,
-              fontSize: { xs: '1.75rem', sm: '2.125rem' }
-            }}
-          >
-            ダッシュボード
-          </Typography>
-        </Box>
+          {error && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              <Typography variant="body2">{error}</Typography>
+            </Alert>
+          )}
 
-        {/* プロジェクトセクション */}
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: { xs: 'flex-start', sm: 'center' },
-          flexDirection: { xs: 'column', sm: 'row' },
-          gap: { xs: 2, sm: 0 },
-          mb: 3 
-        }}>
-          <Typography 
-            variant="h5" 
-            sx={{ 
-              fontWeight: 600,
-              fontSize: { xs: '1.25rem', sm: '1.5rem' }
-            }}
-          >
-            探究プロジェクト
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setIsCreateDialogOpen(true)}
-            data-tutorial="create-project-button"
+          <Box
             sx={{
-              background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
-              color: 'white',
-              '&:hover': {
-                background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
-              },
-              borderRadius: 2,
-              px: { xs: 2, sm: 3 },
-              py: 1.5,
-              fontSize: { xs: '0.875rem', sm: '1rem' },
-              width: { xs: '100%', sm: 'auto' }
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: { xs: 'flex-start', sm: 'center' },
+              flexDirection: { xs: 'column', sm: 'row' },
+              gap: { xs: 2, sm: 0 },
+              mb: 3,
             }}
           >
-            <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>新しいプロジェクト</Box>
-            <Box sx={{ display: { xs: 'inline', sm: 'none' } }}>プロジェクト作成</Box>
-          </Button>
-        </Box>
+            <Typography
+              variant="h5"
+              sx={{
+                fontWeight: 600,
+                fontSize: { xs: '1.25rem', sm: '1.5rem' },
+              }}
+            >
+              探究プロジェクト
+            </Typography>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setIsCreateDialogOpen(true)}
+              data-tutorial="create-project-button"
+              sx={{
+                background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
+                color: 'white',
+                '&:hover': {
+                  background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
+                },
+                borderRadius: 2,
+                px: { xs: 2, sm: 3 },
+                py: 1.5,
+                fontSize: { xs: '0.875rem', sm: '1rem' },
+                width: { xs: '100%', sm: 'auto' },
+              }}
+            >
+              <Box sx={{ display: { xs: 'none', sm: 'inline' } }}>新しいプロジェクト</Box>
+              <Box sx={{ display: { xs: 'inline', sm: 'none' } }}>プロジェクト作成</Box>
+            </Button>
+          </Box>
 
-        {/* プロジェクト一覧 */}
-        <Box sx={{ mb: 4 }} data-tutorial="project-list">
-          {isLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-              <CircularProgress />
-            </Box>
-          ) : projects.length === 0 ? (
-            <Box sx={{ 
-              textAlign: 'center', 
-              py: { xs: 4, sm: 8 },
-              px: { xs: 2, sm: 0 }
-            }}>
-              <DescriptionIcon sx={{ 
-                fontSize: { xs: 48, sm: 64 }, 
-                color: 'text.secondary', 
-                mb: 2 
-              }} />
-              <Typography 
-                variant="h6" 
-                color="text.secondary" 
-                gutterBottom
-                sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
-              >
-                まだプロジェクトがありません
-              </Typography>
-              <Typography 
-                variant="body2" 
-                color="text.secondary" 
-                sx={{ 
-                  mb: 3,
-                  fontSize: { xs: '0.875rem', sm: '1rem' },
-                  maxWidth: { xs: '280px', sm: 'none' },
-                  mx: 'auto'
-                }}
-              >
-                新しいプロジェクトを作成して、探究を始めましょう
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={() => setIsCreateDialogOpen(true)}
+          <Box sx={{ mb: 4 }} data-tutorial="project-list">
+            {projects.length === 0 ? (
+              <Box
                 sx={{
-                  background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
-                  color: 'white',
-                  '&:hover': {
-                    background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
-                  },
-                  borderRadius: 1.4,
-                  px: { xs: 3, sm: 4 },
-                  py: { xs: 1.5, sm: 2 },
-                  fontSize: { xs: '0.875rem', sm: '1rem' },
-                  width: { xs: '100%', sm: 'auto' },
-                  maxWidth: { xs: '280px', sm: 'none' }
+                  textAlign: 'center',
+                  py: { xs: 4, sm: 8 },
+                  px: { xs: 2, sm: 0 },
                 }}
               >
-                最初のプロジェクトを作成
-              </Button>
-            </Box>
-          ) : (
-            <Box sx={{ 
-              display: 'grid',
-              gridTemplateColumns: { 
-                xs: '1fr', 
-                sm: 'repeat(2, 1fr)', 
-                md: 'repeat(2, 1fr)',
-                lg: 'repeat(3, 1fr)'
-              },
-              gap: { xs: 2, sm: 3 }
-            }}>
-              <AnimatePresence>
-                {projects.map((project) => (
-                  <motion.div
-                    key={project.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <Card
-                      sx={{
-                        cursor: 'pointer',
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          transform: 'translateY(-2px)',
-                          boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
-                        },
-                      }}
-                      onClick={() => navigate(`/app/projects/${project.id}`)}
+                <DescriptionIcon
+                  sx={{
+                    fontSize: { xs: 48, sm: 64 },
+                    color: 'text.secondary',
+                    mb: 2,
+                  }}
+                />
+                <Typography
+                  variant="h6"
+                  color="text.secondary"
+                  gutterBottom
+                  sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
+                >
+                  まだプロジェクトがありません
+                </Typography>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{
+                    mb: 3,
+                    fontSize: { xs: '0.875rem', sm: '1rem' },
+                    maxWidth: { xs: '280px', sm: 'none' },
+                    mx: 'auto',
+                  }}
+                >
+                  新しいプロジェクトを作成して、探究を始めましょう
+                </Typography>
+                <Button
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                  onClick={() => setIsCreateDialogOpen(true)}
+                  sx={{
+                    background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
+                    color: 'white',
+                    '&:hover': {
+                      background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
+                    },
+                    borderRadius: 1.4,
+                    px: { xs: 3, sm: 4 },
+                    py: { xs: 1.5, sm: 2 },
+                    fontSize: { xs: '0.875rem', sm: '1rem' },
+                    width: { xs: '100%', sm: 'auto' },
+                    maxWidth: { xs: '280px', sm: 'none' },
+                  }}
+                >
+                  最初のプロジェクトを作成
+                </Button>
+              </Box>
+            ) : (
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: '1fr',
+                    sm: 'repeat(2, 1fr)',
+                    lg: 'repeat(3, 1fr)',
+                  },
+                  gap: { xs: 2, sm: 3 },
+                }}
+              >
+                <AnimatePresence>
+                  {projects.map((project) => (
+                    <motion.div
+                      key={project.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.3 }}
                     >
-                      <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-                        <Box sx={{ 
-                          display: 'flex', 
-                          justifyContent: 'space-between', 
-                          alignItems: 'flex-start',
-                          gap: { xs: 1, sm: 2 }
-                        }}>
-                          <Box sx={{ flex: 1, minWidth: 0 }}>
-                            <Typography 
-                              variant="h6" 
-                              sx={{ 
-                                fontWeight: 600, 
-                                mb: 1,
-                                fontSize: { xs: '1rem', sm: '1.25rem' },
-                                lineHeight: 1.3,
-                                wordBreak: 'break-word'
-                              }}
-                            >
-                              {project.theme}
-                            </Typography>
-                            <Box sx={{ 
-                              display: 'flex', 
-                              alignItems: 'center', 
-                              gap: { xs: 1, sm: 2 }, 
-                              mt: 2,
-                              flexWrap: 'wrap'
-                            }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <CalendarIcon 
-                                  fontSize="small" 
-                                  sx={{ 
+                      <Card
+                        sx={{
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease',
+                          '&:hover': {
+                            transform: 'translateY(-2px)',
+                            boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+                          },
+                        }}
+                        onClick={() => navigate(`/projects/${project.id}`)}
+                      >
+                        <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'flex-start',
+                              gap: { xs: 1, sm: 2 },
+                            }}
+                          >
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography
+                                variant="h6"
+                                sx={{
+                                  fontWeight: 600,
+                                  mb: 1,
+                                  fontSize: { xs: '1rem', sm: '1.25rem' },
+                                  lineHeight: 1.3,
+                                  wordBreak: 'break-word',
+                                }}
+                              >
+                                {project.theme}
+                              </Typography>
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 1,
+                                  mt: 2,
+                                  flexWrap: 'wrap',
+                                }}
+                              >
+                                <CalendarIcon
+                                  fontSize="small"
+                                  sx={{
                                     color: 'text.secondary',
-                                    fontSize: { xs: '16px', sm: '20px' }
-                                  }} 
+                                    fontSize: { xs: '16px', sm: '20px' },
+                                  }}
                                 />
-                                <Typography 
-                                  variant="caption" 
+                                <Typography
+                                  variant="caption"
                                   color="text.secondary"
                                   sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
                                 >
@@ -581,99 +488,90 @@ const DashboardPage: React.FC = () => {
                                 </Typography>
                               </Box>
                             </Box>
+
+                            <IconButton
+                              onClick={(event) => handleMenuOpen(event, project)}
+                              sx={{
+                                opacity: 0.7,
+                                '&:hover': { opacity: 1 },
+                                p: { xs: 1, sm: 1.5 },
+                              }}
+                            >
+                              <MoreIcon sx={{ fontSize: { xs: '20px', sm: '24px' } }} />
+                            </IconButton>
                           </Box>
-                          
-                          <IconButton
-                            onClick={(e) => handleMenuOpen(e, project)}
-                            sx={{ 
-                              opacity: 0.7, 
-                              '&:hover': { opacity: 1 },
-                              p: { xs: 1, sm: 1.5 }
-                            }}
-                          >
-                            <MoreIcon sx={{ fontSize: { xs: '20px', sm: '24px' } }} />
-                          </IconButton>
-                        </Box>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </Box>
-          )}
-        </Box>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </Box>
+            )}
+          </Box>
 
+          <CreateProjectDialog
+            open={isCreateDialogOpen}
+            onClose={() => setIsCreateDialogOpen(false)}
+            onSubmit={handleCreateProject}
+          />
 
-        {/* ダイアログ */}
-        <CreateProjectDialog
-          open={isCreateDialogOpen}
-          onClose={() => setIsCreateDialogOpen(false)}
-          onSubmit={handleCreateProject}
-        />
-
-        <EditProjectDialog
-          open={isEditDialogOpen}
-          project={selectedProject}
-          onClose={() => {
-            setIsEditDialogOpen(false);
-            setSelectedProject(null);
-          }}
-          onSubmit={handleEditProject}
-        />
-
-        {/* コンテキストメニュー */}
-        <Menu
-          anchorEl={menuAnchor}
-          open={Boolean(menuAnchor)}
-          onClose={handleMenuClose}
-        >
-          <MenuItem
-            onClick={() => {
-              if (selectedProject) {
-                setIsEditDialogOpen(true);
-              }
-              handleMenuClose();
+          <EditProjectDialog
+            open={isEditDialogOpen}
+            project={selectedProject}
+            onClose={() => {
+              setIsEditDialogOpen(false);
+              setSelectedProject(null);
             }}
-          >
-            <ListItemIcon>
-              <EditIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>編集</ListItemText>
-          </MenuItem>
-          <MenuItem
-            onClick={() => {
-              if (selectedProject) {
-                handleDeleteProject(selectedProject.id);
-              }
-              handleMenuClose();
-            }}
-            sx={{ color: 'error.main' }}
-          >
-            <ListItemIcon>
-              <DeleteIcon fontSize="small" color="error" />
-            </ListItemIcon>
-            <ListItemText>削除</ListItemText>
-          </MenuItem>
-        </Menu>
+            onSubmit={handleEditProject}
+          />
+
+          <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose}>
+            <MenuItem
+              onClick={() => {
+                if (selectedProject) {
+                  setIsEditDialogOpen(true);
+                }
+                handleMenuClose();
+              }}
+            >
+              <ListItemIcon>
+                <EditIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>編集</ListItemText>
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                if (selectedProject) {
+                  void handleDeleteProject(selectedProject.id);
+                }
+                handleMenuClose();
+              }}
+              sx={{ color: 'error.main' }}
+            >
+              <ListItemIcon>
+                <DeleteIcon fontSize="small" color="error" />
+              </ListItemIcon>
+              <ListItemText>削除</ListItemText>
+            </MenuItem>
+          </Menu>
         </motion.div>
       </Container>
-      
-      {/* SimpleTutorial */}
+
       <SimpleTutorial
         steps={simpleSteps}
         isOpen={showTutorial}
-        spotlightClicks={false} // チュートリアル中はハイライトされた要素のクリックを無効化
+        spotlightClicks={false}
         onClose={() => {
           setShowTutorial(false);
-          setTutorialShownFlag(); // チュートリアルを閉じた時もフラグを設定
+          markTutorialShown();
         }}
         onComplete={() => {
           setShowTutorial(false);
-          setTutorialShownFlag(); // チュートリアル完了時もフラグを設定
+          markTutorialShown();
         }}
       />
     </>
   );
 };
 
-export default memo(DashboardPage); 
+export default memo(DashboardPage);
