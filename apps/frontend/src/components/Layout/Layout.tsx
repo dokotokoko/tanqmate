@@ -1,25 +1,14 @@
 // react-app/src/components/Layout/Layout.tsx
-import React, { useState, useCallback, useEffect, useMemo, memo } from 'react';
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useCallback, useEffect, memo } from 'react';
+import { Outlet, useNavigate } from 'react-router-dom';
 import {
   Box,
-  Typography,
   IconButton,
-  Avatar,
   useTheme,
   useMediaQuery,
-  Menu,
-  MenuItem,
 } from '@mui/material';
-import {
-  Menu as MenuIcon,
-  Logout,
-  ExpandMore,
-} from '@mui/icons-material';
-import { motion} from 'framer-motion';
-import { useAuthStore } from '../../stores/authStore';
-import { useChatStore } from '../../stores/chatStore';
-import { useTutorialStore } from '../../stores/tutorialStore';
+import { Menu as MenuIcon } from '@mui/icons-material';
+import { motion } from 'framer-motion';
 import DashboardSidebar from './DashboardSidebar';
 import LeftSidebar from './LeftSidebar';
 
@@ -40,53 +29,15 @@ export const LayoutContext = React.createContext<LayoutContextType>({
 
 const Layout: React.FC = () => {
   const navigate = useNavigate();
-  const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
-  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
-  
-  const { user, logout } = useAuthStore();
-  const { 
-    chatPageId, 
-  } = useChatStore();
 
-  // 現在のページに基づくチャットページIDを生成
-  const getEffectiveChatPageId = () => {
-    if (chatPageId) return chatPageId;
-    
-    // プロジェクトページの場合
-    const projectMatch = location.pathname.match(/\/projects\/(\d+)/);
-    if (projectMatch) {
-      return `project-${projectMatch[1]}`;
-    }
-    
-    // ダッシュボードやその他のページの場合
-    return `general-${location.pathname.replace(/\//g, '-')}`;
-  };
-  const { startTutorialManually } = useTutorialStore();
-  
   const [dashboardSidebarOpen, setDashboardSidebarOpen] = useState(!isMobile); // モバイルではデフォルトで非表示
   const [dashboardSidebarWidth, setDashboardSidebarWidth] = useState(defaultDashboardSidebarWidth);
-  const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
 
   const handleDashboardSidebarToggle = useCallback(() => {
     setDashboardSidebarOpen(prev => !prev);
   }, []);
-
-  const handleLogout = () => {
-    logout();
-    navigate('/signin');
-    setUserMenuAnchor(null);
-  };
-
-  const handleUserMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
-    setUserMenuAnchor(event.currentTarget);
-  };
-
-  const handleUserMenuClose = () => {
-    setUserMenuAnchor(null);
-  };
 
   // ウィンドウリサイズ時のダッシュボードサイドバー幅調整
   useEffect(() => {
@@ -122,13 +73,12 @@ const Layout: React.FC = () => {
     }
   }, [isMobile, hasInitialized]);
 
-
   return (
     <LayoutContext.Provider value={{ sidebarOpen: true, onSidebarToggle: handleDashboardSidebarToggle }}>
       <Box sx={{ display: 'flex', minHeight: '100vh', background: '#FFFAED' }}>
         {/* New Left Sidebar */}
         {!isMobile && (
-          <LeftSidebar 
+          <LeftSidebar
             onDashboardToggle={handleDashboardSidebarToggle}
             onNewChat={() => {
               navigate('/chat');
@@ -209,8 +159,6 @@ const Layout: React.FC = () => {
           width={isMobile ? window.innerWidth * 0.85 : dashboardSidebarWidth}
           isMobile={isMobile}
         />
-
-        {/* ユーザーメニューは一旦削除 - 必要に応じて後で追加 */}
       </Box>
     </LayoutContext.Provider>
   );

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, memo, useCallback } from 'react';
-import { tokenManager } from '../../utils/tokenManager';
 import {
   Box,
   Typography,
   Card,
+  CardContent,
   IconButton,
   Button,
   List,
@@ -11,13 +11,16 @@ import {
   ListItemButton,
   ListItemText,
   ListItemIcon,
+  ListItemSecondaryAction,
   Divider,
+  CircularProgress,
   Alert,
   Skeleton,
   Menu,
   MenuItem,
   Breadcrumbs,
   Link,
+  TextField,
   Paper,
   Chip,
 } from '@mui/material';
@@ -36,6 +39,7 @@ import {
 } from '@mui/icons-material';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { API_BASE_URL } from '../../config/api';
 import { useAuthStore } from '../../stores/authStore';
 import { useChatStore } from '../../stores/chatStore';
 import CreateProjectDialog from '../Project/CreateProjectDialog';
@@ -72,7 +76,7 @@ type ViewMode = 'projects' | 'project-detail' | 'memo-detail' | 'memo-create';
 
 const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, width, isMobile = false }) => {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const { user, getAccessToken } = useAuthStore();
   const { setCurrentMemo, updateMemoContent, setCurrentProject } = useChatStore();
   
   // 表示モードと選択状態
@@ -98,23 +102,25 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
   const [memoContent, setMemoContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
+  const getAuthHeaders = () => {
+    const accessToken = getAccessToken();
+    if (!accessToken) {
+      throw new Error('認証セッションが見つかりません。再ログインしてください。');
+    }
+
+    return {
+      Authorization: `Bearer ${accessToken}`,
+    };
+  };
+
   // プロジェクト一覧の取得
   const fetchProjects = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      
-      const token = tokenManager.getAccessToken();
-      if (!token) {
-        throw new Error('認証トークンが見つかりません。');
-      }
 
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/projects`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
+      const response = await fetch(`${API_BASE_URL}/projects`, {
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) {
@@ -137,14 +143,9 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
     try {
       setIsLoading(true);
       setError(null);
-      
-      const token = tokenManager.getAccessToken();
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/projects/${projectId}/memos`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
+
+      const response = await fetch(`${API_BASE_URL}/projects/${projectId}/memos`, {
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) throw new Error('メモの取得に失敗しました');
@@ -163,13 +164,8 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
   const fetchMemo = async (projectId: number, memoId: number) => {
     try {
       setIsLoading(true);
-      const token = tokenManager.getAccessToken();
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
+      const response = await fetch(`${API_BASE_URL}/memos/${memoId}`, {
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) throw new Error('メモの取得に失敗しました');
@@ -180,7 +176,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
       setMemoContent(content);
       
       // チャットストアにメモ情報を設定
-      setCurrentMemo(data.title, data.content);
+      setCurrentMemo(projectId.toString(), memoId.toString(), data.title, data.content);
     } catch (error) {
       console.error('Error fetching memo:', error);
       setError(error instanceof Error ? error.message : 'メモの取得でエラーが発生しました');
@@ -198,19 +194,15 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
       const lines = memoContent.split('\n');
       const title = lines[0] || '無題のメモ';
       const content = lines.slice(2).join('\n');
-      
-      const token = tokenManager.getAccessToken();
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      
+
       if (viewMode === 'memo-create') {
         // 新規作成
-        const response = await fetch(`${apiBaseUrl}/projects/${selectedProject.id}/memos`, {
+        const response = await fetch(`${API_BASE_URL}/projects/${selectedProject.id}/memos`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            ...getAuthHeaders(),
           },
-          credentials: 'include',
           body: JSON.stringify({ title, content }),
         });
 
@@ -222,13 +214,12 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
         await fetchMemos(selectedProject.id);
       } else if (selectedMemo) {
         // 更新
-        const response = await fetch(`${apiBaseUrl}/memos/${selectedMemo.id}`, {
+        const response = await fetch(`${API_BASE_URL}/memos/${selectedMemo.id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
+            ...getAuthHeaders(),
           },
-          credentials: 'include',
           body: JSON.stringify({ title, content, project_id: selectedProject.id }),
         });
 
@@ -240,7 +231,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
       }
       
       // チャットストアにメモ情報を更新
-      updateMemoContent(content);
+      updateMemoContent(title, content);
     } catch (error) {
       console.error('Error saving memo:', error);
       setError(error instanceof Error ? error.message : 'メモの保存でエラーが発生しました');
@@ -254,14 +245,9 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
     if (!selectedProject || !confirm('このメモを削除しますか？')) return;
     
     try {
-      const token = tokenManager.getAccessToken();
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
+      const response = await fetch(`${API_BASE_URL}/memos/${memoId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) throw new Error('メモの削除に失敗しました');
@@ -291,16 +277,12 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
     hypothesis?: string;
   }) => {
     try {
-      const token = tokenManager.getAccessToken();
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      
-      const response = await fetch(`${apiBaseUrl}/projects`, {
+      const response = await fetch(`${API_BASE_URL}/projects`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          ...getAuthHeaders(),
         },
-        credentials: 'include',
         body: JSON.stringify(projectData),
       });
 
@@ -323,16 +305,12 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
     hypothesis?: string;
   }) => {
     try {
-      const token = tokenManager.getAccessToken();
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      
-      const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
+      const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
+          ...getAuthHeaders(),
         },
-        credentials: 'include',
         body: JSON.stringify(projectData),
       });
 
@@ -354,15 +332,9 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
     if (!confirm('このプロジェクトを削除しますか？')) return;
 
     try {
-      const token = tokenManager.getAccessToken();
-      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
-      
-      const response = await fetch(`${apiBaseUrl}/projects/${projectId}`, {
+      const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
+        headers: getAuthHeaders(),
       });
 
       if (!response.ok) throw new Error('プロジェクトの削除に失敗しました');
@@ -900,7 +872,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                         const lines = content.split('\n');
                         const title = lines[0] || '';
                         const bodyContent = lines.slice(2).join('\n');
-                        updateMemoContent(bodyContent);
+                        updateMemoContent(title, bodyContent);
                       }}
                       onSave={async (content) => {
                         // 自動保存実行

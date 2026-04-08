@@ -262,7 +262,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
             <MenuItem disabled sx={{ opacity: 1, cursor: 'default' }}>
               <PersonIcon sx={{ mr: 1, color: '#9E9891' }} />
               <Typography variant="body2" sx={{ color: '#6B6560' }}>
-                {user.username}
+                {user.username || user.email || 'ユーザー'}
               </Typography>
             </MenuItem>
 
