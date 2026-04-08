@@ -4,7 +4,7 @@
  * データフロー: DB → API → Normalizer → Store → UI
  */
 
-import { tokenManager } from '../utils/tokenManager';
+import { ApiRequestError, apiClient } from '../lib/api';
 
 export interface Message {
   id: string;
@@ -34,10 +34,8 @@ interface APIMessage {
 
 export class MessageService {
   private static instance: MessageService;
-  private apiBaseUrl: string;
 
   private constructor() {
-    this.apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
   }
 
   static getInstance(): MessageService {
@@ -137,12 +135,6 @@ export class MessageService {
    */
   async fetchChatHistory(limit: number = 50, conversationId?: string): Promise<Message[]> {
     try {
-      const token = tokenManager.getAccessToken();
-      if (!token) {
-        console.warn('No authentication token available');
-        return [];
-      }
-
       // URLパラメータ構築
       const params = new URLSearchParams({
         limit: limit.toString(),
@@ -152,24 +144,15 @@ export class MessageService {
         params.append('conversation_id', conversationId);
       }
 
-      const response = await fetch(`${this.apiBaseUrl}/chat/history?${params.toString()}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        console.error('Failed to fetch chat history:', response.status);
-        return [];
-      }
-
-      const apiMessages: APIMessage[] = await response.json();
+      const apiMessages = await apiClient.requestJson<APIMessage[]>(`/chat/history?${params.toString()}`);
       console.log('📊 Fetched messages from DB:', apiMessages.length);
 
       // 正規化して返す
       return this.normalizeMessages(apiMessages);
     } catch (error) {
+      if (error instanceof ApiRequestError) {
+        console.error('Failed to fetch chat history:', error.status, error.message);
+      }
       console.error('Error fetching chat history:', error);
       return [];
     }
@@ -180,33 +163,17 @@ export class MessageService {
    */
   async fetchConversationMessages(conversationId: string): Promise<Message[]> {
     try {
-      const token = tokenManager.getAccessToken();
-      if (!token) {
-        console.warn('No authentication token available');
-        return [];
-      }
-
-      const response = await fetch(
-        `${this.apiBaseUrl}/conversations/${conversationId}/messages`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-          credentials: 'include',
-        }
+      const apiMessages = await apiClient.requestJson<APIMessage[]>(
+        `/conversations/${conversationId}/messages`
       );
-
-      if (!response.ok) {
-        console.error('Failed to fetch conversation messages:', response.status);
-        return [];
-      }
-
-      const apiMessages: APIMessage[] = await response.json();
       console.log(`📊 Fetched messages for conversation ${conversationId}:`, apiMessages.length);
 
       // 正規化して返す
       return this.normalizeMessages(apiMessages);
     } catch (error) {
+      if (error instanceof ApiRequestError) {
+        console.error('Failed to fetch conversation messages:', error.status, error.message);
+      }
       console.error('Error fetching conversation messages:', error);
       return [];
     }
@@ -222,11 +189,6 @@ export class MessageService {
     customInstruction?: string,
     context?: string
   ): Promise<{ userMessage: Message; assistantMessage: Message; conversationId: string }> {
-    const token = tokenManager.getAccessToken();
-    if (!token) {
-      throw new Error('No authentication token');
-    }
-
     const userMessage: Message = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -235,13 +197,8 @@ export class MessageService {
       conversation_id: conversationId,
     };
 
-    const response = await fetch(`${this.apiBaseUrl}/chat`, {
+    const result = await apiClient.requestJson<any>('/chat', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      credentials: 'include',
       body: JSON.stringify({
         message,
         conversation_id: conversationId,
@@ -250,12 +207,6 @@ export class MessageService {
         context,
       }),
     });
-
-    if (!response.ok) {
-      throw new Error('Failed to send message');
-    }
-
-    const result = await response.json();
 
     // AI応答を正規化
     const assistantMessage: Message = {

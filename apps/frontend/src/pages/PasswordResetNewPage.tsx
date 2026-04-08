@@ -43,6 +43,10 @@ const PasswordResetNewPage = () => {
 
   const checkSession = async () => {
     const { data: { session } } = await supabase.auth.getSession();
+    console.info('[PasswordResetNewPage] checkSession', {
+      hasSession: Boolean(session),
+      userId: session?.user?.id || null,
+    });
     if (!session) {
       // セッションがない場合はパスワードリセットページへ
       navigate('/password-reset');
@@ -91,6 +95,7 @@ const PasswordResetNewPage = () => {
       }
 
       // パスワード更新成功
+      console.info('[PasswordResetNewPage] password-updated');
       navigate('/password-reset/complete');
     } catch (err: any) {
       console.error('Password update error:', err);

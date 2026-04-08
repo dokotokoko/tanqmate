@@ -77,11 +77,12 @@ const LegacyMemoRedirect: React.FC = () => {
 function App() {
   const auth = useAuthStore();
   const { isDarkMode } = useThemeStore();
+  const initializeAuth = useAuthStore((state) => state.initialize);
   
   React.useEffect(() => {
     console.log('[App] Initializing auth...');
-    void auth.initialize();
-  }, []); // 依存配列を空にして初回のみ実行
+    void initializeAuth();
+  }, [initializeAuth]);
   
   const user = auth.user;
   const isLoading = auth.isLoading || !auth.isInitialized;

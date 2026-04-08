@@ -74,6 +74,10 @@ const getTokenDataFromSession = (session: Session): TokenData => ({
   token_type: session.token_type,
 });
 
+const logAuthEvent = (event: string, payload?: Record<string, unknown>) => {
+  console.info(`[AuthStore] ${event}`, payload || {});
+};
+
 const enrichUser = (user: User, profile?: Partial<ProfileData> | null): AuthenticatedUser => ({
   ...user,
   username: profile?.username || user.user_metadata?.username || user.email?.split('@')[0] || user.id,
@@ -170,6 +174,11 @@ export const useAuthStore = create<AuthState>()(
       };
 
       const applySessionState = async (session: Session | null) => {
+        logAuthEvent('applySessionState:start', {
+          hasSession: Boolean(session),
+          userId: session?.user?.id || null,
+          email: session?.user?.email || null,
+        });
         if (!session) {
           syncTokenState(null);
           set({
@@ -182,6 +191,7 @@ export const useAuthStore = create<AuthState>()(
             error: null,
             migrationStatus: 'none',
           });
+          logAuthEvent('applySessionState:cleared');
           return;
         }
 
@@ -195,6 +205,11 @@ export const useAuthStore = create<AuthState>()(
           isLoading: false,
           isInitialized: true,
           error: null,
+        });
+        logAuthEvent('applySessionState:completed', {
+          userId: session.user.id,
+          email: session.user.email || null,
+          role: profile?.role || 'student',
         });
       };
 
@@ -219,10 +234,17 @@ export const useAuthStore = create<AuthState>()(
         initialize: async () => {
           const state = get();
           if (state.isInitialized || state.isLoading) {
+            logAuthEvent('initialize:skipped', {
+              isInitialized: state.isInitialized,
+              isLoading: state.isLoading,
+            });
             return;
           }
 
           if (!isSupabaseConfigured) {
+            logAuthEvent('initialize:missing-config', {
+              error: supabaseConfigError || 'Supabase is not configured',
+            });
             set({
               error: createAuthError(supabaseConfigError || 'Supabase is not configured'),
               isInitialized: true,
@@ -232,6 +254,7 @@ export const useAuthStore = create<AuthState>()(
           }
 
           set({ isLoading: true, error: null });
+          logAuthEvent('initialize:start');
 
           try {
             const {
@@ -243,12 +266,21 @@ export const useAuthStore = create<AuthState>()(
               throw error;
             }
 
+            logAuthEvent('initialize:session-loaded', {
+              hasSession: Boolean(session),
+              userId: session?.user?.id || null,
+            });
             await applySessionState(session);
 
             if (!authSubscription) {
               const {
                 data: { subscription },
               } = supabase.auth.onAuthStateChange(async (_event: string, nextSession: Session | null) => {
+                logAuthEvent('onAuthStateChange', {
+                  event: _event,
+                  hasSession: Boolean(nextSession),
+                  userId: nextSession?.user?.id || null,
+                });
                 await applySessionState(nextSession);
               });
 
@@ -257,6 +289,9 @@ export const useAuthStore = create<AuthState>()(
             }
           } catch (error) {
             console.error('[Auth] Initialization error:', error);
+            logAuthEvent('initialize:error', {
+              message: (error as AuthError)?.message || String(error),
+            });
             set({
               error: error as AuthError,
               isInitialized: true,
@@ -267,6 +302,10 @@ export const useAuthStore = create<AuthState>()(
 
         signUp: async (email, password, metadata = {}) => {
           set({ isLoading: true, error: null, registrationMessage: null });
+          logAuthEvent('signUp:start', {
+            email,
+            metadataKeys: Object.keys(metadata),
+          });
 
           try {
             const username = metadata.username || email.split('@')[0];
@@ -298,6 +337,10 @@ export const useAuthStore = create<AuthState>()(
                   error: null,
                   registrationMessage: null,
                 });
+                logAuthEvent('signUp:completed-with-session', {
+                  userId: data.user.id,
+                  email: data.user.email || email,
+                });
                 return { success: true, requiresEmailConfirmation: false };
               }
             }
@@ -307,6 +350,10 @@ export const useAuthStore = create<AuthState>()(
               isLoading: false,
               registrationMessage: message,
             });
+            logAuthEvent('signUp:confirmation-required', {
+              userId: data.user?.id || null,
+              email,
+            });
             return {
               success: true,
               message,
@@ -314,6 +361,10 @@ export const useAuthStore = create<AuthState>()(
             };
           } catch (error) {
             const authError = error as AuthError;
+            logAuthEvent('signUp:error', {
+              email,
+              message: authError.message,
+            });
             set({ isLoading: false, error: authError });
             return { success: false, error: authError };
           }
@@ -321,6 +372,7 @@ export const useAuthStore = create<AuthState>()(
 
         signIn: async (email, password) => {
           set({ isLoading: true, error: null });
+          logAuthEvent('signIn:start', { email });
 
           try {
             const { data, error } = await supabase.auth.signInWithPassword({
@@ -333,9 +385,17 @@ export const useAuthStore = create<AuthState>()(
             }
 
             await applySessionState(data.session);
+            logAuthEvent('signIn:completed', {
+              email,
+              userId: data.user?.id || data.session?.user?.id || null,
+            });
             return { success: true };
           } catch (error) {
             const authError = error as AuthError;
+            logAuthEvent('signIn:error', {
+              email,
+              message: authError.message,
+            });
             set({ isLoading: false, error: authError });
             return { success: false, error: authError };
           }
@@ -343,6 +403,7 @@ export const useAuthStore = create<AuthState>()(
 
         signInWithGoogle: async () => {
           set({ isLoading: true, error: null });
+          logAuthEvent('signInWithGoogle:start');
 
           try {
             const { error } = await supabase.auth.signInWithOAuth({
@@ -360,9 +421,13 @@ export const useAuthStore = create<AuthState>()(
               throw error;
             }
 
+            logAuthEvent('signInWithGoogle:redirect-requested');
             return { success: true };
           } catch (error) {
             const authError = error as AuthError;
+            logAuthEvent('signInWithGoogle:error', {
+              message: authError.message,
+            });
             set({ isLoading: false, error: authError });
             return { success: false, error: authError };
           }
@@ -370,6 +435,7 @@ export const useAuthStore = create<AuthState>()(
 
         signOut: async () => {
           set({ isLoading: true, error: null });
+          logAuthEvent('signOut:start');
 
           try {
             const { error } = await supabase.auth.signOut();
@@ -377,6 +443,9 @@ export const useAuthStore = create<AuthState>()(
               throw error;
             }
           } catch (error) {
+            logAuthEvent('signOut:error', {
+              message: (error as AuthError).message,
+            });
             set({ error: error as AuthError });
           } finally {
             syncTokenState(null);
@@ -390,6 +459,7 @@ export const useAuthStore = create<AuthState>()(
               migrationStatus: 'none',
               registrationMessage: null,
             });
+            logAuthEvent('signOut:completed');
           }
         },
 
@@ -399,6 +469,7 @@ export const useAuthStore = create<AuthState>()(
 
         resetPassword: async (email) => {
           set({ isLoading: true, error: null });
+          logAuthEvent('resetPassword:start', { email });
 
           try {
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -410,9 +481,14 @@ export const useAuthStore = create<AuthState>()(
             }
 
             set({ isLoading: false });
+            logAuthEvent('resetPassword:email-sent', { email });
             return { success: true };
           } catch (error) {
             const authError = error as AuthError;
+            logAuthEvent('resetPassword:error', {
+              email,
+              message: authError.message,
+            });
             set({ isLoading: false, error: authError });
             return { success: false, error: authError };
           }
@@ -420,6 +496,11 @@ export const useAuthStore = create<AuthState>()(
 
         updateUser: async (updates) => {
           set({ isLoading: true, error: null });
+          logAuthEvent('updateUser:start', {
+            hasEmail: Boolean(updates.email),
+            hasPassword: Boolean(updates.password),
+            dataKeys: updates.data ? Object.keys(updates.data) : [],
+          });
 
           try {
             const { data, error } = await supabase.auth.updateUser(updates);
@@ -439,15 +520,23 @@ export const useAuthStore = create<AuthState>()(
               set({ isLoading: false });
             }
 
+            logAuthEvent('updateUser:completed', {
+              userId: data.user?.id || null,
+              email: data.user?.email || null,
+            });
             return { success: true };
           } catch (error) {
             const authError = error as AuthError;
+            logAuthEvent('updateUser:error', {
+              message: authError.message,
+            });
             set({ isLoading: false, error: authError });
             return { success: false, error: authError };
           }
         },
 
         refreshSession: async () => {
+          logAuthEvent('refreshSession:start');
           try {
             const {
               data: { session },
@@ -459,8 +548,15 @@ export const useAuthStore = create<AuthState>()(
             }
 
             await applySessionState(session);
+            logAuthEvent('refreshSession:completed', {
+              hasSession: Boolean(session),
+              userId: session?.user?.id || null,
+            });
             return Boolean(session);
           } catch (error) {
+            logAuthEvent('refreshSession:error', {
+              message: (error as AuthError).message,
+            });
             set({ error: error as AuthError });
             return false;
           }
@@ -552,10 +648,4 @@ declare global {
   interface Window {
     __supabaseAuthSubscription?: { unsubscribe: () => void };
   }
-}
-
-if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    void useAuthStore.getState().initialize();
-  }, 0);
 }

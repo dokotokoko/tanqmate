@@ -7,6 +7,18 @@ interface ApiResponse<T> {
   error?: string;
 }
 
+export class ApiRequestError extends Error {
+  status: number;
+  details?: unknown;
+
+  constructor(message: string, status: number, details?: unknown) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.details = details;
+  }
+}
+
 // 型定義
 export interface User {
   id: number;
@@ -183,6 +195,22 @@ class ApiClient {
     }
   }
 
+  private normalizeHeaders(headers?: HeadersInit): Record<string, string> {
+    if (!headers) {
+      return {};
+    }
+
+    if (headers instanceof Headers) {
+      return Object.fromEntries(headers.entries());
+    }
+
+    if (Array.isArray(headers)) {
+      return Object.fromEntries(headers);
+    }
+
+    return { ...headers };
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {},
@@ -231,6 +259,91 @@ class ApiClient {
       console.error('API request error:', error);
       return { error: 'Network error' };
     }
+  }
+
+  private async parseJsonResponse<T>(response: Response): Promise<T | undefined> {
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return undefined;
+    }
+
+    try {
+      return (await response.json()) as T;
+    } catch (error) {
+      console.error('Failed to parse JSON response:', error);
+      return undefined;
+    }
+  }
+
+  private buildErrorMessage(status: number, payload?: any): string {
+    if (typeof payload?.detail === 'string') {
+      return payload.detail;
+    }
+
+    if (typeof payload?.message === 'string') {
+      return payload.message;
+    }
+
+    if (status === 401) {
+      return '認証の有効期限が切れています。再ログインしてください。';
+    }
+
+    if (status === 403) {
+      return 'この操作を実行する権限がありません。';
+    }
+
+    if (status === 404) {
+      return '対象のデータが見つかりません。';
+    }
+
+    return 'API request failed';
+  }
+
+  async requestJson<T>(
+    endpoint: string,
+    options: RequestInit = {},
+    isRetry = false
+  ): Promise<T> {
+    const headers = this.normalizeHeaders(options.headers);
+
+    if (options.body && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    const accessToken = tokenManager.getAccessToken() || this.token;
+    const isAuthEndpoint = endpoint === '/auth/login' || endpoint === '/auth/refresh';
+
+    if (accessToken && !isAuthEndpoint) {
+      headers['Authorization'] = `Bearer ${accessToken}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
+
+    if (response.status === 401 && !isRetry && !isAuthEndpoint) {
+      const refreshed = await this.refreshAccessToken().catch((error) => {
+        console.error('Token refresh failed during requestJson:', error);
+        return false;
+      });
+
+      if (refreshed) {
+        return this.requestJson<T>(endpoint, options, true);
+      }
+    }
+
+    const payload = await this.parseJsonResponse<T | { detail?: string; message?: string }>(response);
+
+    if (!response.ok) {
+      throw new ApiRequestError(
+        this.buildErrorMessage(response.status, payload),
+        response.status,
+        payload
+      );
+    }
+
+    return payload as T;
   }
 
   /**

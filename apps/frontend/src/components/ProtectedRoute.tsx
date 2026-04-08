@@ -13,13 +13,26 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { user, isLoading, isInitialized } = useAuthStore();
 
   if (isLoading || !isInitialized) {
+    console.info('[ProtectedRoute] waiting', {
+      pathname: location.pathname,
+      isLoading,
+      isInitialized,
+    });
     return <LoadingScreen />;
   }
 
   if (!user) {
+    console.warn('[ProtectedRoute] redirecting-to-signin', {
+      pathname: location.pathname,
+    });
     return <Navigate to="/signin" state={{ from: location }} replace />;
   }
 
+  console.info('[ProtectedRoute] granted', {
+    pathname: location.pathname,
+    userId: user.id,
+    email: user.email || null,
+  });
   return <>{children}</>;
 };
 

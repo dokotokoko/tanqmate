@@ -28,38 +28,26 @@ import CreateProjectDialog from '../components/Project/CreateProjectDialog';
 import EditProjectDialog from '../components/Project/EditProjectDialog';
 import { simpleSteps } from '../components/Tutorial/DashboardTutorial';
 import SimpleTutorial from '../components/Tutorial/SimpleTutorial';
-import { API_BASE_URL } from '../config/api';
 import { useAuthStore } from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
-
-interface Project {
-  id: number;
-  theme: string;
-  question?: string;
-  hypothesis?: string;
-  created_at: string;
-  updated_at: string;
-  memo_count?: number;
-}
-
-interface ProjectPayload {
-  theme: string;
-  question?: string;
-  hypothesis?: string;
-}
+import {
+  dashboardProjectService,
+  type DashboardProject,
+  type DashboardProjectPayload,
+} from '../services/dashboard/projectService';
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, getAccessToken } = useAuthStore();
+  const { user } = useAuthStore();
   const { clearCurrentMemo } = useChatStore();
 
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [projects, setProjects] = useState<DashboardProject[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [selectedProject, setSelectedProject] = useState<DashboardProject | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
 
   const getTutorialStorageKey = () => {
@@ -81,17 +69,6 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const getAuthHeaders = () => {
-    const accessToken = getAccessToken();
-    if (!accessToken) {
-      throw new Error('認証セッションが見つかりません。再ログインしてください。');
-    }
-
-    return {
-      Authorization: `Bearer ${accessToken}`,
-    };
-  };
-
   const fetchProjects = async () => {
     if (!user) {
       setIsLoading(false);
@@ -101,19 +78,7 @@ const DashboardPage: React.FC = () => {
     try {
       setIsLoading(true);
       setError(null);
-
-      const response = await fetch(`${API_BASE_URL}/projects`, {
-        headers: getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('認証の有効期限が切れています。再ログインしてください。');
-        }
-        throw new Error(`プロジェクトの取得に失敗しました (${response.status})`);
-      }
-
-      const data = (await response.json()) as Project[];
+      const data = await dashboardProjectService.listProjects();
       setProjects(data);
     } catch (fetchError) {
       console.error('プロジェクト取得エラー:', fetchError);
@@ -150,25 +115,10 @@ const DashboardPage: React.FC = () => {
     return undefined;
   }, [user]);
 
-  const handleCreateProject = async (projectData: ProjectPayload) => {
+  const handleCreateProject = async (projectData: DashboardProjectPayload) => {
     try {
       setError(null);
-
-      const response = await fetch(`${API_BASE_URL}/projects`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify(projectData),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('プロジェクト作成エラー:', errorText);
-        throw new Error('プロジェクトの作成に失敗しました');
-      }
-
+      await dashboardProjectService.createProject(projectData);
       await fetchProjects();
       setIsCreateDialogOpen(false);
     } catch (createError) {
@@ -181,36 +131,10 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const handleEditProject = async (projectId: number, projectData: ProjectPayload) => {
+  const handleEditProject = async (projectId: number, projectData: DashboardProjectPayload) => {
     try {
       setError(null);
-
-      const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify(projectData),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('プロジェクト編集エラー:', errorText);
-
-        if (response.status === 401) {
-          throw new Error('認証の有効期限が切れています。再ログインしてください。');
-        }
-        if (response.status === 403) {
-          throw new Error('このプロジェクトを編集する権限がありません。');
-        }
-        if (response.status === 404) {
-          throw new Error('プロジェクトが見つかりません。');
-        }
-
-        throw new Error(`プロジェクトの更新に失敗しました (${response.status})`);
-      }
-
+      await dashboardProjectService.updateProject(projectId, projectData);
       await fetchProjects();
       setIsEditDialogOpen(false);
       setSelectedProject(null);
@@ -231,19 +155,7 @@ const DashboardPage: React.FC = () => {
 
     try {
       setError(null);
-
-      const response = await fetch(`${API_BASE_URL}/projects/${projectId}`, {
-        method: 'DELETE',
-        headers: getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('認証の有効期限が切れています。再ログインしてください。');
-        }
-        throw new Error('プロジェクトの削除に失敗しました');
-      }
-
+      await dashboardProjectService.deleteProject(projectId);
       await fetchProjects();
       setMenuAnchor(null);
       setSelectedProject(null);
@@ -257,7 +169,7 @@ const DashboardPage: React.FC = () => {
     }
   };
 
-  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, project: Project) => {
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, project: DashboardProject) => {
     event.stopPropagation();
     setMenuAnchor(event.currentTarget);
     setSelectedProject(project);
