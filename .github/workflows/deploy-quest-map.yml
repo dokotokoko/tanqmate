@@ -1,0 +1,494 @@
+# .github/workflows/deploy-quest-map.yml - 探QマップCI/CDパイプライン
+name: Quest Map CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: ${{ github.repository }}/quest-map-backend
+  IMAGE_NAME_FRONTEND: ${{ github.repository }}/quest-map-frontend
+
+jobs:
+  # ===== 変更検出 =====
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      migrations: ${{ steps.changes.outputs.migrations }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'requirements.txt'
+              - 'docker-compose*.yml'
+            frontend:
+              - 'react-app/**'
+              - 'package*.json'
+            migrations:
+              - 'backend/scripts/migrate_quest_map.py'
+              - 'backend/models/quest_map.py'
+              - 'backend/sql/**'
+
+  # ===== バックエンドテスト =====
+  backend-test:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.backend == 'true'
+    
+    services:
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_tanqmates
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run database migrations
+        run: |
+          cd backend
+          python scripts/migrate_quest_map.py --action migrate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_tanqmates
+          REDIS_URL: redis://localhost:6379/0
+      
+      - name: Run tests with coverage
+        run: |
+          cd backend
+          pytest tests/test_quest_map.py -v --cov=. --cov-report=xml --cov-report=html
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_tanqmates
+          REDIS_URL: redis://localhost:6379/0
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_TEST }}
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./backend/coverage.xml
+          flags: backend
+          name: backend-coverage
+      
+      - name: Run security scan
+        run: |
+          cd backend
+          pip install safety bandit
+          safety check
+          bandit -r . -f json -o security-report.json
+      
+      - name: Upload security report
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: backend-security-report
+          path: backend/security-report.json
+
+  # ===== フロントエンドテスト =====
+  frontend-test:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.frontend == 'true'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: react-app/package-lock.json
+      
+      - name: Install dependencies
+        run: |
+          cd react-app
+          npm ci
+      
+      - name: Run linting
+        run: |
+          cd react-app
+          npm run lint
+      
+      - name: Run unit tests
+        run: |
+          cd react-app
+          npm run test:coverage
+        env:
+          CI: true
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./react-app/coverage/lcov.info
+          flags: frontend
+          name: frontend-coverage
+      
+      - name: Build application
+        run: |
+          cd react-app
+          npm run build
+        env:
+          REACT_APP_API_URL: ${{ secrets.REACT_APP_API_URL }}
+          REACT_APP_SENTRY_DSN: ${{ secrets.REACT_APP_SENTRY_DSN }}
+      
+      - name: Run E2E tests
+        run: |
+          cd react-app
+          npm run test:e2e
+        env:
+          CI: true
+      
+      - name: Upload E2E test artifacts
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: playwright-report
+          path: react-app/playwright-report/
+
+  # ===== セキュリティスキャン =====
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+      
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # ===== Docker イメージビルド =====
+  build-backend:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, backend-test]
+    if: needs.detect-changes.outputs.backend == 'true'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    needs: [detect-changes, frontend-test]
+    if: needs.detect-changes.outputs.frontend == 'true'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+      
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./react-app
+          file: ./react-app/Dockerfile.prod
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            REACT_APP_API_URL=${{ secrets.REACT_APP_API_URL }}
+            REACT_APP_SENTRY_DSN=${{ secrets.REACT_APP_SENTRY_DSN }}
+
+  # ===== ステージング環境デプロイ =====
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+    if: github.ref == 'refs/heads/develop' || github.event.inputs.environment == 'staging'
+    environment: staging
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.STAGING_SSH_KEY }}
+      
+      - name: Deploy to staging
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.STAGING_USER }}@${{ secrets.STAGING_HOST }} << 'EOF'
+            cd ${{ secrets.STAGING_PATH }}
+            
+            # Backup current version
+            docker-compose -f docker-compose.staging.yml down --volumes
+            
+            # Pull latest images
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:develop
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:develop
+            
+            # Update docker-compose file
+            sed -i 's|image: .*quest-map-backend.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:develop|g' docker-compose.staging.yml
+            sed -i 's|image: .*quest-map-frontend.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:develop|g' docker-compose.staging.yml
+            
+            # Run migrations
+            docker-compose -f docker-compose.staging.yml run --rm backend python scripts/migrate_quest_map.py
+            
+            # Deploy new version
+            docker-compose -f docker-compose.staging.yml up -d
+            
+            # Health check
+            sleep 30
+            curl -f http://localhost:8000/quest-map/health || exit 1
+          EOF
+      
+      - name: Run staging tests
+        run: |
+          cd react-app
+          npx playwright test --config=playwright.staging.config.ts
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ secrets.STAGING_URL }}
+
+  # ===== 本番環境デプロイ =====
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend, deploy-staging]
+    if: github.ref == 'refs/heads/main' || github.event.inputs.environment == 'production'
+    environment: production
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create deployment
+        id: deployment
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const deployment = await github.rest.repos.createDeployment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+              environment: 'production',
+              required_contexts: [],
+              description: 'Deploy Quest Map to production'
+            });
+            return deployment.data.id;
+      
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.PRODUCTION_SSH_KEY }}
+      
+      - name: Deploy to production
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+            cd ${{ secrets.PRODUCTION_PATH }}
+            
+            # Create backup
+            ./scripts/backup-production.sh
+            
+            # Blue-Green deployment preparation
+            docker-compose -f docker-compose.blue.yml pull
+            
+            # Run migrations on staging database first
+            docker-compose -f docker-compose.migration.yml run --rm backend python scripts/migrate_quest_map.py
+            
+            # Deploy to blue environment
+            docker-compose -f docker-compose.blue.yml up -d
+            
+            # Health check blue environment
+            sleep 60
+            for i in {1..10}; do
+              if curl -f http://blue.internal:8000/quest-map/health; then
+                echo "Blue environment healthy"
+                break
+              fi
+              sleep 10
+              if [ $i -eq 10 ]; then
+                echo "Blue environment health check failed"
+                exit 1
+              fi
+            done
+            
+            # Switch traffic to blue (nginx config update)
+            sudo cp nginx/nginx.blue.conf /etc/nginx/sites-available/tanqmates
+            sudo nginx -t && sudo systemctl reload nginx
+            
+            # Wait and verify
+            sleep 30
+            curl -f https://tanqmates.com/quest-map/health || exit 1
+            
+            # Stop green environment
+            docker-compose -f docker-compose.green.yml down
+            
+            # Swap blue/green labels for next deployment
+            mv docker-compose.yml docker-compose.green.yml
+            mv docker-compose.blue.yml docker-compose.yml
+          EOF
+      
+      - name: Update deployment status (success)
+        if: success()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.deployment.outputs.result }},
+              state: 'success',
+              description: 'Deployment successful',
+              environment_url: 'https://tanqmates.com'
+            });
+      
+      - name: Update deployment status (failure)
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            await github.rest.repos.createDeploymentStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              deployment_id: ${{ steps.deployment.outputs.result }},
+              state: 'failure',
+              description: 'Deployment failed'
+            });
+      
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.PRODUCTION_USER }}@${{ secrets.PRODUCTION_HOST }} << 'EOF'
+            cd ${{ secrets.PRODUCTION_PATH }}
+            ./scripts/rollback-production.sh
+          EOF
+
+  # ===== 通知 =====
+  notify:
+    runs-on: ubuntu-latest
+    needs: [deploy-staging, deploy-production]
+    if: always()
+    steps:
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          channel: '#quest-map-deployments'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+
+  # ===== クリーンアップ =====
+  cleanup:
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: always()
+    steps:
+      - name: Cleanup old images
+        run: |
+          # Keep only last 5 image versions
+          echo "Image cleanup would be performed here"
+          # Implementation depends on registry API

@@ -12,8 +12,7 @@ import {
   selectMessageActions,
   selectConversation,
   selectConversationActions,
-  selectUIActions,
-  type Message
+  selectUIActions
 } from '../../stores/chatStore';
 import { AI_INITIAL_MESSAGE } from '../../constants/aiMessages';
 import { useAIChatMessages } from '../../hooks/useAIChatMessages';
@@ -24,25 +23,7 @@ import ResponseStyleSelector, { ResponseStyle } from './ResponseStyleSelector';
 import { SuggestionChips } from './SuggestionChips';
 import { ResponseStyleBadge } from './ResponseStyleBadge';
 import { ProgressTracker } from './ProgressTracker';
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date | string | undefined | null;
-  // 分割表示用フィールド
-  chunks?: string[];
-  isSplit?: boolean;
-  originalLength?: number;
-  // 質問明確化機能用フィールド
-  is_clarification?: boolean;
-  clarification_questions?: string[];
-  suggestion_options?: string[];
-  // 応答スタイル表示用フィールド
-  response_style_used?: string;
-  // クエストカード
-  questCards?: QuestCard[];
-}
+import { useNavigate } from 'react-router-dom';
 
 // Lazy load components for better performance with error boundaries
 const ChatHeader = lazy(() => import('./ChatHeader').catch(err => {
@@ -66,30 +47,9 @@ const ChatHistory = lazy(() => import('./ChatHistory').catch(err => {
 import type { 
   QuestCard,
   AIChatProps,
-  LoadingFallbackProps 
+  LoadingFallbackProps,
+  Message
 } from './types';
-
-interface AIChatProps {
-  isDashboard?: boolean;  // ダッシュボードかどうかのフラグ
-  title: string;
-  initialMessage?: string;
-  initialAIResponse?: string;
-  memoContent?: string; // 使用しないが、既存コンポーネントとの互換性のため残す
-  currentMemoContent?: string; // 現在のメモコンテンツ（動的更新用）
-  currentMemoTitle?: string; // 現在のメモタイトル（動的更新用）
-  onMessageSend?: (message: string, memoContent: string) => Promise<string>;
-  onClose?: () => void;
-  autoStart?: boolean; // 自動開始フラグ
-  onOpenMemo?: () => void; // メモ帳を開く（Step2用）
-  showMemoButton?: boolean; // メモ帳ボタンを表示するか
-  hideMemoButton?: boolean; // メモ帳ボタンを隠すか（メモ帳が開いているときなど）
-  forceRefresh?: boolean; // 強制的にメッセージをクリアして再初期化
-  loadHistoryFromDB?: boolean; // データベースから履歴を読み込むか
-  isInitializing?: boolean; // 初期化中かどうか（外部から制御）
-  enableSmartNotifications?: boolean; // スマート通知機能を有効にするか
-  onActivityRecord?: (message: string, sender: 'user' | 'ai') => void; // 学習活動記録
-  persistentMode?: boolean; // 継続モード（メモ切り替えでリセットしない）
-}
 
 const AIChat: React.FC<AIChatProps> = ({
   isDashboard = false,
@@ -118,6 +78,7 @@ const AIChat: React.FC<AIChatProps> = ({
   const { setConversationId, setLoading, setProcessingStatus, setFallbackInfo } = selectConversationActions();
   const { setHistoryOpen } = selectUIActions();
   const isHistoryOpen = useChatStore((state) => state.isHistoryOpen);
+  const navigate = useNavigate();
   
   // Local UI state
   const [inputValue, setInputValue] = useState('');
@@ -202,19 +163,16 @@ const AIChat: React.FC<AIChatProps> = ({
     ];
   };
 
-  // Define handleNewChat before using it in eventManager
+  // Define handleNewChat (createNewConversation will be defined later)
   const handleNewChat = useCallback(async () => {
     clearMessages();
     setHistoryOpen(false);
+    setHistoryLoaded(false); // 履歴フラグをリセット
     
-    // Create new conversation
-    const newConversationId = await createNewConversation();
-    if (newConversationId) {
-      setConversationId(newConversationId);
-      console.log('🆕 新しい会話を作成しました:', newConversationId);
-    }
+    // 既存のconversation_idをクリア
+    setConversationId(null);
     
-    // Set initial message
+    // Set initial message immediately
     const messageContent = initialMessage || getDefaultInitialMessage();
     const initialMsg: Message = {
       id: `initial-${Date.now()}`,
@@ -224,7 +182,10 @@ const AIChat: React.FC<AIChatProps> = ({
       questCards: getDefaultQuestCards(),
     };
     addMessage(initialMsg);
-  }, [clearMessages, setHistoryOpen, setConversationId, addMessage, initialMessage]);
+    
+    // Create new conversation asynchronously
+    // Note: 実際の作成は最初のメッセージ送信時に行われる
+  }, [initialMessage, clearMessages, setHistoryOpen, setConversationId, addMessage]); // 関数の依存を最小化
 
   // Initialize event manager after handleNewChat is defined
   const eventManager = useEventManager({
@@ -249,7 +210,23 @@ const AIChat: React.FC<AIChatProps> = ({
     if (!loadHistoryFromDB || historyLoaded) return;
 
     try {
-      console.log('🔄 Loading chat history from DB...');
+      console.log('🔄 Loading chat history from DB...', 'conversationId:', conversation.conversationId);
+      
+      // conversation_idがあれば指定して履歴を取得
+      // 新規チャットの場合(conversationId === null)は履歴を取得しない
+      if (conversation.conversationId === null) {
+        // 新規チャット：初期メッセージのみ表示
+        const initialMessage: Message = {
+          id: `initial-${Date.now()}`,
+          role: 'assistant',
+          content: getDefaultInitialMessage(),
+          timestamp: new Date(),
+          questCards: getDefaultQuestCards(),
+        };
+        setMessages([initialMessage]);
+        setHistoryLoaded(true);
+        return;
+      }
       
       // conversation_idがあれば指定して履歴を取得、なければ最新のアクティブな会話を取得
       const historyMessages = await messageService.fetchChatHistory(50, conversation.conversationId || undefined);
@@ -264,14 +241,25 @@ const AIChat: React.FC<AIChatProps> = ({
           questCards: getDefaultQuestCards(),
         };
         setMessages([initialMessage]);
-      } else {
+      } else if (historyMessages.length > 0) {
         // DBからの履歴を唯一の信頼できるソースとして設定
         setMessages(historyMessages);
         
         // 会話IDが含まれている場合は設定
-        if (historyMessages.length > 0 && historyMessages[0].conversation_id) {
+        if (historyMessages[0].conversation_id) {
           setConversationId(historyMessages[0].conversation_id);
         }
+      } else {
+        // 履歴が取得できなかった場合は初期メッセージを表示
+        console.log('📝 No history found, showing initial message');
+        const initialMessage: Message = {
+          id: `initial-${Date.now()}`,
+          role: 'assistant',
+          content: getDefaultInitialMessage(),
+          timestamp: new Date(),
+          questCards: getDefaultQuestCards(),
+        };
+        setMessages([initialMessage]);
       }
       
       setHistoryLoaded(true);
@@ -279,7 +267,7 @@ const AIChat: React.FC<AIChatProps> = ({
       console.error('対話履歴の読み込みエラー:', error);
       setHistoryLoaded(true); // エラーでも処理を続行
     }
-  }, [isDashboard, loadHistoryFromDB, historyLoaded, setMessages, setConversationId]);
+  }, [isDashboard, loadHistoryFromDB, historyLoaded, setMessages, setConversationId, conversation.conversationId]);
 
   // 初期メッセージ設定関数（イベント駆動）
   const loadInitialMessages = useCallback(async () => {
@@ -342,7 +330,7 @@ const AIChat: React.FC<AIChatProps> = ({
         },
         credentials: 'include',
         body: JSON.stringify({
-          title: '', // 空文字列に変更（バックエンドで自動生成）
+          title: null, // nullを送信してバックエンドでデフォルト処理
           metadata: {
             source: 'new_chat_button',
             created_via: 'ai_chat_component'
@@ -568,6 +556,35 @@ const AIChat: React.FC<AIChatProps> = ({
     }, 100);
   };
 
+  // タイトル生成関数（非同期でバックグラウンド処理）
+  const generateTitleInBackground = async (convId: string, firstMessage: string) => {
+    try {
+      const token = tokenManager.getAccessToken();
+      if (!token) return;
+      
+      const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+      
+      // Fire-and-forget: レスポンスを待たずにバックグラウンドで処理
+      fetch(`${apiBaseUrl}/conversations/${convId}/generate-title`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          first_message: firstMessage,
+        }),
+      }).catch(error => {
+        console.log('タイトル生成開始（バックグラウンド）:', error);
+      });
+      
+      console.log('📝 タイトル生成をバックグラウンドで開始:', convId);
+    } catch (error) {
+      console.log('タイトル生成エラー（無視）:', error);
+    }
+  };
+
   // メッセージ送信処理（二重送信防止付き）
   const handleSendMessage = async () => {
     if (!inputValue.trim() || conversation.isLoading || isSendingRef.current) return;
@@ -580,6 +597,7 @@ const AIChat: React.FC<AIChatProps> = ({
 
     // 会話IDが存在しない場合は新しい会話を作成
     let conversationId = conversation.conversationId;
+    const isFirstMessage = !conversationId;
     if (!conversationId) {
       conversationId = await createNewConversation();
       if (conversationId) {
@@ -621,6 +639,12 @@ const AIChat: React.FC<AIChatProps> = ({
         if (token) {
           setProcessingStatus('AIが考え中です...');
           const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+          
+          // 初回メッセージの場合、タイトル生成を並列で開始
+          if (isFirstMessage && conversationId) {
+            generateTitleInBackground(conversationId, userMessage.content);
+          }
+          
           // デバッグログ: API送信直前のresponseStyle確認（refを使用）
           const currentResponseStyle = responseStyleRef.current;
           console.log('📤 fetch直前のresponseStyle (ref):', currentResponseStyle?.id, currentResponseStyle);
@@ -762,22 +786,41 @@ const AIChat: React.FC<AIChatProps> = ({
   };
 
   // 履歴セッション選択時の処理
-  const handleSessionSelect = (session: any) => {
-    const historyMessages: Message[] = session.messages.map((item: any) => ({
-      id: item.id.toString(),
-      role: item.sender === 'user' ? 'user' : 'assistant',
-      content: item.message,
-      timestamp: item.created_at ? new Date(item.created_at) : new Date(),
-    }));
-    
+  const handleSessionSelect = async (session: any) => {
     // 会話IDを設定（sessionに含まれている場合）
     if (session.conversation_id) {
       setConversationId(session.conversation_id);
       console.log('📋 会話を切り替えました:', session.conversation_id);
+      
+      // 選択した会話のメッセージのみをDBから取得
+      try {
+        const historyMessages = await messageService.fetchChatHistory(100, session.conversation_id);
+        setMessages(historyMessages);
+      } catch (error) {
+        console.error('会話履歴の取得に失敗:', error);
+        // フォールバック：sessionに含まれるメッセージを使用
+        const historyMessages: Message[] = session.messages?.map((item: any) => ({
+          id: item.id.toString(),
+          role: item.sender === 'user' ? 'user' : 'assistant',
+          content: item.message,
+          timestamp: item.created_at ? new Date(item.created_at) : new Date(),
+          conversation_id: session.conversation_id,
+        })) || [];
+        setMessages(historyMessages);
+      }
+    } else {
+      // conversation_idがない場合のフォールバック
+      const historyMessages: Message[] = session.messages?.map((item: any) => ({
+        id: item.id.toString(),
+        role: item.sender === 'user' ? 'user' : 'assistant',
+        content: item.message,
+        timestamp: item.created_at ? new Date(item.created_at) : new Date(),
+      })) || [];
+      setMessages(historyMessages);
     }
     
-    setMessages(historyMessages);
     setHistoryOpen(false);
+    setHistoryLoaded(true); // 履歴読み込み済みフラグを設定
   };
 
   // ページリロード検出と履歴リセット
@@ -796,15 +839,21 @@ const AIChat: React.FC<AIChatProps> = ({
 
   // 初期化とクリーンアップ
   useEffect(() => {
-    const wasCleared = clearMessagesIfNeeded();
-    if (!wasCleared) {
-      if (!historyLoaded && loadHistoryFromDB) {
-        loadChatHistory();
-      } else if (!loadHistoryFromDB || historyLoaded) {
-        loadInitialMessages();
-      }
+    // forceRefreshの処理
+    if (forceRefresh) {
+      clearMessages();
+      setHistoryLoaded(false);
+      initializationKeyRef.current = 'initialized';
+      return;
     }
-  }, [forceRefresh, clearMessagesIfNeeded, loadChatHistory, loadInitialMessages, loadHistoryFromDB, historyLoaded]);
+    
+    // 履歴読み込みの処理
+    if (!historyLoaded && loadHistoryFromDB) {
+      loadChatHistory();
+    } else if (!loadHistoryFromDB || historyLoaded) {
+      loadInitialMessages();
+    }
+  }, [forceRefresh, loadHistoryFromDB, historyLoaded]);
   
   // Event listeners are managed by useEventManager hook
 
@@ -915,6 +964,10 @@ const AIChat: React.FC<AIChatProps> = ({
             onSendMessage={handleSendMessage}
             onKeyPress={handleKeyPress}
             onStyleChange={setResponseStyle}
+            onDiaryClick={() => {
+              console.log('🔵 日誌ボタンクリック: 日誌ページへ遷移します');
+              navigate('/diary');
+            }}
           />
         </Suspense>
       </Box>

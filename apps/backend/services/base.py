@@ -74,6 +74,11 @@ class CacheableService(BaseService):
     def clear_cache(self) -> None:
         """キャッシュをクリア"""
         self._cache.clear()
+    
+    def invalidate_cache(self, cache_key: str) -> None:
+        """特定のキャッシュエントリを無効化"""
+        if cache_key in self._cache:
+            del self._cache[cache_key]
 
 class ServiceManager:
     """サービスクラスの管理・依存注入"""

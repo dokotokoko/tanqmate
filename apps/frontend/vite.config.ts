@@ -9,7 +9,12 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@rive-app/react-canvas': path.resolve(__dirname, 'node_modules/@rive-app/react-canvas/dist/index.js'),
+      '@rive-app/canvas': path.resolve(__dirname, 'node_modules/@rive-app/canvas/dist/cjs/runtime.js'),
     },
+  },
+  optimizeDeps: {
+    include: ['@rive-app/react-canvas', '@rive-app/canvas']
   },
   plugins: [
     react(),

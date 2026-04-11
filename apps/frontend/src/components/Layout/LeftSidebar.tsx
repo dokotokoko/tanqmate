@@ -10,9 +10,12 @@ import {
   AccountCircle as AccountCircleIcon,
   Logout as LogoutIcon,
   Person as PersonIcon,
+  Dashboard as DashboardIcon,
+  Book as BookIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import DiaryModal from '../Diary/DiaryModal';
 
 interface LeftSidebarProps {
   onDashboardToggle: () => void;
@@ -29,6 +32,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
   const location = useLocation();
   const { user, logout } = useAuthStore();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [diaryModalOpen, setDiaryModalOpen] = useState(false);
   const isMenuOpen = Boolean(anchorEl);
 
   const handleAccountMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -45,6 +49,14 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     navigate('/signin');
   };
 
+  const handleDiaryOpen = () => {
+    setDiaryModalOpen(true);
+  };
+
+  const handleDiaryClose = () => {
+    setDiaryModalOpen(false);
+  };
+
   const menuItems = [
     {
       icon: <ChatIcon />,
@@ -57,6 +69,12 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
       label: 'プロジェクト',
       path: '#',
       action: onDashboardToggle
+    },
+    {
+      icon: <DashboardIcon />,
+      label: '先生用ダッシュボード',
+      path: '/teacher',
+      action: () => navigate('/teacher')
     },
     {
       icon: <TimelineIcon />,
@@ -83,6 +101,11 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
       icon: <HistoryIcon />,
       label: '会話履歴',
       action: onHistoryOpen
+    },
+    {
+      icon: <BookIcon />,
+      label: '日誌を書く',
+      action: handleDiaryOpen
     }
   ];
 
@@ -289,6 +312,9 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
           </Menu>
         </Box>
       )}
+
+      {/* Diary Modal */}
+      <DiaryModal open={diaryModalOpen} onClose={handleDiaryClose} />
     </Box>
   );
 };
