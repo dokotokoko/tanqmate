@@ -1,54 +1,65 @@
 import React from 'react';
 import { Card as MuiCard, CardContent, CardProps as MuiCardProps } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { colors, spacing, borderRadius, transitions, shadows } from '../../styles/design-system';
+import { borderRadius, colors, shadows, spacing, transitions } from '../../styles/design-system';
 
 interface CardProps extends MuiCardProps {
-  variant?: 'default' | 'elevated' | 'outlined' | 'gradient';
+  variant?: 'default' | 'elevated' | 'outlined' | 'tinted' | 'interactive' | 'gradient';
   hoverable?: boolean;
   noPadding?: boolean;
 }
 
-const StyledCard = styled(MuiCard)<{ variant?: string; hoverable?: boolean }>(({ variant, hoverable }) => {
+const StyledCard = styled(MuiCard, {
+  shouldForwardProp: (prop) => prop !== 'cardvariant' && prop !== 'hoverable',
+})<{ cardvariant?: string; hoverable?: boolean }>(({ cardvariant = 'default', hoverable }) => {
+  const normalizedVariant = cardvariant === 'gradient' ? 'tinted' : cardvariant;
+
   const baseStyles = {
     borderRadius: borderRadius.card,
     transition: transitions.preset.smooth,
     position: 'relative' as const,
     overflow: 'hidden',
+    backgroundImage: 'none',
   };
 
   const variantStyles = {
     default: {
       background: colors.background.paper,
       boxShadow: shadows.card.default,
-      border: 'none',
+      border: `1px solid ${colors.border.soft}`,
     },
     elevated: {
       background: colors.background.elevated,
-      boxShadow: shadows.elevated,
-      border: 'none',
+      boxShadow: shadows.md,
+      border: `1px solid ${colors.border.soft}`,
     },
     outlined: {
       background: colors.background.paper,
       boxShadow: 'none',
-      border: `1px solid ${colors.grey[300]}`,
+      border: `1px solid ${colors.border.soft}`,
     },
-    gradient: {
-      background: `linear-gradient(135deg, ${colors.primary[50]} 0%, ${colors.secondary[50]} 100%)`,
+    tinted: {
+      background: colors.background.subtle,
+      boxShadow: shadows.sm,
+      border: `1px solid ${colors.border.warm}`,
+    },
+    interactive: {
+      background: colors.background.paper,
       boxShadow: shadows.card.default,
-      border: 'none',
+      border: `1px solid ${colors.border.soft}`,
     },
   };
 
-  const hoverStyles = hoverable
+  const hoverStyles = hoverable || normalizedVariant === 'interactive'
     ? {
         cursor: 'pointer',
         '&:hover': {
-          transform: 'translateY(-4px)',
+          transform: 'translateY(-2px)',
           boxShadow: shadows.card.hover,
+          borderColor: colors.border.warm,
         },
         '&:active': {
-          transform: 'translateY(-2px)',
+          transform: 'translateY(0)',
           boxShadow: shadows.card.active,
         },
       }
@@ -56,7 +67,7 @@ const StyledCard = styled(MuiCard)<{ variant?: string; hoverable?: boolean }>(({
 
   return {
     ...baseStyles,
-    ...(variant && variantStyles[variant as keyof typeof variantStyles]),
+    ...variantStyles[normalizedVariant as keyof typeof variantStyles],
     ...hoverStyles,
   };
 });
@@ -69,7 +80,7 @@ const Card: React.FC<CardProps> = ({
   ...props
 }) => {
   return (
-    <StyledCard variant={variant} hoverable={hoverable} {...props}>
+    <StyledCard cardvariant={variant} hoverable={hoverable} {...props}>
       {noPadding ? (
         children
       ) : (

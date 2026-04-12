@@ -23,6 +23,7 @@ import {
 import { motion } from 'framer-motion';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import { borderRadius, colors, shadows } from '../styles/design-system';
 
 const SignInPage = () => {
   const navigate = useNavigate();
@@ -95,7 +96,7 @@ const SignInPage = () => {
   };
 
   return (
-    <Container component="main" maxWidth="xs">
+    <Container component="main" maxWidth="xs" sx={{ minHeight: '100vh' }}>
       <Box
         sx={{
           minHeight: '100vh',
@@ -103,6 +104,7 @@ const SignInPage = () => {
           alignItems: 'center',
           justifyContent: 'center',
           py: 3,
+          backgroundColor: colors.background.default,
         }}
       >
         <motion.div
@@ -111,7 +113,7 @@ const SignInPage = () => {
           transition={{ duration: 0.5 }}
           style={{ width: '100%' }}
         >
-          <Paper elevation={3} sx={{ p: 4 }}>
+          <Paper elevation={0} sx={{ p: 4, backgroundColor: colors.background.paper, border: `1px solid ${colors.border.soft}`, borderRadius: borderRadius.xl, boxShadow: shadows.md }}>
             <Box
               sx={{
                 display: 'flex',
@@ -125,11 +127,7 @@ const SignInPage = () => {
                 variant="h4"
                 sx={{
                   fontWeight: 'bold',
-                  background: 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)',
-                  backgroundClip: 'text',
-                  textFillColor: 'transparent',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
+                  color: colors.text.primary,
                   mb: 1,
                 }}
               >
@@ -209,10 +207,11 @@ const SignInPage = () => {
                 sx={{
                   mt: 3,
                   mb: 2,
-                  background: 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)',
-                  color: 'white',
+                  backgroundColor: colors.accentWarm.main,
+                  color: colors.text.inverse,
                   '&:hover': {
-                    background: 'linear-gradient(135deg, #F57C00 0%, #E65100 100%)',
+                    backgroundColor: colors.accentWarm.hover,
+                    boxShadow: shadows.accent,
                   },
                 }}
                 disabled={isLoading}
@@ -227,11 +226,11 @@ const SignInPage = () => {
                 variant="outlined"
                 onClick={handleGoogleSignIn}
                 disabled={isLoading}
-                startIcon={<Google />}
-                sx={{ mb: 2 }}
-              >
-                Googleでログイン
-              </Button>
+                  startIcon={<Google />}
+                  sx={{ mb: 2, borderColor: colors.border.soft, color: colors.text.secondary, '&:hover': { borderColor: colors.secondary[300], backgroundColor: colors.trustBlue.soft } }}
+                >
+                  Googleでログイン
+                </Button>
 
               <Box sx={{ mt: 2, textAlign: 'center' }}>
                 <Link

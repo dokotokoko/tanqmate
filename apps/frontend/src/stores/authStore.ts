@@ -9,10 +9,17 @@ export interface ProfileData {
   id: string;
   username?: string;
   name?: string;
+  grade?: string;
+  class_name?: string;
+  attendance_number?: number;
   role: 'student' | 'teacher';
   school_id: string | null;
   school_code_locked?: boolean;
   email?: string;
+  schools?: {
+    id: string;
+    name: string;
+  };
   created_at?: string;
   updated_at?: string;
   legacy_user_id?: number;

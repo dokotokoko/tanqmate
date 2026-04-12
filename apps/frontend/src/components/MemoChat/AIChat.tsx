@@ -441,7 +441,7 @@ const AIChat: React.FC<AIChatProps> = ({
           aiResponse = await onMessageSend(messageWithStyle, contextContent);
         } else {
           // データベース対応のチャットAPIを使用
-          const token = localStorage.getItem('auth-token');
+          const token = tokenManager.getAccessToken();
           if (token) {
             const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
             // デバッグログ: handleSuggestionClick内のfetch直前のresponseStyle確認（refを使用）
@@ -966,7 +966,7 @@ const AIChat: React.FC<AIChatProps> = ({
             onStyleChange={setResponseStyle}
             onDiaryClick={() => {
               console.log('🔵 日誌ボタンクリック: 日誌ページへ遷移します');
-              navigate('/diary');
+              navigate('/app/diary?autostart=1');
             }}
           />
         </Suspense>

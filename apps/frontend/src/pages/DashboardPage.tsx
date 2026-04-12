@@ -35,6 +35,7 @@ import {
   type DashboardProject,
   type DashboardProjectPayload,
 } from '../services/dashboard/projectService';
+import { borderRadius, colors, shadows } from '../styles/design-system';
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -210,6 +211,7 @@ const DashboardPage: React.FC = () => {
               sx={{
                 fontWeight: 600,
                 fontSize: { xs: '1.75rem', sm: '2.125rem' },
+                color: colors.text.primary,
               }}
             >
               ダッシュボード
@@ -237,6 +239,7 @@ const DashboardPage: React.FC = () => {
               sx={{
                 fontWeight: 600,
                 fontSize: { xs: '1.25rem', sm: '1.5rem' },
+                color: colors.text.primary,
               }}
             >
               探究プロジェクト
@@ -247,12 +250,13 @@ const DashboardPage: React.FC = () => {
               onClick={() => setIsCreateDialogOpen(true)}
               data-tutorial="create-project-button"
               sx={{
-                background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
-                color: 'white',
+                backgroundColor: colors.accentWarm.main,
+                color: colors.text.inverse,
                 '&:hover': {
-                  background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
+                  backgroundColor: colors.accentWarm.hover,
+                  boxShadow: shadows.accent,
                 },
-                borderRadius: 2,
+                borderRadius: borderRadius.button,
                 px: { xs: 2, sm: 3 },
                 py: 1.5,
                 fontSize: { xs: '0.875rem', sm: '1rem' },
@@ -271,12 +275,15 @@ const DashboardPage: React.FC = () => {
                   textAlign: 'center',
                   py: { xs: 4, sm: 8 },
                   px: { xs: 2, sm: 0 },
+                  backgroundColor: colors.background.paper,
+                  border: `1px solid ${colors.border.soft}`,
+                  borderRadius: borderRadius.card,
                 }}
               >
                 <DescriptionIcon
                   sx={{
                     fontSize: { xs: 48, sm: 64 },
-                    color: 'text.secondary',
+                    color: colors.text.muted,
                     mb: 2,
                   }}
                 />
@@ -284,7 +291,7 @@ const DashboardPage: React.FC = () => {
                   variant="h6"
                   color="text.secondary"
                   gutterBottom
-                  sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
+                  sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' }, color: colors.text.primary }}
                 >
                   まだプロジェクトがありません
                 </Typography>
@@ -296,6 +303,7 @@ const DashboardPage: React.FC = () => {
                     fontSize: { xs: '0.875rem', sm: '1rem' },
                     maxWidth: { xs: '280px', sm: 'none' },
                     mx: 'auto',
+                    color: colors.text.secondary,
                   }}
                 >
                   新しいプロジェクトを作成して、探究を始めましょう
@@ -305,12 +313,13 @@ const DashboardPage: React.FC = () => {
                   startIcon={<AddIcon />}
                   onClick={() => setIsCreateDialogOpen(true)}
                   sx={{
-                    background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
-                    color: 'white',
+                    backgroundColor: colors.accentWarm.main,
+                    color: colors.text.inverse,
                     '&:hover': {
-                      background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
+                      backgroundColor: colors.accentWarm.hover,
+                      boxShadow: shadows.accent,
                     },
-                    borderRadius: 1.4,
+                    borderRadius: borderRadius.button,
                     px: { xs: 3, sm: 4 },
                     py: { xs: 1.5, sm: 2 },
                     fontSize: { xs: '0.875rem', sm: '1rem' },
@@ -346,9 +355,14 @@ const DashboardPage: React.FC = () => {
                         sx={{
                           cursor: 'pointer',
                           transition: 'all 0.3s ease',
+                          backgroundColor: colors.background.paper,
+                          border: `1px solid ${colors.border.soft}`,
+                          boxShadow: shadows.card.default,
+                          borderRadius: borderRadius.card,
                           '&:hover': {
                             transform: 'translateY(-2px)',
-                            boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+                            boxShadow: shadows.card.hover,
+                            borderColor: colors.border.warm,
                           },
                         }}
                         onClick={() => navigate(`/projects/${project.id}`)}
@@ -371,6 +385,7 @@ const DashboardPage: React.FC = () => {
                                   fontSize: { xs: '1rem', sm: '1.25rem' },
                                   lineHeight: 1.3,
                                   wordBreak: 'break-word',
+                                  color: colors.text.primary,
                                 }}
                               >
                                 {project.theme}
@@ -388,13 +403,14 @@ const DashboardPage: React.FC = () => {
                                   fontSize="small"
                                   sx={{
                                     color: 'text.secondary',
+                                    color: colors.text.muted,
                                     fontSize: { xs: '16px', sm: '20px' },
                                   }}
                                 />
                                 <Typography
                                   variant="caption"
                                   color="text.secondary"
-                                  sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+                                  sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' }, color: colors.text.secondary }}
                                 >
                                   {new Date(project.updated_at).toLocaleDateString('ja-JP')}
                                 </Typography>
@@ -404,8 +420,9 @@ const DashboardPage: React.FC = () => {
                             <IconButton
                               onClick={(event) => handleMenuOpen(event, project)}
                               sx={{
+                                color: colors.text.secondary,
                                 opacity: 0.7,
-                                '&:hover': { opacity: 1 },
+                                '&:hover': { opacity: 1, backgroundColor: colors.background.subtle },
                                 p: { xs: 1, sm: 1.5 },
                               }}
                             >
@@ -437,7 +454,7 @@ const DashboardPage: React.FC = () => {
             onSubmit={handleEditProject}
           />
 
-          <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose}>
+          <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose} PaperProps={{ sx: { backgroundColor: colors.background.paper, border: `1px solid ${colors.border.soft}`, boxShadow: shadows.md, borderRadius: borderRadius.lg } }}>
             <MenuItem
               onClick={() => {
                 if (selectedProject) {

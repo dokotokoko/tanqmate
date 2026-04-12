@@ -15,7 +15,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
-import DiaryModal from '../Diary/DiaryModal';
+import { borderRadius, colors, shadows } from '../../styles/design-system';
 
 interface LeftSidebarProps {
   onDashboardToggle: () => void;
@@ -32,7 +32,6 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
   const location = useLocation();
   const { user, logout } = useAuthStore();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [diaryModalOpen, setDiaryModalOpen] = useState(false);
   const isMenuOpen = Boolean(anchorEl);
 
   const handleAccountMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -50,11 +49,12 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
   };
 
   const handleDiaryOpen = () => {
-    setDiaryModalOpen(true);
+    navigate('/app/diary?autostart=1');
   };
 
-  const handleDiaryClose = () => {
-    setDiaryModalOpen(false);
+  const handleProfileOpen = () => {
+    handleAccountMenuClose();
+    navigate('/app/profile');
   };
 
   const menuItems = [
@@ -114,12 +114,12 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
       sx={{
         width: '64px',
         height: '100vh',
-        background: '#FFFDF7', // --bg-secondary from mockup
+        backgroundColor: colors.background.paper,
         padding: '16px 12px',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        borderRight: '1px solid #F0E8D8', // --border-light from mockup
+        borderRight: `1px solid ${colors.border.soft}`,
       }}
     >
       {/* Main Content Area */}
@@ -136,12 +136,13 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
           sx={{
             width: '40px',
             height: '40px',
-            background: 'linear-gradient(135deg, #FF8C5A, #FFD166)',
-            borderRadius: '12px',
+            backgroundColor: colors.accentWarm.main,
+            boxShadow: shadows.accent,
+            borderRadius: borderRadius.lg,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: 'white',
+            color: colors.text.inverse,
             fontWeight: 700,
             fontSize: '14px',
             marginBottom: '16px',
@@ -158,12 +159,12 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
               sx={{
                 width: '40px',
                 height: '40px',
-                borderRadius: '12px',
-                color: '#9E9891',
+                borderRadius: borderRadius.lg,
+                color: colors.text.muted,
                 transition: 'all 0.2s',
                 '&:hover': {
-                  backgroundColor: '#FFF6E0',
-                  color: '#6B6560',
+                  backgroundColor: colors.background.subtle,
+                  color: colors.text.secondary,
                 },
               }}
             >
@@ -177,7 +178,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
           sx={{
             width: '32px',
             height: '1px',
-            backgroundColor: '#F0E8D8',
+            backgroundColor: colors.border.soft,
             margin: '8px 0',
           }}
         />
@@ -190,16 +191,16 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
               sx={{
                 width: '40px',
                 height: '40px',
-                borderRadius: '12px',
-                color: '#9E9891', // --text-tertiary from mockup
+                borderRadius: borderRadius.lg,
+                color: colors.text.muted,
                 transition: 'all 0.2s',
                 '&:hover': {
-                  backgroundColor: '#FFF6E0', // --bg-tertiary from mockup
-                  color: '#6B6560', // --text-secondary from mockup
+                  backgroundColor: colors.background.subtle,
+                  color: colors.text.secondary,
                 },
                 ...(location.pathname === item.path && item.path !== '#' && {
-                  backgroundColor: '#FFF4EE', // --accent-orange-light from mockup
-                  color: '#FF8C5A', // --accent-orange from mockup
+                  backgroundColor: colors.accentWarm.soft,
+                  color: colors.accentWarm.main,
                 }),
               }}
             >
@@ -228,16 +229,16 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
               sx={{
                 width: '40px',
                 height: '40px',
-                borderRadius: '12px',
-                color: '#9E9891',
+                borderRadius: borderRadius.lg,
+                color: colors.text.muted,
                 transition: 'all 0.2s',
                 '&:hover': {
-                  backgroundColor: '#FFF6E0',
-                  color: '#6B6560',
+                  backgroundColor: colors.background.subtle,
+                  color: colors.text.secondary,
                 },
                 ...(isMenuOpen && {
-                  backgroundColor: '#FFF4EE',
-                  color: '#FF8C5A',
+                  backgroundColor: colors.accentWarm.soft,
+                  color: colors.accentWarm.main,
                 }),
               }}
             >
@@ -255,9 +256,12 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
               elevation: 0,
               sx: {
                 overflow: 'visible',
-                filter: 'drop-shadow(0px 2px 8px rgba(0,0,0,0.32))',
+                filter: 'drop-shadow(0px 6px 18px rgba(120, 92, 64, 0.18))',
                 mt: 1.5,
                 ml: 2,
+                backgroundColor: colors.background.paper,
+                border: `1px solid ${colors.border.soft}`,
+                borderRadius: borderRadius.lg,
                 '& .MuiAvatar-root': {
                   width: 32,
                   height: 32,
@@ -283,20 +287,15 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
           >
             {/* User Info */}
             <MenuItem disabled sx={{ opacity: 1, cursor: 'default' }}>
-              <PersonIcon sx={{ mr: 1, color: '#9E9891' }} />
-              <Typography variant="body2" sx={{ color: '#6B6560' }}>
+              <PersonIcon sx={{ mr: 1, color: colors.text.muted }} />
+              <Typography variant="body2" sx={{ color: colors.text.secondary }}>
                 {user.username || user.email || 'ユーザー'}
               </Typography>
             </MenuItem>
 
-            {/* Profile Settings - Optional/未実装 */}
+            {/* Profile Settings */}
             <MenuItem
-              onClick={() => {
-                // TODO: プロフィール設定ページへのナビゲーション
-                console.log('プロフィール設定（未実装）');
-              }}
-              disabled
-              sx={{ opacity: 0.5 }}
+              onClick={handleProfileOpen}
             >
               <SettingsIcon sx={{ mr: 1 }} />
               プロフィール設定
@@ -304,17 +303,14 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
             {/* Logout */}
             <MenuItem onClick={handleLogout}>
-              <LogoutIcon sx={{ mr: 1, color: '#FF6B6B' }} />
-              <Typography variant="body2" sx={{ color: '#FF6B6B' }}>
+              <LogoutIcon sx={{ mr: 1, color: colors.error.main }} />
+              <Typography variant="body2" sx={{ color: colors.error.main }}>
                 ログアウト
               </Typography>
             </MenuItem>
           </Menu>
         </Box>
       )}
-
-      {/* Diary Modal */}
-      <DiaryModal open={diaryModalOpen} onClose={handleDiaryClose} />
     </Box>
   );
 };

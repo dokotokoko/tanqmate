@@ -93,7 +93,6 @@ export default defineConfig({
       'react', 'react-dom', 
       'react-router-dom',
       'react', 'react-dom', 'react-router-dom',
-      '@rive-app/react-canvas',  // ← 追加
       '@rive-app/canvas',        // ← 追加
     ],
     exclude: ['@vite-pwa/assets-generator'],

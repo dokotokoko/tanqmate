@@ -1,7 +1,7 @@
 import React from 'react';
 import { Chip, ChipProps } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { colors, spacing, borderRadius, typography, transitions } from '../../styles/design-system';
+import { borderRadius, colors, spacing, transitions, typography } from '../../styles/design-system';
 
 interface BadgeProps extends Omit<ChipProps, 'variant' | 'color'> {
   variant?: 'filled' | 'outlined' | 'soft';
@@ -12,35 +12,35 @@ interface BadgeProps extends Omit<ChipProps, 'variant' | 'color'> {
 const colorSchemes = {
   primary: {
     filled: {
-      backgroundColor: colors.primary[500],
+      backgroundColor: colors.accentWarm.main,
       color: colors.text.inverse,
-      borderColor: colors.primary[500],
+      borderColor: colors.accentWarm.main,
     },
     outlined: {
       backgroundColor: 'transparent',
-      color: colors.primary[500],
-      borderColor: colors.primary[500],
+      color: colors.accentWarm.active,
+      borderColor: colors.border.warm,
     },
     soft: {
-      backgroundColor: colors.primary[50],
-      color: colors.primary[700],
-      borderColor: colors.primary[200],
+      backgroundColor: colors.accentWarm.soft,
+      color: colors.accentWarm.active,
+      borderColor: colors.border.warm,
     },
   },
   secondary: {
     filled: {
-      backgroundColor: colors.secondary[500],
+      backgroundColor: colors.trustBlue.main,
       color: colors.text.inverse,
-      borderColor: colors.secondary[500],
+      borderColor: colors.trustBlue.main,
     },
     outlined: {
       backgroundColor: 'transparent',
-      color: colors.secondary[500],
-      borderColor: colors.secondary[500],
+      color: colors.secondary[800],
+      borderColor: colors.secondary[200],
     },
     soft: {
-      backgroundColor: colors.secondary[50],
-      color: colors.secondary[700],
+      backgroundColor: colors.trustBlue.soft,
+      color: colors.secondary[800],
       borderColor: colors.secondary[200],
     },
   },
@@ -52,13 +52,13 @@ const colorSchemes = {
     },
     outlined: {
       backgroundColor: 'transparent',
-      color: colors.success.main,
+      color: colors.success.dark,
       borderColor: colors.success.main,
     },
     soft: {
-      backgroundColor: `${colors.success.light}20`,
+      backgroundColor: colors.success.light,
       color: colors.success.dark,
-      borderColor: colors.success.light,
+      borderColor: colors.success.main,
     },
   },
   error: {
@@ -69,13 +69,13 @@ const colorSchemes = {
     },
     outlined: {
       backgroundColor: 'transparent',
-      color: colors.error.main,
+      color: colors.error.dark,
       borderColor: colors.error.main,
     },
     soft: {
-      backgroundColor: `${colors.error.light}20`,
+      backgroundColor: colors.error.light,
       color: colors.error.dark,
-      borderColor: colors.error.light,
+      borderColor: colors.error.main,
     },
   },
   warning: {
@@ -86,13 +86,13 @@ const colorSchemes = {
     },
     outlined: {
       backgroundColor: 'transparent',
-      color: colors.warning.main,
+      color: colors.warning.dark,
       borderColor: colors.warning.main,
     },
     soft: {
-      backgroundColor: `${colors.warning.light}20`,
+      backgroundColor: colors.warning.light,
       color: colors.warning.dark,
-      borderColor: colors.warning.light,
+      borderColor: colors.warning.main,
     },
   },
   info: {
@@ -103,30 +103,30 @@ const colorSchemes = {
     },
     outlined: {
       backgroundColor: 'transparent',
-      color: colors.info.main,
+      color: colors.info.dark,
       borderColor: colors.info.main,
     },
     soft: {
-      backgroundColor: `${colors.info.light}20`,
+      backgroundColor: colors.info.light,
       color: colors.info.dark,
-      borderColor: colors.info.light,
+      borderColor: colors.info.main,
     },
   },
   default: {
     filled: {
-      backgroundColor: colors.grey[500],
-      color: colors.text.inverse,
-      borderColor: colors.grey[500],
+      backgroundColor: colors.grey[200],
+      color: colors.text.primary,
+      borderColor: colors.grey[200],
     },
     outlined: {
       backgroundColor: 'transparent',
-      color: colors.grey[700],
-      borderColor: colors.grey[400],
+      color: colors.text.secondary,
+      borderColor: colors.border.soft,
     },
     soft: {
-      backgroundColor: colors.grey[100],
-      color: colors.grey[700],
-      borderColor: colors.grey[300],
+      backgroundColor: colors.background.subtle,
+      color: colors.text.secondary,
+      borderColor: colors.border.soft,
     },
   },
 };
@@ -138,54 +138,51 @@ const sizeStyles = {
     padding: `0 ${spacing.sm}`,
   },
   medium: {
-    height: '32px',
+    height: '30px',
     fontSize: typography.fontSize.sm,
     padding: `0 ${spacing.md}`,
   },
   large: {
-    height: '40px',
+    height: '36px',
     fontSize: typography.fontSize.base,
     padding: `0 ${spacing.lg}`,
   },
 };
 
-const StyledChip = styled(Chip)<{
+const StyledChip = styled(Chip, {
+  shouldForwardProp: (prop) => !['variantType', 'colorType', 'sizeType'].includes(String(prop)),
+})<{
   variantType?: string;
   colorType?: string;
   sizeType?: string;
 }>(({ variantType = 'filled', colorType = 'default', sizeType = 'medium' }) => {
   const colorScheme = colorSchemes[colorType as keyof typeof colorSchemes][variantType as keyof typeof colorSchemes['primary']];
   const sizeStyle = sizeStyles[sizeType as keyof typeof sizeStyles];
-  
+
   return {
     ...colorScheme,
     ...sizeStyle,
     borderRadius: borderRadius.chip,
-    border: variantType === 'outlined' ? `1px solid ${colorScheme.borderColor}` : 'none',
+    border: `1px solid ${colorScheme.borderColor}`,
     fontWeight: typography.fontWeight.medium,
     transition: transitions.preset.fast,
     cursor: 'default',
-    
     '&:hover': {
-      opacity: 0.9,
+      opacity: 0.92,
     },
-    
     '& .MuiChip-label': {
       paddingLeft: 0,
       paddingRight: 0,
     },
-    
     '& .MuiChip-deleteIcon': {
       color: 'inherit',
-      opacity: 0.7,
+      opacity: 0.72,
       marginLeft: spacing.xs,
       marginRight: `-${spacing.xs}`,
-      
       '&:hover': {
         opacity: 1,
       },
     },
-    
     '& .MuiChip-icon': {
       color: 'inherit',
       marginLeft: `-${spacing.xs}`,
@@ -200,14 +197,7 @@ const Badge: React.FC<BadgeProps> = ({
   size = 'medium',
   ...props
 }) => {
-  return (
-    <StyledChip
-      variantType={variant}
-      colorType={color}
-      sizeType={size}
-      {...props}
-    />
-  );
+  return <StyledChip variantType={variant} colorType={color} sizeType={size} {...props} />;
 };
 
 export default Badge;

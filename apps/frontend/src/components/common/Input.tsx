@@ -1,117 +1,118 @@
 import React from 'react';
-import { TextField, TextFieldProps, InputAdornment } from '@mui/material';
+import { InputAdornment, TextField, TextFieldProps } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { colors, spacing, borderRadius, transitions } from '../../styles/design-system';
+import { borderRadius, colors, spacing, transitions } from '../../styles/design-system';
 
 interface InputProps extends Omit<TextFieldProps, 'variant'> {
-  variant?: 'default' | 'filled' | 'outlined';
+  variant?: 'default' | 'filled' | 'outlined' | 'surface';
   startIcon?: React.ReactNode;
   endIcon?: React.ReactNode;
 }
 
-const StyledTextField = styled(TextField)<{ variant?: string }>(({ theme, variant }) => ({
-  '& .MuiOutlinedInput-root': {
-    borderRadius: borderRadius.input,
-    transition: transitions.preset.smooth,
-    backgroundColor: colors.background.paper,
-    
-    '& fieldset': {
-      borderColor: colors.grey[300],
-      borderWidth: '1px',
-      transition: transitions.preset.fast,
-    },
-    
-    '&:hover fieldset': {
-      borderColor: colors.primary[400],
-      borderWidth: '1px',
-    },
-    
-    '&.Mui-focused fieldset': {
-      borderColor: colors.primary[500],
-      borderWidth: '2px',
-    },
-    
-    '&.Mui-error fieldset': {
-      borderColor: colors.error.main,
-    },
-    
-    '& input': {
-      padding: spacing.component.inputPadding,
-      fontSize: '1rem',
-      lineHeight: 1.5,
-      
-      '&::placeholder': {
-        color: colors.text.hint,
-        opacity: 1,
+const StyledTextField = styled(TextField, {
+  shouldForwardProp: (prop) => prop !== 'inputvariant',
+})<{ inputvariant?: string }>(({ inputvariant = 'outlined' }) => {
+  const usesSurfaceVariant = inputvariant === 'surface';
+  const baseBackground = usesSurfaceVariant ? colors.background.subtle : colors.background.paper;
+
+  return {
+    '& .MuiOutlinedInput-root': {
+      borderRadius: borderRadius.input,
+      transition: transitions.preset.smooth,
+      backgroundColor: baseBackground,
+      color: colors.text.primary,
+
+      '& fieldset': {
+        borderColor: colors.border.soft,
+        borderWidth: '1px',
+      },
+
+      '&:hover fieldset': {
+        borderColor: colors.border.warm,
+      },
+
+      '&.Mui-focused': {
+        boxShadow: `0 0 0 3px ${colors.focus.warm}`,
+      },
+
+      '&.Mui-focused fieldset': {
+        borderColor: colors.accentWarm.main,
+        borderWidth: '1px',
+      },
+
+      '&.Mui-error': {
+        boxShadow: 'none',
+      },
+
+      '&.Mui-error fieldset': {
+        borderColor: colors.error.main,
+      },
+
+      '& input, & textarea': {
+        padding: spacing.component.inputPadding,
+        fontSize: '1rem',
+        lineHeight: 1.5,
+        color: colors.text.primary,
+        '&::placeholder': {
+          color: colors.text.muted,
+          opacity: 1,
+        },
       },
     },
-    
-    '& input:disabled': {
-      backgroundColor: colors.grey[100],
-      cursor: 'not-allowed',
+
+    '& .MuiFilledInput-root': {
+      borderRadius: borderRadius.input,
+      backgroundColor: colors.background.subtle,
+      transition: transitions.preset.smooth,
+      '&:hover': {
+        backgroundColor: colors.background.paper,
+      },
+      '&.Mui-focused': {
+        backgroundColor: colors.background.paper,
+        boxShadow: `0 0 0 3px ${colors.focus.warm}`,
+      },
+      '&:before': {
+        borderBottom: `1px solid ${colors.border.soft}`,
+      },
+      '&:hover:not(.Mui-disabled):before': {
+        borderBottom: `1px solid ${colors.border.warm}`,
+      },
+      '&.Mui-focused:after': {
+        borderBottom: `1px solid ${colors.accentWarm.main}`,
+      },
+      '& input': {
+        padding: `${spacing.md} ${spacing.lg} ${spacing.sm}`,
+      },
     },
-  },
-  
-  '& .MuiFilledInput-root': {
-    borderRadius: borderRadius.input,
-    backgroundColor: colors.grey[100],
-    transition: transitions.preset.smooth,
-    
-    '&:hover': {
-      backgroundColor: colors.grey[200],
+
+    '& .MuiInputLabel-root': {
+      color: colors.text.secondary,
+      fontSize: '0.875rem',
+      '&.Mui-focused': {
+        color: colors.accentWarm.active,
+      },
+      '&.Mui-error': {
+        color: colors.error.main,
+      },
     },
-    
-    '&.Mui-focused': {
-      backgroundColor: colors.grey[100],
+
+    '& .MuiFormHelperText-root': {
+      fontSize: '0.75rem',
+      marginTop: spacing.xs,
+      color: colors.text.secondary,
+      '&.Mui-error': {
+        color: colors.error.main,
+      },
     },
-    
-    '&:before': {
-      borderBottom: `1px solid ${colors.grey[400]}`,
+
+    '& .MuiInputAdornment-root': {
+      color: colors.text.secondary,
+      '& .MuiIconButton-root': {
+        padding: spacing.sm,
+      },
     },
-    
-    '&:hover:not(.Mui-disabled):before': {
-      borderBottom: `2px solid ${colors.primary[400]}`,
-    },
-    
-    '&.Mui-focused:after': {
-      borderBottom: `2px solid ${colors.primary[500]}`,
-    },
-    
-    '& input': {
-      padding: `${spacing.md} ${spacing.md} ${spacing.sm}`,
-    },
-  },
-  
-  '& .MuiInputLabel-root': {
-    color: colors.text.secondary,
-    fontSize: '0.875rem',
-    
-    '&.Mui-focused': {
-      color: colors.primary[500],
-    },
-    
-    '&.Mui-error': {
-      color: colors.error.main,
-    },
-  },
-  
-  '& .MuiFormHelperText-root': {
-    fontSize: '0.75rem',
-    marginTop: spacing.xs,
-    
-    '&.Mui-error': {
-      color: colors.error.main,
-    },
-  },
-  
-  '& .MuiInputAdornment-root': {
-    color: colors.text.secondary,
-    
-    '& .MuiIconButton-root': {
-      padding: spacing.sm,
-    },
-  },
-}));
+  };
+});
 
 const Input: React.FC<InputProps> = ({
   variant = 'outlined',
@@ -120,23 +121,23 @@ const Input: React.FC<InputProps> = ({
   fullWidth = true,
   ...props
 }) => {
-  const inputProps: any = {};
-  
+  const mappedVariant =
+    variant === 'default' || variant === 'surface' ? 'outlined' : variant;
+
+  const inputProps: TextFieldProps['InputProps'] = {};
+
   if (startIcon) {
-    inputProps.startAdornment = (
-      <InputAdornment position="start">{startIcon}</InputAdornment>
-    );
+    inputProps.startAdornment = <InputAdornment position="start">{startIcon}</InputAdornment>;
   }
-  
+
   if (endIcon) {
-    inputProps.endAdornment = (
-      <InputAdornment position="end">{endIcon}</InputAdornment>
-    );
+    inputProps.endAdornment = <InputAdornment position="end">{endIcon}</InputAdornment>;
   }
-  
+
   return (
     <StyledTextField
-      variant={variant as 'outlined' | 'filled' | 'standard'}
+      inputvariant={variant}
+      variant={mappedVariant as 'outlined' | 'filled' | 'standard'}
       fullWidth={fullWidth}
       InputProps={inputProps}
       {...props}

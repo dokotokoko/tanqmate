@@ -45,6 +45,7 @@ import { useChatStore } from '../../stores/chatStore';
 import CreateProjectDialog from '../Project/CreateProjectDialog';
 import EditProjectDialog from '../Project/EditProjectDialog';
 import MemoEditor from '../MemoEditor';
+import { borderRadius, colors, shadows } from '../../styles/design-system';
 
 interface Project {
   id: number;
@@ -422,10 +423,10 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
             sx={{
               width,
               height: '100vh',
-              backgroundColor: '#FFFDF7',
+              backgroundColor: colors.background.paper,
               borderLeft: 1,
-              borderColor: '#F0E8D8',
-              boxShadow: '-2px 0 20px rgba(45, 42, 38, 0.06)',
+              borderColor: colors.border.soft,
+              boxShadow: shadows.lg,
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
@@ -439,11 +440,11 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
             <Box sx={{ 
               p: 2, 
               borderBottom: 1, 
-              borderColor: '#F0E8D8',
+              borderColor: colors.border.soft,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              backgroundColor: '#FFFDF7',
+              backgroundColor: colors.background.paper,
             }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 {viewMode !== 'projects' && (
@@ -451,18 +452,18 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                     onClick={handleBack} 
                     size="small"
                     sx={{
-                      borderRadius: '8px',
-                      color: '#9E9891',
+                      borderRadius: borderRadius.md,
+                      color: colors.text.muted,
                       '&:hover': {
-                        backgroundColor: '#FFF6E0',
-                        color: '#6B6560',
+                        backgroundColor: colors.background.subtle,
+                        color: colors.text.secondary,
                       }
                     }}
                   >
                     <ArrowBack />
                   </IconButton>
                 )}
-                <Typography variant="h6" fontWeight={600} sx={{ color: '#2D2A26' }}>
+                <Typography variant="h6" fontWeight={600} sx={{ color: colors.text.primary }}>
                   {viewMode === 'projects' ? 'ダッシュボード' : 
                    viewMode === 'project-detail' ? selectedProject?.theme :
                    viewMode === 'memo-create' ? '新しいメモ' :
@@ -473,11 +474,11 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                 onClick={onToggle} 
                 size="small"
                 sx={{
-                  borderRadius: '8px',
-                  color: '#9E9891',
+                  borderRadius: borderRadius.md,
+                  color: colors.text.muted,
                   '&:hover': {
-                    backgroundColor: '#FFF6E0',
-                    color: '#6B6560',
+                    backgroundColor: colors.background.subtle,
+                    color: colors.text.secondary,
                   }
                 }}
               >
@@ -487,7 +488,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
 
             {/* Breadcrumbs */}
             {viewMode !== 'projects' && (
-              <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: '#F0E8D8', backgroundColor: '#FFFDF7' }}>
+              <Box sx={{ px: 2, py: 1, borderBottom: 1, borderColor: colors.border.soft, backgroundColor: colors.background.paper }}>
                 <Breadcrumbs separator="›" aria-label="breadcrumb">
                   <Link
                     component="button"
@@ -498,10 +499,10 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                     }}
                     sx={{ 
                       cursor: 'pointer',
-                      color: '#6B6560',
+                      color: colors.text.secondary,
                       textDecoration: 'none',
                       '&:hover': {
-                        color: '#FF8C5A',
+                        color: colors.accentWarm.main,
                         textDecoration: 'underline'
                       }
                     }}
@@ -515,10 +516,10 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                       onClick={() => viewMode !== 'project-detail' && setViewMode('project-detail')}
                       sx={{ 
                         cursor: viewMode === 'project-detail' ? 'default' : 'pointer',
-                        color: '#6B6560',
+                        color: colors.text.secondary,
                         textDecoration: 'none',
                         '&:hover': {
-                          color: '#FF8C5A',
+                          color: colors.accentWarm.main,
                           textDecoration: 'underline'
                         }
                       }}
@@ -527,7 +528,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                     </Link>
                   )}
                   {(viewMode === 'memo-detail' || viewMode === 'memo-create') && (
-                    <Typography variant="body2" sx={{ color: '#2D2A26' }}>
+                    <Typography variant="body2" sx={{ color: colors.text.primary }}>
                       {viewMode === 'memo-create' ? '新しいメモ' : selectedMemo?.title}
                     </Typography>
                   )}
@@ -540,7 +541,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
               flex: 1, 
               overflow: 'auto', 
               p: 3,
-              backgroundColor: '#FFFDF7',
+              backgroundColor: colors.background.paper,
               // スクロールバーを非表示
               '&::-webkit-scrollbar': {
                 display: 'none',
@@ -568,14 +569,15 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                     onClick={() => setIsCreateDialogOpen(true)}
                     sx={{
                       mb: 2,
-                      background: 'linear-gradient(45deg, #FF8C5A, #FF7A42)',
-                      borderRadius: '12px',
-                      boxShadow: '0 2px 12px rgba(255, 140, 90, 0.2)',
+                      backgroundColor: colors.accentWarm.main,
+                      borderRadius: borderRadius.button,
+                      boxShadow: shadows.accent,
                       textTransform: 'none',
                       fontWeight: 500,
+                      color: colors.text.inverse,
                       '&:hover': {
-                        background: 'linear-gradient(45deg, #FF7A42, #FF6B35)',
-                        boxShadow: '0 4px 20px rgba(255, 140, 90, 0.3)',
+                        backgroundColor: colors.accentWarm.hover,
+                        boxShadow: shadows.accentHover,
                         transform: 'translateY(-1px)',
                       },
                     }}
@@ -585,13 +587,13 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
 
                   <Divider sx={{ 
                     mb: 2,
-                    borderColor: '#F0E8D8',
+                    borderColor: colors.border.soft,
                     opacity: 0.6
                   }} />
 
                   <Typography variant="subtitle2" fontWeight={600} sx={{ 
                     mb: 1,
-                    color: '#9E9891',
+                    color: colors.text.muted,
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px',
                     fontSize: '11px'
@@ -603,13 +605,13 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                     <Card sx={{ 
                       textAlign: 'center', 
                       py: 3,
-                      backgroundColor: '#FFF8E7',
-                      borderRadius: '12px',
-                      border: '1px solid #F0E8D8',
-                      boxShadow: '0 2px 12px rgba(45, 42, 38, 0.04)'
+                      backgroundColor: colors.background.subtle,
+                      borderRadius: borderRadius.card,
+                      border: `1px solid ${colors.border.soft}`,
+                      boxShadow: shadows.sm
                     }}>
-                      <DescriptionIcon sx={{ fontSize: 48, color: '#9E9891', mb: 1 }} />
-                      <Typography variant="body2" sx={{ color: '#9E9891' }}>
+                      <DescriptionIcon sx={{ fontSize: 48, color: colors.text.muted, mb: 1 }} />
+                      <Typography variant="body2" sx={{ color: colors.text.muted }}>
                         プロジェクトがありません
                       </Typography>
                     </Card>
@@ -623,32 +625,32 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                         >
                           <Card sx={{ 
                             width: '100%',
-                            backgroundColor: '#FFF8E7',
-                            borderRadius: '12px',
-                            border: '1px solid #F0E8D8',
-                            boxShadow: '0 2px 12px rgba(45, 42, 38, 0.04)',
+                            backgroundColor: colors.background.subtle,
+                            borderRadius: borderRadius.card,
+                            border: `1px solid ${colors.border.soft}`,
+                            boxShadow: shadows.sm,
                             '&:hover': {
-                              backgroundColor: '#FFF3D6',
-                              boxShadow: '0 4px 20px rgba(45, 42, 38, 0.06)',
+                              backgroundColor: colors.accentWarm.soft,
+                              boxShadow: shadows.card.hover,
                             }
                           }}>
                             <ListItemButton
                               onClick={() => handleProjectClick(project)}
                               sx={{ 
                                 p: 1.5,
-                                borderRadius: '12px',
+                                borderRadius: borderRadius.card,
                                 '&:hover': {
                                   backgroundColor: 'transparent'
                                 }
                               }}
                             >
                               <Box sx={{ flex: 1 }}>
-                                <Typography variant="body1" fontWeight={500} noWrap sx={{ color: '#2D2A26' }}>
+                                <Typography variant="body1" fontWeight={500} noWrap sx={{ color: colors.text.primary }}>
                                   {project.theme}
                                 </Typography>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
                                   <CalendarIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-                                  <Typography variant="caption" sx={{ color: '#9E9891' }}>
+                                  <Typography variant="caption" sx={{ color: colors.text.muted }}>
                                     {new Date(project.updated_at).toLocaleDateString('ja-JP')}
                                   </Typography>
                                   {project.memo_count > 0 && (
@@ -657,10 +659,10 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                                       size="small" 
                                       sx={{ 
                                         ml: 1,
-                                        backgroundColor: '#FFFAED',
-                                        color: '#6B6560',
+                                        backgroundColor: colors.background.default,
+                                        color: colors.text.secondary,
                                         fontSize: '11px',
-                                        border: '1px solid #F0E8D8'
+                                        border: `1px solid ${colors.border.soft}`
                                       }}
                                     />
                                   )}
@@ -671,11 +673,11 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                                 onClick={(e) => handleMenuOpen(e, project)}
                                 sx={{ 
                                   ml: 1,
-                                  borderRadius: '8px',
-                                  color: '#9E9891',
+                                  borderRadius: borderRadius.md,
+                                  color: colors.text.muted,
                                   '&:hover': {
-                                    backgroundColor: '#FFF6E0',
-                                    color: '#6B6560',
+                                    backgroundColor: colors.background.subtle,
+                                    color: colors.text.secondary,
                                   }
                                 }}
                               >
@@ -696,7 +698,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                       {selectedProject.question && (
                         <Box sx={{ mb: 2 }}>
                           <Typography variant="caption" sx={{ 
-                            color: '#9E9891',
+                            color: colors.text.muted,
                             fontSize: '11px',
                             fontWeight: 600,
                             textTransform: 'uppercase',
@@ -705,7 +707,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                             探究の問い
                           </Typography>
                           <Typography variant="body2" sx={{ 
-                            color: '#2D2A26',
+                            color: colors.text.primary,
                             mt: 0.5,
                             lineHeight: 1.6
                           }}>
@@ -716,7 +718,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                       {selectedProject.hypothesis && (
                         <Box>
                           <Typography variant="caption" sx={{ 
-                            color: '#9E9891',
+                            color: colors.text.muted,
                             fontSize: '11px',
                             fontWeight: 600,
                             textTransform: 'uppercase',
@@ -725,7 +727,7 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                             仮説
                           </Typography>
                           <Typography variant="body2" sx={{ 
-                            color: '#2D2A26',
+                            color: colors.text.primary,
                             mt: 0.5,
                             lineHeight: 1.6
                           }}>
@@ -743,18 +745,18 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                     onClick={handleCreateMemo}
                     sx={{ 
                       mb: 2,
-                      borderRadius: '12px',
-                      borderColor: '#F0E8D8',
-                      color: '#6B6560',
-                      backgroundColor: '#FFFDF7',
+                      borderRadius: borderRadius.button,
+                      borderColor: colors.border.soft,
+                      color: colors.text.secondary,
+                      backgroundColor: colors.background.paper,
                       textTransform: 'none',
                       fontWeight: 500,
-                      boxShadow: '0 2px 8px rgba(45, 42, 38, 0.04)',
+                      boxShadow: shadows.sm,
                       '&:hover': {
-                        borderColor: '#FF8C5A',
-                        color: '#FF8C5A',
-                        backgroundColor: '#FFF4EE',
-                        boxShadow: '0 4px 16px rgba(255, 140, 90, 0.1)',
+                        borderColor: colors.accentWarm.main,
+                        color: colors.accentWarm.main,
+                        backgroundColor: colors.accentWarm.soft,
+                        boxShadow: shadows.card.hover,
                         transform: 'translateY(-1px)',
                       }
                     }}
@@ -764,13 +766,13 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
 
                   <Divider sx={{ 
                     mb: 2,
-                    borderColor: '#F0E8D8',
+                    borderColor: colors.border.soft,
                     opacity: 0.6
                   }} />
 
                   <Typography variant="subtitle2" fontWeight={600} sx={{ 
                     mb: 1,
-                    color: '#9E9891',
+                    color: colors.text.muted,
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px',
                     fontSize: '11px'
@@ -782,13 +784,13 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                     <Card sx={{ 
                       textAlign: 'center', 
                       py: 3,
-                      backgroundColor: '#FFF8E7',
-                      borderRadius: '12px',
-                      border: '1px solid #F0E8D8',
-                      boxShadow: '0 2px 12px rgba(45, 42, 38, 0.04)'
+                      backgroundColor: colors.background.subtle,
+                      borderRadius: borderRadius.card,
+                      border: `1px solid ${colors.border.soft}`,
+                      boxShadow: shadows.sm
                     }}>
-                      <DescriptionIcon sx={{ fontSize: 36, color: '#9E9891', mb: 1 }} />
-                      <Typography variant="body2" sx={{ color: '#9E9891' }}>
+                      <DescriptionIcon sx={{ fontSize: 36, color: colors.text.muted, mb: 1 }} />
+                      <Typography variant="body2" sx={{ color: colors.text.muted }}>
                         メモがありません
                       </Typography>
                     </Card>
@@ -802,30 +804,30 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                         >
                           <Card sx={{ 
                             width: '100%',
-                            backgroundColor: '#FFF8E7',
-                            borderRadius: '12px',
-                            border: '1px solid #F0E8D8',
-                            boxShadow: '0 2px 12px rgba(45, 42, 38, 0.04)',
+                            backgroundColor: colors.background.subtle,
+                            borderRadius: borderRadius.card,
+                            border: `1px solid ${colors.border.soft}`,
+                            boxShadow: shadows.sm,
                             '&:hover': {
-                              backgroundColor: '#FFF3D6',
-                              boxShadow: '0 4px 20px rgba(45, 42, 38, 0.06)',
+                              backgroundColor: colors.accentWarm.soft,
+                              boxShadow: shadows.card.hover,
                             }
                           }}>
                             <ListItemButton
                               onClick={() => handleMemoClick(memo)}
                               sx={{ 
                                 p: 1.5,
-                                borderRadius: '12px',
+                                borderRadius: borderRadius.card,
                                 '&:hover': {
                                   backgroundColor: 'transparent'
                                 }
                               }}
                             >
                               <Box sx={{ flex: 1 }}>
-                                <Typography variant="body2" fontWeight={500} noWrap sx={{ color: '#2D2A26' }}>
+                                <Typography variant="body2" fontWeight={500} noWrap sx={{ color: colors.text.primary }}>
                                   {memo.title}
                                 </Typography>
-                                <Typography variant="caption" sx={{ color: '#9E9891' }}>
+                                <Typography variant="caption" sx={{ color: colors.text.muted }}>
                                   {new Date(memo.updated_at).toLocaleDateString('ja-JP')}
                                 </Typography>
                               </Box>
@@ -834,11 +836,11 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                                 onClick={(e) => handleMemoMenuOpen(e, memo)}
                                 sx={{ 
                                   ml: 1,
-                                  borderRadius: '8px',
-                                  color: '#9E9891',
+                                  borderRadius: borderRadius.md,
+                                  color: colors.text.muted,
                                   '&:hover': {
-                                    backgroundColor: '#FFF6E0',
-                                    color: '#6B6560',
+                                    backgroundColor: colors.background.subtle,
+                                    color: colors.text.secondary,
                                   }
                                 }}
                               >
@@ -860,10 +862,10 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
                   <Paper sx={{ 
                     p: 3,
                     height: 'calc(100vh - 280px)',
-                    backgroundColor: '#FFF8E7',
-                    borderRadius: '12px',
-                    border: '1px solid #F0E8D8',
-                    boxShadow: '0 2px 12px rgba(45, 42, 38, 0.04)'
+                    backgroundColor: colors.background.subtle,
+                    borderRadius: borderRadius.card,
+                    border: `1px solid ${colors.border.soft}`,
+                    boxShadow: shadows.sm
                   }}>
                     <MemoEditor
                       initialContent={memoContent}
@@ -911,6 +913,14 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
         anchorEl={menuAnchor}
         open={Boolean(menuAnchor)}
         onClose={handleMenuClose}
+        PaperProps={{
+          sx: {
+            backgroundColor: colors.background.paper,
+            border: `1px solid ${colors.border.soft}`,
+            boxShadow: shadows.md,
+            borderRadius: borderRadius.lg,
+          },
+        }}
       >
         <MenuItem
           onClick={() => {
@@ -946,6 +956,14 @@ const DashboardSidebar: React.FC<DashboardSidebarProps> = ({ isOpen, onToggle, w
         anchorEl={memoMenuAnchor}
         open={Boolean(memoMenuAnchor)}
         onClose={handleMemoMenuClose}
+        PaperProps={{
+          sx: {
+            backgroundColor: colors.background.paper,
+            border: `1px solid ${colors.border.soft}`,
+            boxShadow: shadows.md,
+            borderRadius: borderRadius.lg,
+          },
+        }}
       >
         <MenuItem
           onClick={() => {

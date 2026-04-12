@@ -12,6 +12,7 @@ import {
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { borderRadius, colors, shadows } from '../styles/design-system';
 
 const PasswordResetCompletePage = () => {
   const navigate = useNavigate();
@@ -25,6 +26,7 @@ const PasswordResetCompletePage = () => {
           alignItems: 'center',
           justifyContent: 'center',
           py: 3,
+          backgroundColor: colors.background.default,
         }}
       >
         <motion.div
@@ -33,18 +35,18 @@ const PasswordResetCompletePage = () => {
           transition={{ duration: 0.5 }}
           style={{ width: '100%' }}
         >
-          <Paper elevation={3} sx={{ p: 4, textAlign: 'center' }}>
+          <Paper elevation={0} sx={{ p: 4, textAlign: 'center', backgroundColor: colors.background.paper, border: `1px solid ${colors.border.soft}`, borderRadius: borderRadius.card, boxShadow: shadows.card.default }}>
             <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.2, type: 'spring', stiffness: 200 }}
             >
               <CheckCircleOutline
-                sx={{
-                  fontSize: 80,
-                  color: 'success.main',
-                  mb: 2,
-                }}
+              sx={{
+                fontSize: 80,
+                color: colors.success.main,
+                mb: 2,
+              }}
               />
             </motion.div>
 
@@ -70,11 +72,13 @@ const PasswordResetCompletePage = () => {
               startIcon={<Login />}
               onClick={() => navigate('/signin')}
               sx={{
-                background: 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)',
-                color: 'white',
+                backgroundColor: colors.accentWarm.main,
+                color: colors.text.inverse,
                 '&:hover': {
-                  background: 'linear-gradient(135deg, #F57C00 0%, #E65100 100%)',
+                  backgroundColor: colors.accentWarm.hover,
+                  boxShadow: shadows.accent,
                 },
+                borderRadius: borderRadius.button,
               }}
             >
               ログインページへ戻る

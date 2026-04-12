@@ -36,6 +36,8 @@ const GeneralInquiryPage = lazy(() => import('./pages/GeneralInquiryPage'));
 const ProjectPage = lazy(() => import('./pages/ProjectPage'));
 const MemoPage = lazy(() => import('./pages/MemoPage'));
 const MultiMemoPage = lazy(() => import('./pages/MultiMemoPage'));
+const DiaryPage = lazy(() => import('./pages/DiaryPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 // 不要なコンポーネントを削除（メモリ削減のため）
 // const NotificationDemoPage = lazy(() => import('./pages/NotificationDemoPage'));
 // const ThemeDeepDiveGame = lazy(() => import('./components/FrameworkGames/ThemeDeepDiveGame'));
@@ -250,6 +252,8 @@ function App() {
                 <Route path="projects/:projectId/memos/:memoId" element={<LazyWrapper><MemoPage /></LazyWrapper>} />
                 <Route path="memos" element={<LazyWrapper><MultiMemoPage /></LazyWrapper>} />
                 <Route path="inquiry" element={<LazyWrapper><GeneralInquiryPage /></LazyWrapper>} />
+                <Route path="diary" element={<LazyWrapper><DiaryPage /></LazyWrapper>} />
+                <Route path="profile" element={<LazyWrapper><ProfilePage /></LazyWrapper>} />
               </Route>
               
               {/* InquiryExplorer - 一時的に無効化（メモリ削減のため） */}
@@ -271,6 +275,8 @@ function App() {
               <Route path="/student" element={<Navigate to="/app/dashboard" replace />} />
               <Route path="/chat" element={<Navigate to="/app/chat" replace />} />
               <Route path="/home" element={<Navigate to="/app/home" replace />} />
+              <Route path="/diary" element={<Navigate to="/app/diary" replace />} />
+              <Route path="/profile" element={<Navigate to="/app/profile" replace />} />
               <Route path="/projects/:projectId" element={<LegacyProjectRedirect />} />
               <Route path="/projects/:projectId/memos/:memoId" element={<LegacyMemoRedirect />} />
               <Route path="/memos" element={<Navigate to="/app/memos" replace />} />

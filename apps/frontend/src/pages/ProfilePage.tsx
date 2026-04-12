@@ -1,38 +1,47 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Container,
-  Box,
-  Typography,
-  Paper,
-  Button,
   Alert,
-  Tabs,
-  Tab,
-  Divider,
+  Box,
+  Button,
   Card,
   CardContent,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
   Chip,
+  CircularProgress,
+  Container,
+  Divider,
+  Grid,
+  List,
+  ListItemButton,
+  ListItemText,
   Stack,
-  LinearProgress,
+  Tab,
+  Tabs,
+  TextField,
+  Typography,
 } from '@mui/material';
-import {
-  Person as PersonIcon,
-  Home as HomeIcon,
-  Save as SaveIcon,
-  History as HistoryIcon,
-  School as SchoolIcon,
-  GpsFixed as TargetIcon,
-  Assignment as PlanIcon,
-  Lightbulb as ThemeIcon,
-} from '@mui/icons-material';
 import { motion } from 'framer-motion';
-import MyTags from '../components/MyTags';
+import { API_BASE_URL } from '../config/api';
+import { tokenManager } from '../utils/tokenManager';
 import { useAuthStore } from '../stores/authStore';
+import { borderRadius, colors, shadows } from '../styles/design-system';
+
+interface DiaryRecord {
+  id: string;
+  student_id: string;
+  date: string;
+  published_body?: string;
+  published_quote?: string;
+  published_tags: string[];
+  emotion?: {
+    effort_score?: number;
+    mood_tags?: string[];
+    free_text?: string;
+  };
+  turning_point: boolean;
+  submitted_at?: string;
+  status: string;
+}
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -40,349 +49,384 @@ interface TabPanelProps {
   value: number;
 }
 
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
-
-  return (
-    <div
-      role="tabpanel"
-      hidden={value !== index}
-      id={`profile-tabpanel-${index}`}
-      aria-labelledby={`profile-tab-${index}`}
-      {...other}
-    >
-      {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
-    </div>
-  );
+function TabPanel({ children, value, index }: TabPanelProps) {
+  if (value !== index) return null;
+  return <Box sx={{ py: 3 }}>{children}</Box>;
 }
 
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
-  const [tabValue, setTabValue] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info', text: string } | null>(null);
-
-  // プロフィールデータの状態管理
-  const [myTags, setMyTags] = useState<string[]>([]);
-
-  // 学習履歴データ（サンプル）
-  const [learningHistory, setLearningHistory] = useState({
-    themes: [] as { name: string; date: string; status: string }[],
-    goals: [] as { content: string; date: string; step: number }[],
-    plans: [] as { title: string; date: string; progress: number }[],
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { profile, fetchProfile } = useAuthStore();
+  const [tabValue, setTabValue] = useState(searchParams.get('tab') === 'diaries' ? 1 : 0);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [diaries, setDiaries] = useState<DiaryRecord[]>([]);
+  const [selectedDiaryId, setSelectedDiaryId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    grade: '',
+    class_name: '',
+    attendance_number: '',
   });
 
-  // データ読み込み
   useEffect(() => {
-    loadProfileData();
-    loadLearningHistory();
-  }, [user]);
+    void loadPage();
+  }, []);
 
-  const loadProfileData = async () => {
+  useEffect(() => {
+    setTabValue(searchParams.get('tab') === 'diaries' ? 1 : 0);
+  }, [searchParams]);
+
+  const selectedDiary = useMemo(
+    () => diaries.find((diary) => diary.id === selectedDiaryId) ?? diaries[0] ?? null,
+    [diaries, selectedDiaryId]
+  );
+
+  const loadPage = async () => {
+    setLoading(true);
+    setErrorMessage(null);
     try {
-      // LocalStorageから読み込み
-      const savedTags = localStorage.getItem(`user-${user?.id}-interests`);
-      setMyTags(savedTags ? JSON.parse(savedTags) : []);
-
-      // TODO: Supabaseからの読み込み
-      // const response = await fetch('/api/profile', { ... });
-    } catch (error) {
-      console.error('プロフィール読み込みエラー:', error);
-      showMessage('error', 'データの読み込みに失敗しました');
-    }
-  };
-
-  const loadLearningHistory = async () => {
-    try {
-      // 学習履歴をLocalStorageから読み込み
-      const themes: { name: string; date: string; status: string }[] = [];
-      const goals: { content: string; date: string; step: number }[] = [];
-      const plans: { title: string; date: string; progress: number }[] = [];
-
-      // Step1-4の履歴を読み込み
-      for (let step = 1; step <= 4; step++) {
-        const stepContent = localStorage.getItem(`step-${step}-content`);
-        if (stepContent) {
-          switch (step) {
-            case 1:
-              const theme = localStorage.getItem('step-1-theme');
-              if (theme) {
-                themes.push({
-                  name: theme,
-                  date: new Date().toLocaleDateString('ja-JP'),
-                  status: '設定済み'
-                });
-              }
-              break;
-            case 2:
-              const goal = localStorage.getItem('step-2-goal');
-              if (goal) {
-                goals.push({
-                  content: goal,
-                  date: new Date().toLocaleDateString('ja-JP'),
-                  step: 2
-                });
-              }
-              break;
-            case 3:
-              if (stepContent.length > 50) {
-                plans.push({
-                  title: `活動計画 (Step ${step})`,
-                  date: new Date().toLocaleDateString('ja-JP'),
-                  progress: 75
-                });
-              }
-              break;
-          }
-        }
+      const token = tokenManager.getAccessToken();
+      if (!token) {
+        throw new Error('認証トークンが見つかりません');
       }
 
-      setLearningHistory({ themes, goals, plans });
+      const [profileResponse, diaryResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/auth/profile`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${API_BASE_URL}/diary/my-diaries?limit=50&offset=0`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+
+      if (!profileResponse.ok) {
+        throw new Error('プロフィールの読み込みに失敗しました');
+      }
+
+      const profilePayload = await profileResponse.json();
+      const nextProfile = profilePayload.profile;
+      setFormData({
+        name: nextProfile?.name || '',
+        grade: nextProfile?.grade || '',
+        class_name: nextProfile?.class_name || '',
+        attendance_number: nextProfile?.attendance_number ? String(nextProfile.attendance_number) : '',
+      });
+
+      if (diaryResponse.ok) {
+        const diaryPayload = (await diaryResponse.json()) as DiaryRecord[];
+        setDiaries(diaryPayload);
+        setSelectedDiaryId(diaryPayload[0]?.id ?? null);
+      } else {
+        setDiaries([]);
+      }
     } catch (error) {
-      console.error('学習履歴読み込みエラー:', error);
-    }
-  };
-
-  const showMessage = (type: 'success' | 'error' | 'info', text: string) => {
-    setMessage({ type, text });
-    setTimeout(() => setMessage(null), 3000);
-  };
-
-  const handleSaveProfile = async () => {
-    setLoading(true);
-    try {
-      // LocalStorageに保存（ユーザーIDを使用）
-      localStorage.setItem(`user-${user?.id}-interests`, JSON.stringify(myTags));
-
-      // TODO: Supabaseに保存
-      // const response = await fetch('/api/profile', {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify({ myTags }),
-      // });
-
-      showMessage('success', 'プロフィールを保存しました');
-    } catch (error) {
-      console.error('保存エラー:', error);
-      showMessage('error', '保存に失敗しました。再試行してください。');
+      console.error('Failed to load profile page:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'データの読み込みに失敗しました');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+  const handleProfileSave = async () => {
+    setSaving(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      const token = tokenManager.getAccessToken();
+      if (!token) {
+        throw new Error('認証トークンが見つかりません');
+      }
+
+      const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          name: formData.name || null,
+          grade: formData.grade || null,
+          class_name: formData.class_name || null,
+          attendance_number: formData.attendance_number ? Number(formData.attendance_number) : null,
+        }),
+      });
+
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.detail || 'プロフィールの保存に失敗しました');
+      }
+
+      await fetchProfile();
+      setSuccessMessage('プロフィールを更新しました');
+    } catch (error) {
+      console.error('Failed to save profile:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'プロフィールの保存に失敗しました');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTabChange = (_event: React.SyntheticEvent, nextValue: number) => {
+    setTabValue(nextValue);
+    setSearchParams(nextValue === 1 ? { tab: 'diaries' } : {});
   };
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        {/* ヘッダー */}
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" fontWeight={700} gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <PersonIcon color="primary" />
-            プロフィール設定
+      <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+        <Box
+          sx={{
+            mb: 4,
+            p: 4,
+            borderRadius: '32px',
+            backgroundColor: colors.background.paper,
+            border: `1px solid ${colors.border.warm}`,
+            boxShadow: shadows.md,
+          }}
+        >
+          <Typography variant="overline" sx={{ letterSpacing: '0.18em', color: colors.text.secondary }}>
+            Profile & Diary Archive
           </Typography>
-          <Typography variant="body1" color="text.secondary">
-            あなたの興味や関心を管理し、学習履歴を確認できます
+          <Typography variant="h3" sx={{ mt: 1, fontWeight: 700, color: colors.text.primary }}>
+            プロフィールと日誌
           </Typography>
-        </Box>
-
-        {/* メッセージ表示 */}
-        {message && (
-          <Alert 
-            severity={message.type} 
-            sx={{ mb: 3 }}
-            onClose={() => setMessage(null)}
-          >
-            {message.text}
-          </Alert>
-        )}
-
-        {/* ローディング */}
-        {loading && <LinearProgress sx={{ mb: 3 }} />}
-
-        {/* タブナビゲーション */}
-        <Paper elevation={1} sx={{ mb: 3 }}>
-          <Tabs 
-            value={tabValue} 
-            onChange={handleTabChange}
-            variant="fullWidth"
-            sx={{ borderBottom: 1, borderColor: 'divider' }}
-          >
-            <Tab 
-              label="マイタグ" 
-              icon={<PersonIcon />}
-              iconPosition="start"
-              sx={{ minHeight: 64 }}
-            />
-            <Tab 
-              label="過去に設定した探究テーマ" 
-              icon={<HistoryIcon />}
-              iconPosition="start"
-              sx={{ minHeight: 64 }}
-            />
-          </Tabs>
-        </Paper>
-
-        {/* タブコンテンツ */}
-        <TabPanel value={tabValue} index={0}>
-          {/* マイタグセクション */}
-          <Typography variant="h5" fontWeight={600} gutterBottom sx={{ mb: 1 }}>
-            My Tags
+          <Typography variant="body1" sx={{ mt: 1.5, color: colors.text.secondary, maxWidth: 760 }}>
+            自分の設定を整えながら、これまでの探究日誌を確認できます。日誌を保存した直後はこのページで内容を振り返れます。
           </Typography>
-
-          {/* マイタグ */}
-          <MyTags
-            tags={myTags}
-            onTagsChange={setMyTags}
-            placeholder="例: 音楽、映画、AI、環境問題、プログラミング"
-            maxTags={50}
-          />
-
-          {/* 保存ボタン */}
-          <Box sx={{ textAlign: 'center', mt: 3 }}>
-            <Button
-              variant="contained"
-              size="large"
-              startIcon={<SaveIcon />}
-              onClick={handleSaveProfile}
-              disabled={loading}
-              sx={{ minWidth: 200, py: 1.5 }}
-            >
-              保存
-            </Button>
-          </Box>
-        </TabPanel>
-
-        <TabPanel value={tabValue} index={1}>
-          {/* 探究テーマ履歴セクション */}
-          <Typography variant="h5" fontWeight={600} gutterBottom sx={{ mb: 1 }}>
-            過去に設定した探究テーマ
-          </Typography>
-
-          <Stack spacing={3}>
-            {/* テーマ履歴 */}
-            <Card elevation={2}>
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <ThemeIcon color="primary" />
-                  探究テーマ履歴
-                </Typography>
-                {learningHistory.themes.length > 0 ? (
-                  <List>
-                    {learningHistory.themes.map((theme, index) => (
-                      <ListItem key={index} divider={index < learningHistory.themes.length - 1}>
-                        <ListItemIcon>
-                          <Chip label={theme.status} color="primary" size="small" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={theme.name}
-                          secondary={`設定日: ${theme.date}`}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                ) : (
-                  <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                    まだ探究テーマが設定されていません
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 目標履歴 */}
-            <Card elevation={2}>
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <TargetIcon color="primary" />
-                  学習目標履歴
-                </Typography>
-                {learningHistory.goals.length > 0 ? (
-                  <List>
-                    {learningHistory.goals.map((goal, index) => (
-                      <ListItem key={index} divider={index < learningHistory.goals.length - 1}>
-                        <ListItemIcon>
-                          <Chip label={`Step ${goal.step}`} color="secondary" size="small" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={goal.content.length > 100 ? `${goal.content.substring(0, 100)}...` : goal.content}
-                          secondary={`設定日: ${goal.date}`}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                ) : (
-                  <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                    まだ学習目標が設定されていません
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* 活動計画履歴 */}
-            <Card elevation={2}>
-              <CardContent>
-                <Typography variant="h6" fontWeight={600} gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <PlanIcon color="primary" />
-                  活動計画履歴
-                </Typography>
-                {learningHistory.plans.length > 0 ? (
-                  <List>
-                    {learningHistory.plans.map((plan, index) => (
-                      <ListItem key={index} divider={index < learningHistory.plans.length - 1}>
-                        <ListItemIcon>
-                          <Chip label={`${plan.progress}%`} color="success" size="small" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={plan.title}
-                          secondary={
-                            <Box>
-                              <Typography variant="caption" display="block">
-                                作成日: {plan.date}
-                              </Typography>
-                              <LinearProgress 
-                                variant="determinate" 
-                                value={plan.progress} 
-                                sx={{ mt: 1, height: 6, borderRadius: 2.1 }}
-                              />
-                            </Box>
-                          }
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                ) : (
-                  <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-                    まだ活動計画が作成されていません
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
+          <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap', useFlexGap: true }}>
+            <Chip label={profile?.schools?.name || '学校未設定'} sx={{ backgroundColor: colors.accentWarm.soft, color: colors.accentWarm.active, border: `1px solid ${colors.border.warm}` }} />
+            <Chip label={profile?.role === 'teacher' ? 'Teacher' : 'Student'} sx={{ backgroundColor: colors.background.elevated, color: colors.text.secondary, border: `1px solid ${colors.border.soft}` }} />
           </Stack>
-        </TabPanel>
-
-        {/* ホームに戻るボタン */}
-        <Divider sx={{ my: 4 }} />
-        <Box sx={{ textAlign: 'center' }}>
-          <Button
-            variant="outlined"
-            size="large"
-            startIcon={<HomeIcon />}
-            onClick={() => navigate('/home')}
-            sx={{ minWidth: 200, py: 1.5 }}
-          >
-            ホームに戻る
-          </Button>
         </Box>
+
+        {errorMessage && <Alert severity="error" sx={{ mb: 3 }}>{errorMessage}</Alert>}
+        {successMessage && <Alert severity="success" sx={{ mb: 3 }}>{successMessage}</Alert>}
+
+        <Card sx={{ borderRadius: '28px', border: `1px solid ${colors.border.soft}`, boxShadow: shadows.sm, backgroundColor: colors.background.paper }}>
+          <Tabs value={tabValue} onChange={handleTabChange} sx={{ px: 2, pt: 1, '& .MuiTabs-indicator': { backgroundColor: colors.accentWarm.main }, '& .MuiTab-root.Mui-selected': { color: colors.accentWarm.active } }}>
+            <Tab label="プロフィール編集" />
+            <Tab label="日誌アーカイブ" />
+          </Tabs>
+
+          <TabPanel value={tabValue} index={0}>
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={7}>
+                  <Card sx={{ borderRadius: '24px', boxShadow: 'none', border: `1px solid ${colors.border.soft}`, backgroundColor: colors.background.paper }}>
+                    <CardContent sx={{ p: 3.5 }}>
+                      <Typography variant="h5" sx={{ fontWeight: 700, color: colors.text.primary, mb: 1 }}>
+                        基本プロフィール
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: colors.text.secondary, mb: 3 }}>
+                        表示名や学年を更新できます。学校情報は onboarding の設定内容を表示しています。
+                      </Typography>
+                      <Grid container spacing={2}>
+                        <Grid item xs={12}>
+                          <TextField fullWidth label="名前" value={formData.name} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <TextField fullWidth label="学年" value={formData.grade} onChange={(e) => setFormData((prev) => ({ ...prev, grade: e.target.value }))} />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <TextField fullWidth label="クラス" value={formData.class_name} onChange={(e) => setFormData((prev) => ({ ...prev, class_name: e.target.value }))} />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <TextField fullWidth label="出席番号" value={formData.attendance_number} onChange={(e) => setFormData((prev) => ({ ...prev, attendance_number: e.target.value }))} />
+                        </Grid>
+                        <Grid item xs={12} sm={6}>
+                          <TextField fullWidth label="メールアドレス" value={profile?.email || ''} disabled />
+                        </Grid>
+                        <Grid item xs={12}>
+                          <TextField fullWidth label="学校" value={profile?.schools?.name || '未設定'} disabled />
+                        </Grid>
+                      </Grid>
+
+                      <Stack direction="row" spacing={1.5} sx={{ mt: 3 }}>
+                        <Button variant="contained" onClick={handleProfileSave} disabled={saving}>
+                          {saving ? '保存中...' : 'プロフィールを保存'}
+                        </Button>
+                        <Button variant="outlined" onClick={() => navigate('/app/chat')}>
+                          チャットに戻る
+                        </Button>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12} md={5}>
+                  <Card sx={{ borderRadius: '24px', boxShadow: 'none', border: `1px solid ${colors.border.soft}`, height: '100%', backgroundColor: colors.background.subtle }}>
+                    <CardContent sx={{ p: 3.5 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 700, color: colors.text.primary }}>
+                        現在の状態
+                      </Typography>
+                      <Stack spacing={2} sx={{ mt: 2.5 }}>
+                        <Box>
+                          <Typography variant="caption" sx={{ color: colors.text.secondary, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                            名前
+                          </Typography>
+                          <Typography variant="body1" sx={{ color: colors.text.primary, fontWeight: 600 }}>
+                            {formData.name || '未設定'}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" sx={{ color: colors.text.secondary, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                            所属
+                          </Typography>
+                          <Typography variant="body1" sx={{ color: colors.text.primary, fontWeight: 600 }}>
+                            {[formData.grade, formData.class_name].filter(Boolean).join(' / ') || '未設定'}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" sx={{ color: colors.text.secondary, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                            日誌保存数
+                          </Typography>
+                          <Typography variant="body1" sx={{ color: colors.text.primary, fontWeight: 600 }}>
+                            {diaries.length} 件
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" sx={{ color: colors.text.secondary, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                            最新更新
+                          </Typography>
+                          <Typography variant="body1" sx={{ color: colors.text.primary, fontWeight: 600 }}>
+                            {profile?.updated_at ? new Date(profile.updated_at).toLocaleString('ja-JP') : '未更新'}
+                          </Typography>
+                        </Box>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+            )}
+          </TabPanel>
+
+          <TabPanel value={tabValue} index={1}>
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={4}>
+                  <Card sx={{ borderRadius: '24px', boxShadow: 'none', border: `1px solid ${colors.border.soft}`, backgroundColor: colors.background.paper }}>
+                    <CardContent sx={{ p: 2 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 700, color: colors.text.primary, px: 1, py: 1 }}>
+                        保存した日誌
+                      </Typography>
+                      {diaries.length === 0 ? (
+                          <Typography variant="body2" sx={{ px: 1, py: 3, color: colors.text.secondary }}>
+                          まだ日誌は保存されていません。
+                        </Typography>
+                      ) : (
+                        <List disablePadding>
+                          {diaries.map((diary) => (
+                            <ListItemButton
+                              key={diary.id}
+                              selected={selectedDiary?.id === diary.id}
+                              onClick={() => setSelectedDiaryId(diary.id)}
+                              sx={{ borderRadius: '18px', mb: 0.75, alignItems: 'flex-start', '&.Mui-selected': { backgroundColor: colors.background.subtle, border: `1px solid ${colors.border.warm}` } }}
+                            >
+                              <ListItemText
+                                primary={new Date(diary.date).toLocaleDateString('ja-JP')}
+                                secondary={
+                                  <Box sx={{ mt: 0.75 }}>
+                                    <Typography variant="body2" sx={{ color: colors.text.secondary }}>
+                                      {(diary.published_body || '').slice(0, 52) || '本文なし'}
+                                    </Typography>
+                                    <Stack direction="row" spacing={0.5} sx={{ mt: 1, flexWrap: 'wrap', useFlexGap: true }}>
+                                      {(diary.emotion?.mood_tags || []).slice(0, 3).map((tag) => (
+                                        <Chip key={tag} size="small" label={tag} />
+                                      ))}
+                                    </Stack>
+                                  </Box>
+                                }
+                              />
+                            </ListItemButton>
+                          ))}
+                        </List>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12} md={8}>
+                  <Card sx={{ borderRadius: '24px', boxShadow: 'none', border: `1px solid ${colors.border.soft}`, minHeight: '100%', backgroundColor: colors.background.paper }}>
+                    <CardContent sx={{ p: 3.5 }}>
+                      {selectedDiary ? (
+                        <>
+                          <Typography variant="overline" sx={{ letterSpacing: '0.14em', color: colors.text.secondary }}>
+                            {new Date(selectedDiary.date).toLocaleDateString('ja-JP')}
+                          </Typography>
+                          <Typography variant="h4" sx={{ fontWeight: 700, color: colors.text.primary, mt: 0.5 }}>
+                            探究日誌
+                          </Typography>
+                          <Stack direction="row" spacing={1} sx={{ mt: 2, mb: 3, flexWrap: 'wrap', useFlexGap: true }}>
+                            {(selectedDiary.published_tags || []).map((tag) => (
+                              <Chip key={tag} label={`#${tag}`} sx={{ backgroundColor: colors.accentWarm.soft, color: colors.accentWarm.active, border: `1px solid ${colors.border.warm}` }} />
+                            ))}
+                            {selectedDiary.turning_point && <Chip label="転換点あり" color="primary" variant="outlined" />}
+                          </Stack>
+                          <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.95, color: colors.text.primary }}>
+                            {selectedDiary.published_body || '本文はありません。'}
+                          </Typography>
+
+                          {selectedDiary.published_quote && (
+                            <Box sx={{ mt: 3, p: 2.5, borderRadius: '18px', backgroundColor: colors.background.subtle, border: `1px solid ${colors.border.warm}` }}>
+                              <Typography variant="caption" sx={{ color: colors.text.secondary, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                                Quote
+                              </Typography>
+                              <Typography variant="body1" sx={{ mt: 1, fontStyle: 'italic', color: colors.text.primary }}>
+                                「{selectedDiary.published_quote}」
+                              </Typography>
+                            </Box>
+                          )}
+
+                          <Divider sx={{ my: 3 }} />
+
+                          <Grid container spacing={2}>
+                            <Grid item xs={12} sm={6}>
+                              <Typography variant="caption" sx={{ color: colors.text.secondary, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                                感情タグ
+                              </Typography>
+                              <Stack direction="row" spacing={0.8} sx={{ mt: 1, flexWrap: 'wrap', useFlexGap: true }}>
+                                {(selectedDiary.emotion?.mood_tags || []).map((tag) => (
+                                  <Chip key={tag} label={tag} />
+                                ))}
+                              </Stack>
+                            </Grid>
+                            <Grid item xs={12} sm={6}>
+                              <Typography variant="caption" sx={{ color: colors.text.secondary, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                                炎の強さ
+                              </Typography>
+                              <Typography variant="h5" sx={{ mt: 1, color: colors.accentWarm.active, fontWeight: 700 }}>
+                                {(selectedDiary.emotion?.effort_score || 0) * 20} / 100
+                              </Typography>
+                            </Grid>
+                          </Grid>
+                        </>
+                      ) : (
+                        <Typography variant="body2" sx={{ color: colors.text.secondary }}>
+                          表示する日誌がありません。
+                        </Typography>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+            )}
+          </TabPanel>
+        </Card>
       </motion.div>
     </Container>
   );
 };
 
-export default ProfilePage; 
+export default ProfilePage;

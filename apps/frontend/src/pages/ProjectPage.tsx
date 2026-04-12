@@ -34,6 +34,7 @@ import projectPageService, {
   type ProjectPageProject as Project,
   type ProjectPageProjectPayload,
 } from '../services/project-page/projectPageService';
+import { borderRadius, colors, shadows } from '../styles/design-system';
 
 const ProjectPage: React.FC = () => {
   const theme = useTheme();
@@ -255,7 +256,7 @@ const ProjectPage: React.FC = () => {
   if (isLoading) {
     return (
       <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Typography>読み込み中...</Typography>
+        <Typography sx={{ color: colors.text.secondary }}>読み込み中...</Typography>
       </Container>
     );
   }
@@ -263,7 +264,7 @@ const ProjectPage: React.FC = () => {
   if (!project) {
     return (
       <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Typography>プロジェクトが見つかりません</Typography>
+        <Typography sx={{ color: colors.text.secondary }}>プロジェクトが見つかりません</Typography>
       </Container>
     );
   }
@@ -284,7 +285,7 @@ const ProjectPage: React.FC = () => {
               mb: 4,
             }}
           >
-            <Typography variant="h4" sx={{ fontWeight: 600 }}>
+            <Typography variant="h4" sx={{ fontWeight: 600, color: colors.text.primary }}>
               探究プロジェクト
             </Typography>
             <Button
@@ -292,12 +293,13 @@ const ProjectPage: React.FC = () => {
               startIcon={<PsychologyIcon />}
               onClick={toggleChat}
               sx={{
-                background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
-                color: 'white',
+                backgroundColor: colors.accentWarm.main,
+                color: colors.text.inverse,
                 '&:hover': {
-                  background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
+                  backgroundColor: colors.accentWarm.hover,
+                  boxShadow: shadows.accent,
                 },
-                borderRadius: 1.4,
+                borderRadius: borderRadius.button,
                 px: 3,
                 py: 1.5,
               }}
@@ -307,14 +309,14 @@ const ProjectPage: React.FC = () => {
           </Box>
 
           {project && (
-            <Card sx={{ mb: 4, borderRadius: 2.1 }}>
+            <Card sx={{ mb: 4, borderRadius: borderRadius.card, backgroundColor: colors.background.paper, border: `1px solid ${colors.border.soft}`, boxShadow: shadows.card.default }}>
               <CardContent sx={{ p: 4 }}>
-                <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
+                <Typography variant="h5" sx={{ mb: 3, fontWeight: 600, color: colors.text.primary }}>
                   {project.theme}
                 </Typography>
 
                 <Box sx={{ mb: 3 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1, color: colors.text.primary }}>
                     問い
                   </Typography>
                   {editingField === 'question' ? (
@@ -347,18 +349,19 @@ const ProjectPage: React.FC = () => {
                       onClick={() => startEditing('question')}
                       sx={{
                         p: 2,
-                        border: '1px dashed #ddd',
-                        borderRadius: 0.7,
+                        border: `1px dashed ${colors.border.soft}`,
+                        borderRadius: borderRadius.md,
                         cursor: 'pointer',
                         minHeight: 60,
                         display: 'flex',
                         alignItems: 'center',
+                        backgroundColor: colors.background.subtle,
                         '&:hover': {
-                          backgroundColor: '#f5f5f5',
+                          backgroundColor: colors.accentWarm.soft,
                         },
                       }}
                     >
-                      <Typography color={project.question ? 'text.primary' : 'text.secondary'}>
+                      <Typography color={project.question ? colors.text.primary : colors.text.secondary}>
                         {project.question || 'クリックして問いを設定...'}
                       </Typography>
                     </Box>
@@ -366,7 +369,7 @@ const ProjectPage: React.FC = () => {
                 </Box>
 
                 <Box>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1, color: colors.text.primary }}>
                     仮説
                   </Typography>
                   {editingField === 'hypothesis' ? (
@@ -399,18 +402,19 @@ const ProjectPage: React.FC = () => {
                       onClick={() => startEditing('hypothesis')}
                       sx={{
                         p: 2,
-                        border: '1px dashed #ddd',
-                        borderRadius: 0.7,
+                        border: `1px dashed ${colors.border.soft}`,
+                        borderRadius: borderRadius.md,
                         cursor: 'pointer',
                         minHeight: 60,
                         display: 'flex',
                         alignItems: 'center',
+                        backgroundColor: colors.background.subtle,
                         '&:hover': {
-                          backgroundColor: '#f5f5f5',
+                          backgroundColor: colors.accentWarm.soft,
                         },
                       }}
                     >
-                      <Typography color={project.hypothesis ? 'text.primary' : 'text.secondary'}>
+                      <Typography color={project.hypothesis ? colors.text.primary : colors.text.secondary}>
                         {project.hypothesis || 'クリックして仮説を設定...'}
                       </Typography>
                     </Box>
@@ -421,7 +425,7 @@ const ProjectPage: React.FC = () => {
           )}
 
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+            <Typography variant="h5" sx={{ fontWeight: 600, color: colors.text.primary }}>
               メモ
             </Typography>
             <Button
@@ -429,11 +433,13 @@ const ProjectPage: React.FC = () => {
               startIcon={<AddIcon />}
               onClick={handleCreateMemo}
               sx={{
-                background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
-                color: 'white',
+                backgroundColor: colors.accentWarm.main,
+                color: colors.text.inverse,
                 '&:hover': {
-                  background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
+                  backgroundColor: colors.accentWarm.hover,
+                  boxShadow: shadows.accent,
                 },
+                borderRadius: borderRadius.button,
               }}
             >
               新しいメモ
@@ -455,9 +461,14 @@ const ProjectPage: React.FC = () => {
                         height: '100%',
                         cursor: 'pointer',
                         transition: 'all 0.3s ease',
+                        backgroundColor: colors.background.paper,
+                        border: `1px solid ${colors.border.soft}`,
+                        borderRadius: borderRadius.card,
+                        boxShadow: shadows.card.default,
                         '&:hover': {
                           transform: 'translateY(-4px)',
-                          boxShadow: '0 8px 25px rgba(0,0,0,0.15)',
+                          boxShadow: shadows.card.hover,
+                          borderColor: colors.border.warm,
                         },
                       }}
                       onClick={() => navigate(`/app/projects/${projectId}/memos/${memo.id}`)}
@@ -471,13 +482,13 @@ const ProjectPage: React.FC = () => {
                             mb: 2,
                           }}
                         >
-                          <Typography variant="h6" sx={{ fontWeight: 600, flexGrow: 1, pr: 1 }}>
+                          <Typography variant="h6" sx={{ fontWeight: 600, flexGrow: 1, pr: 1, color: colors.text.primary }}>
                             {memo.title}
                           </Typography>
                           <IconButton
                             size="small"
                             onClick={(e: React.MouseEvent<HTMLElement>) => handleMenuOpen(e, memo)}
-                            sx={{ opacity: 0.7, '&:hover': { opacity: 1 } }}
+                            sx={{ opacity: 0.7, color: colors.text.muted, '&:hover': { opacity: 1, backgroundColor: colors.background.subtle, color: colors.text.secondary } }}
                           >
                             <MoreIcon />
                           </IconButton>
@@ -493,14 +504,15 @@ const ProjectPage: React.FC = () => {
                             overflow: 'hidden',
                             lineHeight: 1.5,
                             minHeight: '3.5em',
+                            color: colors.text.secondary,
                           }}
                         >
                           {getContentPreview(memo.content)}
                         </Typography>
 
                         <Box sx={{ display: 'flex', alignItems: 'center', mt: 2, gap: 1 }}>
-                          <DescriptionIcon fontSize="small" sx={{ color: 'text.secondary' }} />
-                          <Typography variant="caption" color="text.secondary">
+                          <DescriptionIcon fontSize="small" sx={{ color: colors.text.muted }} />
+                          <Typography variant="caption" color="text.secondary" sx={{ color: colors.text.muted }}>
                             {new Date(memo.updated_at).toLocaleDateString('ja-JP')}
                           </Typography>
                         </Box>
@@ -513,12 +525,12 @@ const ProjectPage: React.FC = () => {
           </Grid>
 
           {memos.length === 0 && !isLoading && (
-            <Box sx={{ textAlign: 'center', py: 8 }}>
-              <DescriptionIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-              <Typography variant="h6" color="text.secondary" gutterBottom>
+            <Box sx={{ textAlign: 'center', py: 8, backgroundColor: colors.background.paper, border: `1px solid ${colors.border.soft}`, borderRadius: borderRadius.card }}>
+              <DescriptionIcon sx={{ fontSize: 64, color: colors.text.muted, mb: 2 }} />
+              <Typography variant="h6" gutterBottom sx={{ color: colors.text.primary }}>
                 まだメモがありません
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+              <Typography variant="body2" sx={{ mb: 3, color: colors.text.secondary }}>
                 新しいメモを作成して、探究の記録を始めましょう
               </Typography>
               <Button
@@ -526,11 +538,13 @@ const ProjectPage: React.FC = () => {
                 startIcon={<AddIcon />}
                 onClick={handleCreateMemo}
                 sx={{
-                  background: 'linear-gradient(45deg, #FF7A00, #FF6B35)',
-                  color: 'white',
+                  backgroundColor: colors.accentWarm.main,
+                  color: colors.text.inverse,
                   '&:hover': {
-                    background: 'linear-gradient(45deg, #FFB347, #FF6B35)',
+                    backgroundColor: colors.accentWarm.hover,
+                    boxShadow: shadows.accent,
                   },
+                  borderRadius: borderRadius.button,
                 }}
               >
                 最初のメモを作成
@@ -538,7 +552,7 @@ const ProjectPage: React.FC = () => {
             </Box>
           )}
 
-          <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose}>
+          <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose} PaperProps={{ sx: { backgroundColor: colors.background.paper, border: `1px solid ${colors.border.soft}`, boxShadow: shadows.md, borderRadius: borderRadius.lg } }}>
             <MenuItem
               onClick={() => {
                 if (selectedMemo) {

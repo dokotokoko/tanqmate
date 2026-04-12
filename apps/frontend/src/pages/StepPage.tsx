@@ -46,6 +46,7 @@ import { LayoutContext } from '../components/Layout/Layout';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useTheme } from '@mui/material';
 import { AI_INITIAL_MESSAGE, STEP1_INITIAL_MESSAGE, generateStep2InitialMessage, generateStep3InitialMessage, generateStep4InitialMessage, generateStep5InitialMessage} from '../constants/aiMessages';
+import { tokenManager } from '../utils/tokenManager';
 
 const ReviewStepPage: React.FC<{ handleAIMessage: (message: string, workContent: string) => Promise<string> }> = ({ handleAIMessage }) => {
   const [themes, setThemes] = useState<{ [key: string]: string }>({});
@@ -343,7 +344,7 @@ const StepPage: React.FC = () => {
   // AI応答の処理
   const handleAIMessage = async (message: string, workContent: string): Promise<string> => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = tokenManager.getAccessToken();
       
       if (!token) {
         throw new Error('認証トークンが見つかりません。再ログインしてください。');

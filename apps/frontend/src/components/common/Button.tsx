@@ -1,143 +1,149 @@
 import React from 'react';
 import { Button as MuiButton, ButtonProps as MuiButtonProps, CircularProgress } from '@mui/material';
 import { styled } from '@mui/material/styles';
-import { colors, spacing, borderRadius, transitions, shadows } from '../../styles/design-system';
+import { borderRadius, colors, shadows, spacing, transitions } from '../../styles/design-system';
 
 interface ButtonProps extends Omit<MuiButtonProps, 'variant'> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger';
+  variant?: 'solid' | 'soft' | 'outline' | 'ghost' | 'danger' | 'cool' | 'primary' | 'secondary';
   size?: 'small' | 'medium' | 'large';
   isLoading?: boolean;
   fullWidth?: boolean;
 }
 
-const StyledButton = styled(MuiButton)<{ variant?: string }>(({ theme, variant }) => {
+const StyledButton = styled(MuiButton, {
+  shouldForwardProp: (prop) => prop !== 'buttonvariant',
+})<{ buttonvariant?: string }>(({ buttonvariant = 'solid' }) => {
+  const normalizedVariant =
+    buttonvariant === 'primary'
+      ? 'solid'
+      : buttonvariant === 'secondary'
+        ? 'cool'
+        : buttonvariant;
+
   const baseStyles = {
     textTransform: 'none' as const,
     fontWeight: 600,
     borderRadius: borderRadius.button,
-    transition: 'transform 60ms ease-out, box-shadow 100ms ease-out',
-    position: 'relative' as const,
-    transformStyle: 'preserve-3d' as const,
-    
+    transition: `transform ${transitions.duration.shortest} ease-out, background-color ${transitions.duration.standard} ease, border-color ${transitions.duration.standard} ease, color ${transitions.duration.standard} ease, box-shadow ${transitions.duration.standard} ease`,
+    minHeight: '44px',
+    boxShadow: 'none',
+
     '&:disabled': {
-      opacity: 0.5,
-      cursor: 'not-allowed',
+      backgroundColor: colors.grey[100],
+      color: colors.text.muted,
+      borderColor: colors.border.soft,
     },
   };
 
   const variantStyles = {
-    primary: {
-      background: colors.primary[500],
+    solid: {
+      backgroundColor: colors.accentWarm.main,
       color: colors.text.inverse,
-      border: 'none',
-      boxShadow: shadows.sm,
-      
+      border: `1px solid ${colors.accentWarm.main}`,
+      boxShadow: shadows.accent,
       '&:hover': {
-        background: colors.primary[600],
-        transform: 'scale(1.01)',
-        boxShadow: shadows.md,
+        backgroundColor: colors.accentWarm.hover,
+        borderColor: colors.accentWarm.hover,
+        boxShadow: shadows.accent,
+        transform: 'translateY(-1px)',
       },
-      
       '&:active': {
-        transform: 'scale(0.97)',
-        boxShadow: shadows.xs,
-        transition: 'transform 0ms, box-shadow 0ms',
+        backgroundColor: colors.accentWarm.active,
+        borderColor: colors.accentWarm.active,
+        transform: 'translateY(0)',
+        boxShadow: shadows.sm,
       },
     },
-    secondary: {
-      background: colors.secondary[500],
-      color: colors.text.inverse,
-      border: 'none',
-      boxShadow: shadows.sm,
-      
+    soft: {
+      backgroundColor: colors.accentWarm.soft,
+      color: colors.accentWarm.active,
+      border: `1px solid ${colors.border.warm}`,
       '&:hover': {
-        background: colors.secondary[600],
-        transform: 'scale(1.01)',
-        boxShadow: shadows.md,
+        backgroundColor: colors.primary[100],
+        borderColor: colors.accentWarm.main,
       },
-      
       '&:active': {
-        transform: 'scale(0.97)',
-        boxShadow: shadows.xs,
-        transition: 'transform 0ms, box-shadow 0ms',
+        backgroundColor: colors.primary[200],
       },
     },
     outline: {
-      background: 'transparent',
-      color: colors.primary[500],
-      border: `2px solid ${colors.primary[500]}`,
-      
+      backgroundColor: 'transparent',
+      color: colors.text.primary,
+      border: `1px solid ${colors.border.soft}`,
       '&:hover': {
-        background: colors.primary[50],
-        borderColor: colors.primary[600],
-        transform: 'scale(1.01)',
+        backgroundColor: colors.background.paper,
+        borderColor: colors.accentWarm.main,
+        color: colors.accentWarm.active,
       },
-      
       '&:active': {
-        transform: 'scale(0.97)',
-        background: colors.primary[100],
-        transition: 'transform 0ms',
+        backgroundColor: colors.background.subtle,
       },
     },
     ghost: {
-      background: 'transparent',
-      color: colors.primary[500],
-      border: 'none',
-      
+      backgroundColor: 'transparent',
+      color: colors.text.secondary,
+      border: '1px solid transparent',
       '&:hover': {
-        background: colors.primary[50],
+        backgroundColor: colors.background.subtle,
+        color: colors.text.primary,
       },
-      
       '&:active': {
-        background: colors.primary[100],
+        backgroundColor: colors.grey[100],
       },
     },
     danger: {
-      background: colors.error.main,
+      backgroundColor: colors.error.main,
       color: colors.text.inverse,
-      border: 'none',
-      boxShadow: shadows.sm,
-      
+      border: `1px solid ${colors.error.main}`,
       '&:hover': {
-        background: colors.error.dark,
-        transform: 'scale(1.01)',
-        boxShadow: shadows.md,
+        backgroundColor: colors.error.dark,
+        borderColor: colors.error.dark,
       },
-      
       '&:active': {
-        transform: 'scale(0.97)',
-        boxShadow: shadows.xs,
-        transition: 'transform 0ms, box-shadow 0ms',
+        backgroundColor: '#94423B',
+      },
+    },
+    cool: {
+      backgroundColor: colors.trustBlue.soft,
+      color: colors.secondary[800],
+      border: `1px solid ${colors.secondary[200]}`,
+      '&:hover': {
+        backgroundColor: colors.secondary[100],
+        borderColor: colors.trustBlue.main,
+        color: colors.secondary[900],
+      },
+      '&:active': {
+        backgroundColor: colors.secondary[200],
       },
     },
   };
 
   return {
     ...baseStyles,
-    ...(variant && variantStyles[variant as keyof typeof variantStyles]),
+    ...variantStyles[normalizedVariant as keyof typeof variantStyles],
   };
 });
 
 const sizeStyles = {
   small: {
-    padding: `${spacing.sm} ${spacing.md}`,
+    padding: `${spacing.sm} ${spacing.lg}`,
     fontSize: '0.875rem',
     minHeight: '36px',
   },
   medium: {
-    padding: `${spacing.md} ${spacing.lg}`,
+    padding: `${spacing.md} ${spacing.xl}`,
     fontSize: '1rem',
     minHeight: '44px',
   },
   large: {
-    padding: `${spacing.lg} ${spacing.xl}`,
-    fontSize: '1.125rem',
+    padding: `${spacing.lg} ${spacing['2xl']}`,
+    fontSize: '1rem',
     minHeight: '52px',
   },
 };
 
 const Button: React.FC<ButtonProps> = ({
-  variant = 'primary',
+  variant = 'solid',
   size = 'medium',
   isLoading = false,
   fullWidth = false,
@@ -148,10 +154,10 @@ const Button: React.FC<ButtonProps> = ({
 }) => {
   return (
     <StyledButton
-      variant={variant}
+      buttonvariant={variant}
       disabled={disabled || isLoading}
       fullWidth={fullWidth}
-      disableRipple // MUIのリップルエフェクトを無効化
+      disableRipple
       sx={{
         ...sizeStyles[size],
         ...(fullWidth && { width: '100%' }),
@@ -159,11 +165,7 @@ const Button: React.FC<ButtonProps> = ({
       }}
       {...props}
     >
-      {isLoading ? (
-        <CircularProgress size={20} color="inherit" />
-      ) : (
-        children
-      )}
+      {isLoading ? <CircularProgress size={20} color="inherit" /> : children}
     </StyledButton>
   );
 };

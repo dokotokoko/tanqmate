@@ -27,6 +27,7 @@ import {
 import { motion } from 'framer-motion';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import { borderRadius, colors, shadows } from '../styles/design-system';
 
 const SignUpPage = () => {
   const navigate = useNavigate();
@@ -134,7 +135,7 @@ const SignUpPage = () => {
   };
 
   return (
-    <Container component="main" maxWidth="xs">
+    <Container component="main" maxWidth="xs" sx={{ minHeight: '100vh' }}>
       <Box
         sx={{
           minHeight: '100vh',
@@ -142,6 +143,7 @@ const SignUpPage = () => {
           alignItems: 'center',
           justifyContent: 'center',
           py: 3,
+          backgroundColor: colors.background.default,
         }}
       >
         <motion.div
@@ -150,7 +152,7 @@ const SignUpPage = () => {
           transition={{ duration: 0.5 }}
           style={{ width: '100%' }}
         >
-          <Paper elevation={3} sx={{ p: 4 }}>
+          <Paper elevation={0} sx={{ p: 4, backgroundColor: colors.background.paper, border: `1px solid ${colors.border.soft}`, borderRadius: borderRadius.xl, boxShadow: shadows.md }}>
             <Box
               sx={{
                 display: 'flex',
@@ -164,11 +166,7 @@ const SignUpPage = () => {
                 variant="h4"
                 sx={{
                   fontWeight: 'bold',
-                  background: 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)',
-                  backgroundClip: 'text',
-                  textFillColor: 'transparent',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
+                  color: colors.text.primary,
                   mb: 1,
                 }}
               >
@@ -237,10 +235,11 @@ const SignUpPage = () => {
                     sx={{
                       mt: 3,
                       mb: 2,
-                      background: 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)',
-                      color: 'white',
+                      backgroundColor: colors.accentWarm.main,
+                      color: colors.text.inverse,
                       '&:hover': {
-                        background: 'linear-gradient(135deg, #F57C00 0%, #E65100 100%)',
+                        backgroundColor: colors.accentWarm.hover,
+                        boxShadow: shadows.accent,
                       },
                     }}
                     disabled={isLoading || emailExists}
@@ -323,10 +322,11 @@ const SignUpPage = () => {
                       onClick={handleNext}
                       sx={{
                         flex: 1,
-                        background: 'linear-gradient(135deg, #FF9800 0%, #F57C00 100%)',
-                        color: 'white',
+                        backgroundColor: colors.accentWarm.main,
+                        color: colors.text.inverse,
                         '&:hover': {
-                          background: 'linear-gradient(135deg, #F57C00 0%, #E65100 100%)',
+                          backgroundColor: colors.accentWarm.hover,
+                          boxShadow: shadows.accent,
                         },
                       }}
                       disabled={isLoading}
@@ -345,7 +345,7 @@ const SignUpPage = () => {
                 onClick={handleGoogleSignUp}
                 disabled={isLoading}
                 startIcon={<Google />}
-                sx={{ mb: 2 }}
+                sx={{ mb: 2, borderColor: colors.border.soft, color: colors.text.secondary, '&:hover': { borderColor: colors.secondary[300], backgroundColor: colors.trustBlue.soft } }}
               >
                 Googleで登録
               </Button>

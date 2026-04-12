@@ -1,163 +1,177 @@
 /**
  * 探Qメイト デザインシステム
- * 統一されたデザイン変数とテーマ設定を管理
+ * Master spec: docs/design_system_master_spec.md
  */
 
-// ==========================================
-// 1. カラーパレット
-// ==========================================
-
 export const colors = {
-  // プライマリカラー
   primary: {
-    50: '#E8F4FF',
-    100: '#C3E4FF',
-    200: '#9ED8FF',
-    300: '#52BAFF',
-    400: '#2FA7FF',
-    500: '#059BFF', // メインカラー
-    600: '#0080DD',
-    700: '#006EB8',
-    800: '#005A96',
-    900: '#00406B',
+    50: '#FFF1E8',
+    100: '#FFE4D3',
+    200: '#FFD0B3',
+    300: '#FFBA92',
+    400: '#FFA26F',
+    500: '#FF8C5A',
+    600: '#FF7A42',
+    700: '#F0642B',
+    800: '#D9531F',
+    900: '#B94317',
+    contrastText: '#FFFFFF',
   },
-  
-  // セカンダリカラー
+
   secondary: {
-    50: '#FFF3E0',
-    100: '#FFE0B2',
-    200: '#FFCC80',
-    300: '#FFB74D',
-    400: '#FFA726',
-    500: '#FF9800',
-    600: '#FB8C00',
-    700: '#F57C00',
-    800: '#EF6C00',
-    900: '#E65100',
+    50: '#EEF5F9',
+    100: '#DCEAF3',
+    200: '#C3D9E8',
+    300: '#A7C6DA',
+    400: '#8CB4CE',
+    500: '#7BA9C9',
+    600: '#5F94B9',
+    700: '#4B7B9B',
+    800: '#3A617B',
+    900: '#2B4B5F',
+    contrastText: '#FFFFFF',
   },
-  
-  // 成功・エラー・警告・情報
+
+  accentWarm: {
+    soft: '#FFE4CC',
+    main: '#FF8C5A',
+    hover: '#FF7A42',
+    active: '#FF6B35',
+    contrastText: '#FFFFFF',
+  },
+
+  trustBlue: {
+    soft: '#DCEAF3',
+    main: '#7BA9C9',
+    hover: '#5F94B9',
+    strong: '#4B7B9B',
+    contrastText: '#FFFFFF',
+  },
+
   success: {
-    light: '#81C784',
-    main: '#4CAF50',
-    dark: '#388E3C',
+    light: '#DDEBDD',
+    main: '#6FA67A',
+    dark: '#4E7D58',
   },
   error: {
-    light: '#EF5350',
-    main: '#F44336',
-    dark: '#C62828',
+    light: '#F5DDD8',
+    main: '#D46A5F',
+    dark: '#A84E46',
   },
   warning: {
-    light: '#FFB74D',
-    main: '#FF9800',
-    dark: '#F57C00',
+    light: '#F5E5C7',
+    main: '#D89A43',
+    dark: '#AA742F',
   },
   info: {
-    light: '#4FC3F7',
-    main: '#29B6F6',
-    dark: '#0288D1',
+    light: '#DCEAF3',
+    main: '#6F98B8',
+    dark: '#51748D',
   },
-  
-  // グレースケール
+
   grey: {
-    50: '#FAFAFA',
-    100: '#F5F5F5',
-    200: '#EEEEEE',
-    300: '#E0E0E0',
-    400: '#BDBDBD',
-    500: '#9E9E9E',
-    600: '#757575',
-    700: '#616161',
-    800: '#424242',
-    900: '#212121',
+    50: '#FAF7F2',
+    100: '#F4EEE4',
+    200: '#E8DED0',
+    300: '#D8CDB8',
+    400: '#C3B6A1',
+    500: '#A59681',
+    600: '#857967',
+    700: '#6B6257',
+    800: '#4F4841',
+    900: '#322D29',
   },
-  
-  // 背景色
+
   background: {
-    default: '#FFF9C4', // パステルクリーム
-    paper: '#FFFDE7',
+    default: '#FFFAED',
+    paper: '#FFFDF7',
+    subtle: '#FFF6E8',
     elevated: '#FFFFFF',
     dark: '#1E1E1E',
   },
-  
-  // テキストカラー
+
+  border: {
+    soft: '#F0E8D8',
+    warm: '#FFE4C8',
+    strong: '#D8CDB8',
+  },
+
   text: {
-    primary: '#333333',
-    secondary: '#666666',
-    disabled: '#9E9E9E',
-    hint: '#BDBDBD',
+    primary: '#2D2A26',
+    secondary: '#6B6560',
+    muted: '#9E9891',
+    disabled: '#B2ABA3',
+    hint: '#9E9891',
     inverse: '#FFFFFF',
   },
-};
 
-// ==========================================
-// 2. タイポグラフィシステム
-// ==========================================
+  focus: {
+    warm: 'rgba(255, 140, 90, 0.35)',
+    warmStrong: 'rgba(255, 122, 66, 0.45)',
+    blue: 'rgba(123, 169, 201, 0.30)',
+  },
+};
 
 export const typography = {
   fontFamily: {
     primary: '"Noto Sans JP", "Roboto", "Helvetica", "Arial", sans-serif',
     monospace: '"Roboto Mono", "Courier New", monospace',
   },
-  
-  // フォントサイズ
+
   fontSize: {
-    xs: '0.75rem',    // 12px
-    sm: '0.875rem',   // 14px
-    base: '1rem',     // 16px
-    md: '1.125rem',   // 18px
-    lg: '1.25rem',    // 20px
-    xl: '1.5rem',     // 24px
-    '2xl': '1.875rem', // 30px
-    '3xl': '2.25rem',  // 36px
-    '4xl': '3rem',     // 48px
-    '5xl': '3.75rem',  // 60px
+    xs: '0.75rem',
+    sm: '0.8125rem',
+    base: '1rem',
+    md: '1.125rem',
+    lg: '1.25rem',
+    xl: '1.5rem',
+    '2xl': '1.75rem',
+    '3xl': '2rem',
+    '4xl': '2.5rem',
   },
-  
-  // 見出しスタイル
+
   heading: {
     h1: {
-      fontSize: '2.5rem',
+      fontSize: '2rem',
       fontWeight: 700,
-      lineHeight: 1.2,
-      letterSpacing: '-0.02em',
+      lineHeight: 1.15,
+      letterSpacing: '-0.01em',
     },
     h2: {
-      fontSize: '2rem',
-      fontWeight: 600,
-      lineHeight: 1.3,
+      fontSize: '1.75rem',
+      fontWeight: 700,
+      lineHeight: 1.2,
       letterSpacing: '-0.01em',
     },
     h3: {
-      fontSize: '1.75rem',
+      fontSize: '1.5rem',
+      fontWeight: 600,
+      lineHeight: 1.3,
+      letterSpacing: '0',
+    },
+    h4: {
+      fontSize: '1.25rem',
+      fontWeight: 600,
+      lineHeight: 1.35,
+      letterSpacing: '0',
+    },
+    h5: {
+      fontSize: '1.125rem',
       fontWeight: 600,
       lineHeight: 1.4,
       letterSpacing: '0',
     },
-    h4: {
-      fontSize: '1.5rem',
-      fontWeight: 500,
-      lineHeight: 1.4,
-      letterSpacing: '0',
-    },
-    h5: {
-      fontSize: '1.25rem',
-      fontWeight: 500,
-      lineHeight: 1.5,
-      letterSpacing: '0',
-    },
     h6: {
-      fontSize: '1.125rem',
-      fontWeight: 500,
-      lineHeight: 1.5,
+      fontSize: '1rem',
+      fontWeight: 600,
+      lineHeight: 1.45,
       letterSpacing: '0',
     },
   },
-  
-  // 本文スタイル
+
   body: {
     large: {
-      fontSize: '1.125rem',
+      fontSize: '1rem',
       lineHeight: 1.7,
       letterSpacing: '0',
     },
@@ -168,12 +182,16 @@ export const typography = {
     },
     small: {
       fontSize: '0.875rem',
-      lineHeight: 1.5,
+      lineHeight: 1.55,
+      letterSpacing: '0',
+    },
+    caption: {
+      fontSize: '0.75rem',
+      lineHeight: 1.45,
       letterSpacing: '0',
     },
   },
-  
-  // フォントウェイト
+
   fontWeight: {
     regular: 400,
     medium: 500,
@@ -182,42 +200,30 @@ export const typography = {
   },
 };
 
-// ==========================================
-// 3. スペーシングシステム
-// ==========================================
-
 export const spacing = {
-  // ベーススペーシング（8pxベース）
-  xs: '4px',    // 0.5
-  sm: '8px',    // 1
-  md: '16px',   // 2
-  lg: '24px',   // 3
-  xl: '32px',   // 4
-  '2xl': '40px', // 5
-  '3xl': '48px', // 6
-  '4xl': '64px', // 8
-  '5xl': '80px', // 10
-  
-  // レイアウト用スペーシング
+  xs: '4px',
+  sm: '8px',
+  md: '12px',
+  lg: '16px',
+  xl: '24px',
+  '2xl': '32px',
+  '3xl': '48px',
+  '4xl': '64px',
+
   layout: {
     gutter: '24px',
     containerPadding: '24px',
-    sectionSpacing: '64px',
+    sectionSpacing: '40px',
     cardPadding: '24px',
   },
-  
-  // コンポーネント内スペーシング
+
   component: {
-    buttonPadding: '12px 24px',
+    buttonPadding: '12px 20px',
     inputPadding: '12px 16px',
     chipPadding: '6px 12px',
     listItemPadding: '12px 16px',
   },
 };
-
-// ==========================================
-// 4. ブレークポイント
-// ==========================================
 
 export const breakpoints = {
   xs: '0px',
@@ -225,55 +231,41 @@ export const breakpoints = {
   md: '960px',
   lg: '1280px',
   xl: '1920px',
-  
-  // タブレット専用
   tablet: {
     min: '768px',
     max: '1024px',
   },
-  
-  // モバイル専用
   mobile: {
     max: '599px',
   },
 };
 
-// ==========================================
-// 5. シャドウシステム
-// ==========================================
-
 export const shadows = {
-  xs: '0 1px 3px rgba(0, 0, 0, 0.06)',
-  sm: '0 2px 10px rgba(0, 0, 0, 0.08)',
-  md: '0 4px 20px rgba(0, 0, 0, 0.12)',
-  lg: '0 8px 30px rgba(0, 0, 0, 0.16)',
-  xl: '0 12px 40px rgba(0, 0, 0, 0.20)',
-  
-  // 特殊効果
-  elevated: '0 10px 40px rgba(5, 155, 255, 0.15)',
-  inset: 'inset 0 2px 4px rgba(0, 0, 0, 0.06)',
-  
-  // カード用
+  xs: '0 1px 4px rgba(120, 92, 64, 0.06)',
+  sm: '0 4px 16px rgba(120, 92, 64, 0.08)',
+  md: '0 8px 24px rgba(120, 92, 64, 0.12)',
+  lg: '0 12px 28px rgba(120, 92, 64, 0.14)',
+  xl: '0 18px 40px rgba(120, 92, 64, 0.18)',
+
+  elevated: '0 8px 24px rgba(120, 92, 64, 0.12)',
+  accent: '0 8px 24px rgba(255, 140, 90, 0.18)',
+  inset: 'inset 0 1px 2px rgba(120, 92, 64, 0.04)',
+
   card: {
-    default: '0 4px 20px rgba(0, 0, 0, 0.08)',
-    hover: '0 8px 30px rgba(0, 0, 0, 0.15)',
-    active: '0 2px 10px rgba(0, 0, 0, 0.12)',
+    default: '0 4px 16px rgba(120, 92, 64, 0.08)',
+    hover: '0 10px 28px rgba(120, 92, 64, 0.14)',
+    active: '0 4px 14px rgba(120, 92, 64, 0.10)',
   },
 };
-
-// ==========================================
-// 6. ボーダー半径
-// ==========================================
 
 export const borderRadius = {
   xs: '4px',
   sm: '8px',
   md: '12px',
   lg: '16px',
-  xl: '24px',
+  xl: '20px',
   full: '9999px',
-  
-  // コンポーネント専用
+
   button: '14px',
   card: '16px',
   input: '12px',
@@ -281,40 +273,27 @@ export const borderRadius = {
   dialog: '20px',
 };
 
-// ==========================================
-// 7. トランジション
-// ==========================================
-
 export const transitions = {
-  // イージング関数
   easing: {
     easeInOut: 'cubic-bezier(0.4, 0, 0.2, 1)',
     easeOut: 'cubic-bezier(0.0, 0, 0.2, 1)',
     easeIn: 'cubic-bezier(0.4, 0, 1, 1)',
     sharp: 'cubic-bezier(0.4, 0, 0.6, 1)',
   },
-  
-  // 継続時間
   duration: {
-    shortest: '150ms',
-    short: '200ms',
-    standard: '300ms',
-    long: '400ms',
-    longest: '500ms',
+    shortest: '120ms',
+    short: '160ms',
+    standard: '200ms',
+    long: '280ms',
+    longest: '360ms',
   },
-  
-  // プリセット
   preset: {
-    fast: '0.2s ease',
-    normal: '0.3s ease',
-    slow: '0.5s ease',
-    smooth: '0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+    fast: '160ms ease',
+    normal: '200ms ease',
+    slow: '280ms ease',
+    smooth: '200ms cubic-bezier(0.4, 0, 0.2, 1)',
   },
 };
-
-// ==========================================
-// 8. Z-INDEX階層
-// ==========================================
 
 export const zIndex = {
   negative: -1,
@@ -330,25 +309,51 @@ export const zIndex = {
   loading: 9999,
 };
 
-// ==========================================
-// 9. グラデーション
-// ==========================================
-
 export const gradients = {
-  primary: 'linear-gradient(135deg, #059BFF 0%, #00406B 100%)',
-  secondary: 'linear-gradient(45deg, #52BAFF, #006EB8)',
-  success: 'linear-gradient(135deg, #81C784 0%, #388E3C 100%)',
-  error: 'linear-gradient(135deg, #EF5350 0%, #C62828 100%)',
-  warning: 'linear-gradient(135deg, #FFB74D 0%, #F57C00 100%)',
-  
-  // 特殊効果
-  shimmer: 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent)',
-  glassmorphism: 'linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%)',
+  warm: `linear-gradient(135deg, ${colors.accentWarm.main} 0%, ${colors.accentWarm.hover} 100%)`,
+  warmSoft: 'linear-gradient(180deg, #FFFDF7 0%, #FFF6E8 100%)',
+  coolSoft: 'linear-gradient(180deg, #FFFDF7 0%, #EEF5F9 100%)',
 };
 
-// ==========================================
-// 10. アイコンサイズ
-// ==========================================
+export const diary = {
+  page: {
+    background: colors.background.default,
+    backgroundSoft: colors.background.subtle,
+    surface: colors.background.paper,
+    surfaceRaised: colors.background.elevated,
+    border: colors.border.soft,
+    borderWarm: colors.border.warm,
+    shadow: shadows.card.default,
+    shadowLift: shadows.card.hover,
+  },
+  accent: {
+    warm: colors.accentWarm.main,
+    warmSoft: colors.accentWarm.soft,
+    warmActive: colors.accentWarm.active,
+    trust: colors.trustBlue.main,
+  },
+  atmosphere: {
+    topGlow:
+      'radial-gradient(circle at 18% 0%, rgba(255, 228, 204, 0.88) 0%, rgba(255, 228, 204, 0.28) 24%, rgba(255, 228, 204, 0) 62%)',
+    bottomGlow:
+      'radial-gradient(circle at 82% 100%, rgba(123, 169, 201, 0.14) 0%, rgba(123, 169, 201, 0.06) 30%, rgba(123, 169, 201, 0) 68%)',
+    wash: `linear-gradient(180deg, ${colors.background.paper} 0%, ${colors.background.subtle} 100%)`,
+  },
+  text: {
+    primary: colors.text.primary,
+    secondary: colors.text.secondary,
+    muted: colors.text.muted,
+  },
+  layout: {
+    maxWidth: '1040px',
+    shellPaddingX: 'clamp(16px, 3vw, 32px)',
+    shellPaddingY: 'clamp(20px, 4vw, 40px)',
+    contentGap: '24px',
+    sectionGap: '28px',
+    panelPadding: 'clamp(18px, 2.4vw, 28px)',
+    radius: borderRadius.dialog,
+  },
+};
 
 export const iconSize = {
   xs: '16px',
@@ -359,10 +364,6 @@ export const iconSize = {
   '2xl': '48px',
 };
 
-// ==========================================
-// 11. Material-UI テーマ設定
-// ==========================================
-
 export const createMuiTheme = (isDarkMode: boolean) => ({
   palette: {
     mode: isDarkMode ? 'dark' : 'light',
@@ -370,11 +371,13 @@ export const createMuiTheme = (isDarkMode: boolean) => ({
       main: colors.primary[500],
       light: colors.primary[300],
       dark: colors.primary[700],
+      contrastText: colors.primary.contrastText,
     },
     secondary: {
       main: colors.secondary[500],
       light: colors.secondary[300],
       dark: colors.secondary[700],
+      contrastText: colors.secondary.contrastText,
     },
     error: {
       main: colors.error.main,
@@ -402,9 +405,10 @@ export const createMuiTheme = (isDarkMode: boolean) => ({
     },
     text: {
       primary: isDarkMode ? colors.text.inverse : colors.text.primary,
-      secondary: isDarkMode ? colors.grey[400] : colors.text.secondary,
+      secondary: isDarkMode ? colors.grey[300] : colors.text.secondary,
       disabled: colors.text.disabled,
     },
+    divider: isDarkMode ? colors.grey[700] : colors.border.soft,
   },
   typography: {
     fontFamily: typography.fontFamily.primary,
@@ -416,10 +420,15 @@ export const createMuiTheme = (isDarkMode: boolean) => ({
     h6: typography.heading.h6,
     body1: typography.body.regular,
     body2: typography.body.small,
+    caption: typography.body.caption,
+    button: {
+      textTransform: 'none',
+      fontWeight: typography.fontWeight.semibold,
+    },
   },
-  spacing: 8, // 8px基準
+  spacing: 8,
   shape: {
-    borderRadius: parseInt(borderRadius.md),
+    borderRadius: parseInt(borderRadius.md, 10),
   },
   shadows: [
     'none',
@@ -448,16 +457,58 @@ export const createMuiTheme = (isDarkMode: boolean) => ({
     shadows.xl,
     shadows.xl,
   ],
+  components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        body: {
+          backgroundColor: isDarkMode ? colors.background.dark : colors.background.default,
+          color: isDarkMode ? colors.text.inverse : colors.text.primary,
+        },
+      },
+    },
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          borderRadius: borderRadius.button,
+          textTransform: 'none',
+          boxShadow: 'none',
+        },
+        containedPrimary: {
+          backgroundColor: colors.accentWarm.main,
+          color: colors.text.inverse,
+          '&:hover': {
+            backgroundColor: colors.accentWarm.hover,
+            boxShadow: shadows.accent,
+          },
+        },
+        outlinedPrimary: {
+          borderColor: colors.border.warm,
+          color: colors.accentWarm.active,
+          '&:hover': {
+            borderColor: colors.accentWarm.main,
+            backgroundColor: colors.accentWarm.soft,
+          },
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          backgroundImage: 'none',
+        },
+      },
+    },
+  },
   transitions: {
     easing: transitions.easing,
     duration: {
-      shortest: 150,
-      shorter: 200,
-      short: 250,
-      standard: 300,
-      complex: 375,
-      enteringScreen: 225,
-      leavingScreen: 195,
+      shortest: 120,
+      shorter: 160,
+      short: 180,
+      standard: 200,
+      complex: 280,
+      enteringScreen: 180,
+      leavingScreen: 160,
     },
   },
   zIndex: {
@@ -472,36 +523,22 @@ export const createMuiTheme = (isDarkMode: boolean) => ({
   },
 });
 
-// ==========================================
-// 12. カスタムユーティリティ関数
-// ==========================================
-
 export const utils = {
-  // レスポンシブ値を取得
   getResponsiveValue: (mobile: string, tablet: string, desktop: string) => ({
     '@media (max-width: 599px)': mobile,
     '@media (min-width: 600px) and (max-width: 1023px)': tablet,
     '@media (min-width: 1024px)': desktop,
   }),
-  
-  // グラスモーフィズム効果
-  glassmorphism: (opacity = 0.25) => ({
-    background: `rgba(255, 255, 255, ${opacity})`,
-    backdropFilter: 'blur(10px)',
-    WebkitBackdropFilter: 'blur(10px)',
-    border: `1px solid rgba(255, 255, 255, ${opacity / 2})`,
+
+  focusRing: (mode: 'warm' | 'blue' = 'warm') => ({
+    outline: 'none',
+    boxShadow: `0 0 0 3px ${mode === 'warm' ? colors.focus.warm : colors.focus.blue}`,
   }),
-  
-  // テキストグラデーション
-  textGradient: (gradient: string) => ({
-    background: gradient,
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    backgroundClip: 'text',
-    color: 'transparent',
+
+  textGradient: () => ({
+    color: colors.text.primary,
   }),
-  
-  // トランケート（省略）
+
   truncate: (lines = 1) => ({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -521,6 +558,7 @@ export default {
   transitions,
   zIndex,
   gradients,
+  diary,
   iconSize,
   createMuiTheme,
   utils,
