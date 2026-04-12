@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from pydantic import BaseModel
 from typing import List, Optional
 from services.chat_service import ChatService
-from services.auth_service import AuthService
 from services.base import ServiceManager
 from routers.auth_router import get_current_user, get_supabase_client
 import time
@@ -84,11 +83,11 @@ class ChatHistoryResponse(BaseModel):
     conversation_id: Optional[str] = None
 
 # 依存関数
-def get_chat_service(current_user_id: int = Depends(get_current_user)) -> ChatService:
+def get_chat_service(current_user_id: str = Depends(get_current_user)) -> ChatService:
     """チャットサービス取得"""
     return get_service_manager().get_service(ChatService, current_user_id)
 
-def chat_rate_limiter(request: Request, current_user_id: int = Depends(get_current_user)):
+def chat_rate_limiter(request: Request, current_user_id: str = Depends(get_current_user)):
     """チャット用レート制限"""
     if not ENABLE_CHAT_RATE_LIMIT:
         return
@@ -117,7 +116,7 @@ def chat_rate_limiter(request: Request, current_user_id: int = Depends(get_curre
 @router.post("", response_model=ChatResponse, dependencies=[Depends(chat_rate_limiter)])
 async def chat_with_ai(
     chat_data: ChatMessage,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     chat_service: ChatService = Depends(get_chat_service)
 ):
     """AIとのチャット（統合最適化版）"""
@@ -171,7 +170,7 @@ async def chat_with_ai(
 async def get_chat_history(
     conversation_id: Optional[str] = Query(None, description="会話ID（オプション）"),
     limit: int = Query(20, description="取得件数の上限", ge=1, le=100),
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     chat_service: ChatService = Depends(get_chat_service)
 ):
     """
@@ -207,7 +206,7 @@ async def get_chat_history(
 @router.post("/conversation/{session_type}")
 async def create_conversation_session(
     session_type: str,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     chat_service: ChatService = Depends(get_chat_service)
 ):
     """会話セッション作成/取得"""
@@ -227,7 +226,7 @@ async def create_conversation_session(
 
 @router.delete("/rate-limit/reset")
 async def reset_rate_limit(
-    current_user_id: int = Depends(get_current_user)
+    current_user_id: str = Depends(get_current_user)
 ):
     """レート制限リセット（デバッグ用）"""
     keys_to_remove = [key for key in rate_limit_store.keys() 

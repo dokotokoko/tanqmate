@@ -3,12 +3,12 @@
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from fastapi import HTTPException
-from .base import BaseService, CacheableService
+from .base import BaseService, CacheableService, UserID
 
 class ProjectService(CacheableService):
     """プロジェクト管理を担当するサービスクラス"""
     
-    def __init__(self, supabase_client, user_id: Optional[int] = None):
+    def __init__(self, supabase_client, user_id: Optional[UserID] = None):
         super().__init__(supabase_client, user_id)
     
     def get_service_name(self) -> str:
@@ -16,7 +16,7 @@ class ProjectService(CacheableService):
     
     async def create_project(
         self,
-        user_id: int,
+        user_id: UserID,
         theme: str,
         question: Optional[str] = None,
         hypothesis: Optional[str] = None,
@@ -26,8 +26,7 @@ class ProjectService(CacheableService):
     ) -> Dict[str, Any]:
         """プロジェクト作成"""
         try:
-            project_data = {
-                "user_id": user_id,
+            project_data = self.attach_user_identity({
                 "theme": theme,
                 "question": question,
                 "hypothesis": hypothesis,
@@ -36,7 +35,7 @@ class ProjectService(CacheableService):
                 "tags": tags,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat()
-            }
+            }, user_id)
             
             result = self.supabase.table("projects").insert(project_data).execute()
             
@@ -64,7 +63,7 @@ class ProjectService(CacheableService):
             error_result = self.handle_error(e, "Create project")
             raise HTTPException(status_code=500, detail=error_result["error"])
     
-    def get_user_projects(self, user_id: int) -> List[Dict[str, Any]]:
+    def get_user_projects(self, user_id: UserID) -> List[Dict[str, Any]]:
         """ユーザーのプロジェクト一覧取得"""
         try:
             cache_key = f"user_projects_{user_id}"
@@ -73,11 +72,10 @@ class ProjectService(CacheableService):
             if cached_projects:
                 return cached_projects['data']
             
-            result = self.supabase.table("projects")\
-                .select("id, theme, question, hypothesis, title, description, tags, created_at, updated_at")\
-                .eq("user_id", user_id)\
-                .order("updated_at", desc=True)\
-                .execute()
+            query = self.supabase.table("projects")\
+                .select("id, theme, question, hypothesis, title, description, tags, created_at, updated_at")
+            query = self.apply_user_scope(query, user_id)
+            result = query.order("updated_at", desc=True).execute()
             
             projects = [{
                 "id": project["id"],
@@ -100,7 +98,7 @@ class ProjectService(CacheableService):
             self.logger.error(f"Failed to get projects for user {user_id}: {e}")
             return []
     
-    def get_project_by_id(self, project_id: int, user_id: int) -> Dict[str, Any]:
+    def get_project_by_id(self, project_id: int, user_id: UserID) -> Dict[str, Any]:
         """プロジェクト詳細取得"""
         try:
             cache_key = f"project_{project_id}_{user_id}"
@@ -109,11 +107,10 @@ class ProjectService(CacheableService):
             if cached_project:
                 return cached_project['data']
             
-            result = self.supabase.table("projects")\
+            query = self.supabase.table("projects")\
                 .select("id, theme, question, hypothesis, title, description, tags, created_at, updated_at")\
-                .eq("id", project_id)\
-                .eq("user_id", user_id)\
-                .execute()
+                .eq("id", project_id)
+            result = self.apply_user_scope(query, user_id).execute()
             
             if not result.data:
                 raise HTTPException(status_code=404, detail="Project not found")
@@ -144,7 +141,7 @@ class ProjectService(CacheableService):
     async def update_project(
         self,
         project_id: int,
-        user_id: int,
+        user_id: UserID,
         theme: Optional[str] = None,
         question: Optional[str] = None,
         hypothesis: Optional[str] = None,
@@ -173,11 +170,10 @@ class ProjectService(CacheableService):
             if tags is not None:
                 update_data["tags"] = tags
             
-            result = self.supabase.table("projects")\
+            query = self.supabase.table("projects")\
                 .update(update_data)\
-                .eq("id", project_id)\
-                .eq("user_id", user_id)\
-                .execute()
+                .eq("id", project_id)
+            result = self.apply_user_scope(query, user_id).execute()
             
             if not result.data:
                 raise HTTPException(status_code=404, detail="Project not found or update failed")
@@ -203,7 +199,7 @@ class ProjectService(CacheableService):
             error_result = self.handle_error(e, "Update project")
             raise HTTPException(status_code=500, detail=error_result["error"])
     
-    async def delete_project(self, project_id: int, user_id: int) -> Dict[str, str]:
+    async def delete_project(self, project_id: int, user_id: UserID) -> Dict[str, str]:
         """プロジェクト削除"""
         try:
             # プロジェクト存在確認
@@ -213,11 +209,10 @@ class ProjectService(CacheableService):
             await self._delete_project_related_data(project_id)
             
             # プロジェクト削除
-            result = self.supabase.table("projects")\
+            query = self.supabase.table("projects")\
                 .delete()\
-                .eq("id", project_id)\
-                .eq("user_id", user_id)\
-                .execute()
+                .eq("id", project_id)
+            result = self.apply_user_scope(query, user_id).execute()
             
             if not result.data:
                 raise HTTPException(status_code=404, detail="Project not found or delete failed")
@@ -233,7 +228,7 @@ class ProjectService(CacheableService):
             error_result = self.handle_error(e, "Delete project")
             raise HTTPException(status_code=500, detail=error_result["error"])
     
-    def get_project_context(self, project_id: int, user_id: int) -> str:
+    def get_project_context(self, project_id: int, user_id: UserID) -> str:
         """プロジェクトコンテキスト取得（AI用）"""
         try:
             cache_key = f"project_context_{project_id}_{user_id}"
@@ -299,7 +294,7 @@ class ProjectService(CacheableService):
         except Exception as e:
             self.logger.warning(f"Failed to delete related data for project {project_id}: {e}")
     
-    def clear_project_cache(self, project_id: int, user_id: int) -> None:
+    def clear_project_cache(self, project_id: int, user_id: UserID) -> None:
         """プロジェクト関連キャッシュクリア"""
         cache_keys_to_clear = [
             f"project_{project_id}_{user_id}",
@@ -311,7 +306,7 @@ class ProjectService(CacheableService):
             if key in self._cache:
                 del self._cache[key]
     
-    def clear_user_project_cache(self, user_id: int) -> None:
+    def clear_user_project_cache(self, user_id: UserID) -> None:
         """ユーザーのプロジェクト関連キャッシュクリア"""
         cache_keys = [key for key in self._cache.keys() 
                      if f"user_{user_id}" in key or f"projects_{user_id}" in key]

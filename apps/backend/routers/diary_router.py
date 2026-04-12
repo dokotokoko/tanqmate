@@ -4,7 +4,6 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import date as DateType, datetime
-from uuid import UUID
 from services.diary_service import DiaryService
 from services.base import ServiceManager
 from routers.auth_router import get_current_user, get_supabase_client
@@ -58,7 +57,7 @@ class DiarySubmitRequest(BaseModel):
 class DiaryResponse(BaseModel):
     """日誌レスポンス"""
     id: str
-    student_id: int
+    student_id: str
     date: DateType
     published_body: Optional[str]
     published_quote: Optional[str]
@@ -71,7 +70,7 @@ class DiaryResponse(BaseModel):
 class TeacherDiaryView(BaseModel):
     """先生用日誌ビュー"""
     id: str
-    student_id: int
+    student_id: str
     student_name: str
     student_email: str
     date: DateType
@@ -84,7 +83,7 @@ class TeacherDiaryView(BaseModel):
     follow_up_flag: Optional[str]
 
 # 依存関数
-def get_diary_service(current_user_id: int = Depends(get_current_user)) -> DiaryService:
+def get_diary_service(current_user_id: str = Depends(get_current_user)) -> DiaryService:
     """日誌サービス取得"""
     return service_manager.get_service(DiaryService, current_user_id)
 
@@ -93,7 +92,7 @@ def get_diary_service(current_user_id: int = Depends(get_current_user)) -> Diary
 @router.post("/generate-observation", response_model=ObservationResponse)
 async def generate_observation(
     request: ObservationRequest,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     diary_service: DiaryService = Depends(get_diary_service)
 ):
     """AI観察メモと今日の問いを生成"""
@@ -109,7 +108,7 @@ async def generate_observation(
 @router.post("/generate-draft", response_model=DiaryDraft)
 async def generate_diary_draft(
     request: DiaryDraftRequest,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     diary_service: DiaryService = Depends(get_diary_service)
 ):
     """日誌の下書きを生成"""
@@ -126,7 +125,7 @@ async def generate_diary_draft(
 @router.post("/submit", response_model=DiaryResponse)
 async def submit_diary(
     request: DiarySubmitRequest,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     diary_service: DiaryService = Depends(get_diary_service)
 ):
     """日誌を送信"""
@@ -148,7 +147,7 @@ async def submit_diary(
 async def get_my_diaries(
     limit: int = Query(10, ge=1, le=100, description="取得件数"),
     offset: int = Query(0, ge=0, description="オフセット"),
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     diary_service: DiaryService = Depends(get_diary_service)
 ):
     """自分の日誌一覧を取得"""
@@ -161,7 +160,7 @@ async def get_my_diaries(
 
 @router.get("/today", response_model=Optional[DiaryResponse])
 async def get_today_diary(
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     diary_service: DiaryService = Depends(get_diary_service)
 ):
     """今日の日誌を取得"""
@@ -180,7 +179,7 @@ async def get_teacher_dashboard(
     date_to: Optional[DateType] = Query(None, description="終了日"),
     follow_up_only: bool = Query(False, description="要フォローのみ"),
     limit: int = Query(50, ge=1, le=200),
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     diary_service: DiaryService = Depends(get_diary_service)
 ):
     """先生用ダッシュボードデータ取得"""
@@ -197,9 +196,9 @@ async def get_teacher_dashboard(
 
 @router.get("/teacher/student/{student_id}", response_model=List[DiaryResponse])
 async def get_student_diaries(
-    student_id: int,
+    student_id: str,
     limit: int = Query(20, ge=1, le=100),
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     diary_service: DiaryService = Depends(get_diary_service)
 ):
     """特定生徒の日誌履歴を取得（先生用）"""
@@ -213,7 +212,7 @@ async def get_student_diaries(
 
 @router.get("/stats")
 async def get_diary_stats(
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     diary_service: DiaryService = Depends(get_diary_service)
 ):
     """日誌統計情報を取得"""

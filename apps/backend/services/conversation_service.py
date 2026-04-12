@@ -4,12 +4,12 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 import json
 from fastapi import HTTPException, status
-from .base import BaseService, CacheableService
+from .base import BaseService, CacheableService, UserID
 
 class ConversationService(CacheableService):
     """会話管理を担当するサービスクラス"""
     
-    def __init__(self, supabase_client, user_id: Optional[int] = None):
+    def __init__(self, supabase_client, user_id: Optional[UserID] = None):
         super().__init__(supabase_client, user_id)
     
     def get_service_name(self) -> str:
@@ -17,19 +17,18 @@ class ConversationService(CacheableService):
     
     async def create_conversation(
         self,
-        user_id: int,
+        user_id: UserID,
         title: str,
         metadata: Optional[Dict[str, Any]] = None
     ) -> str:
         """新規会話作成"""
         try:
-            conversation_data = {
-                "user_id": user_id,
+            conversation_data = self.attach_user_identity({
                 "title": title,
                 "is_active": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat()
-            }
+            }, user_id)
             
             if metadata:
                 conversation_data["metadata"] = json.dumps(metadata, ensure_ascii=False)
@@ -50,7 +49,7 @@ class ConversationService(CacheableService):
             error_result = self.handle_error(e, "Create conversation")
             raise HTTPException(status_code=500, detail=error_result["error"])
     
-    async def get_conversation(self, conversation_id: str, user_id: int) -> Optional[Dict[str, Any]]:
+    async def get_conversation(self, conversation_id: str, user_id: UserID) -> Optional[Dict[str, Any]]:
         """会話詳細取得"""
         try:
             cache_key = f"conversation_{conversation_id}_{user_id}"
@@ -59,11 +58,12 @@ class ConversationService(CacheableService):
             if cached_conv:
                 return cached_conv['data']
             
-            result = self.supabase.table("chat_conversations")\
-                .select("*")\
-                .eq("id", conversation_id)\
-                .eq("user_id", user_id)\
-                .execute()
+            result = self.apply_user_scope(
+                self.supabase.table("chat_conversations")
+                .select("*")
+                .eq("id", conversation_id),
+                user_id
+            ).execute()
             
             if not result.data:
                 return None
@@ -96,7 +96,7 @@ class ConversationService(CacheableService):
     
     async def list_conversations(
         self,
-        user_id: int,
+        user_id: UserID,
         limit: int = 20,
         offset: int = 0,
         is_active: Optional[bool] = None
@@ -109,9 +109,11 @@ class ConversationService(CacheableService):
             if cached_list:
                 return cached_list['data']
             
-            query = self.supabase.table("chat_conversations")\
-                .select("*", count="exact")\
-                .eq("user_id", user_id)
+            query = self.apply_user_scope(
+                self.supabase.table("chat_conversations")
+                .select("*", count="exact"),
+                user_id
+            )
             
             if is_active is not None:
                 query = query.eq("is_active", is_active)
@@ -150,7 +152,7 @@ class ConversationService(CacheableService):
     async def update_conversation(
         self,
         conversation_id: str,
-        user_id: int,
+        user_id: UserID,
         update_data: Dict[str, Any]
     ) -> bool:
         """会話更新"""
@@ -168,11 +170,12 @@ class ConversationService(CacheableService):
             
             filtered_data["updated_at"] = datetime.now(timezone.utc).isoformat()
             
-            result = self.supabase.table("chat_conversations")\
-                .update(filtered_data)\
-                .eq("id", conversation_id)\
-                .eq("user_id", user_id)\
-                .execute()
+            result = self.apply_user_scope(
+                self.supabase.table("chat_conversations")
+                .update(filtered_data)
+                .eq("id", conversation_id),
+                user_id
+            ).execute()
             
             if not result.data:
                 return False
@@ -187,14 +190,15 @@ class ConversationService(CacheableService):
             self.logger.error(f"Failed to update conversation {conversation_id}: {e}")
             return False
     
-    async def delete_conversation(self, conversation_id: str, user_id: int) -> bool:
+    async def delete_conversation(self, conversation_id: str, user_id: UserID) -> bool:
         """会話削除（論理削除）"""
         try:
-            result = self.supabase.table("chat_conversations")\
-                .update({"is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()})\
-                .eq("id", conversation_id)\
-                .eq("user_id", user_id)\
-                .execute()
+            result = self.apply_user_scope(
+                self.supabase.table("chat_conversations")
+                .update({"is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()})
+                .eq("id", conversation_id),
+                user_id
+            ).execute()
             
             if not result.data:
                 return False
@@ -212,7 +216,7 @@ class ConversationService(CacheableService):
     async def get_messages(
         self,
         conversation_id: str,
-        user_id: int,
+        user_id: UserID,
         limit: int = 50,
         offset: int = 0
     ) -> List[Dict[str, Any]]:
@@ -249,7 +253,7 @@ class ConversationService(CacheableService):
             self.logger.error(f"Failed to get messages for conversation {conversation_id}: {e}")
             return []
     
-    async def get_or_create_global_session(self, user_id: int) -> str:
+    async def get_or_create_global_session(self, user_id: UserID) -> str:
         """ユーザーのグローバルチャットセッション取得または作成"""
         try:
             # 最新のアクティブな会話を取得
@@ -274,7 +278,7 @@ class ConversationService(CacheableService):
             error_result = self.handle_error(e, "Get or create global session")
             raise HTTPException(status_code=500, detail=error_result["error"])
     
-    def clear_conversation_cache(self, conversation_id: str, user_id: int) -> None:
+    def clear_conversation_cache(self, conversation_id: str, user_id: UserID) -> None:
         """会話関連キャッシュクリア"""
         cache_keys_to_clear = [
             f"conversation_{conversation_id}_{user_id}",
@@ -289,7 +293,7 @@ class ConversationService(CacheableService):
                 elif key == pattern:
                     del self._cache[key]
     
-    def clear_user_conversation_cache(self, user_id: int) -> None:
+    def clear_user_conversation_cache(self, user_id: UserID) -> None:
         """ユーザーの会話関連キャッシュクリア"""
         cache_keys = [key for key in self._cache.keys() 
                      if f"_{user_id}_" in key or f"conversations_{user_id}" in key]

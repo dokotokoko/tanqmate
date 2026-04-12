@@ -5,13 +5,15 @@ from typing import Any, Dict, Optional
 from supabase import Client
 import logging
 import time
+from utils.user_identity import apply_user_scope, attach_user_identity, get_user_identifiers
 
 logger = logging.getLogger(__name__)
+UserID = str
 
 class BaseService(ABC):
     """全サービスクラスの基底クラス"""
     
-    def __init__(self, supabase_client: Client, user_id: Optional[int] = None):
+    def __init__(self, supabase_client: Client, user_id: Optional[UserID] = None):
         self.supabase = supabase_client
         self.user_id = user_id
         self.logger = logger.getChild(self.__class__.__name__)
@@ -27,6 +29,27 @@ class BaseService(ABC):
             return {"error": "Record already exists"}
         else:
             return {"error": error_message}
+
+    def apply_user_scope(self, query, user_id: UserID, *, legacy_column: str = "user_id", supabase_column: str = "supabase_user_id"):
+        return apply_user_scope(
+            query,
+            self.supabase,
+            user_id,
+            legacy_column=legacy_column,
+            supabase_column=supabase_column,
+        )
+
+    def attach_user_identity(self, payload: Dict[str, Any], user_id: UserID, *, legacy_column: str = "user_id", supabase_column: str = "supabase_user_id") -> Dict[str, Any]:
+        return attach_user_identity(
+            payload,
+            self.supabase,
+            user_id,
+            legacy_column=legacy_column,
+            supabase_column=supabase_column,
+        )
+
+    def get_user_identifiers(self, user_id: UserID):
+        return get_user_identifiers(self.supabase, user_id)
     
     @abstractmethod
     def get_service_name(self) -> str:
@@ -56,7 +79,7 @@ class DatabaseService(BaseService):
 class CacheableService(BaseService):
     """キャッシュ機能を持つサービス"""
     
-    def __init__(self, supabase_client: Client, user_id: Optional[int] = None):
+    def __init__(self, supabase_client: Client, user_id: Optional[UserID] = None):
         super().__init__(supabase_client, user_id)
         self._cache = {}
     
@@ -87,7 +110,7 @@ class ServiceManager:
         self.supabase_client = supabase_client
         self._services = {}
     
-    def get_service(self, service_class: type, user_id: Optional[int] = None) -> BaseService:
+    def get_service(self, service_class: type, user_id: Optional[UserID] = None) -> BaseService:
         """サービスインスタンスを取得（シングルトンパターン）"""
         service_key = f"{service_class.__name__}_{user_id or 'global'}"
         

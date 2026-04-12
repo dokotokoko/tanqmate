@@ -4,12 +4,12 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 import asyncio
 from fastapi import HTTPException, status
-from .base import BaseService, CacheableService
+from .base import BaseService, CacheableService, UserID
 
 class MemoService(CacheableService):
     """メモ管理を担当するサービスクラス"""
     
-    def __init__(self, supabase_client, user_id: Optional[int] = None):
+    def __init__(self, supabase_client, user_id: Optional[UserID] = None):
         super().__init__(supabase_client, user_id)
     
     def get_service_name(self) -> str:
@@ -17,21 +17,20 @@ class MemoService(CacheableService):
     
     async def create_memo(
         self,
-        user_id: int,
+        user_id: UserID,
         project_id: int,
         title: Optional[str] = None,
         content: Optional[str] = None
     ) -> Dict[str, Any]:
         """メモ作成"""
         try:
-            memo_data = {
-                'user_id': user_id,
+            memo_data = self.attach_user_identity({
                 'project_id': project_id,
                 'title': title,
                 'content': content,
                 'created_at': datetime.now(timezone.utc).isoformat(),
                 'updated_at': datetime.now(timezone.utc).isoformat()
-            }
+            }, user_id)
             
             result = self.supabase.table('memos').insert(memo_data).execute()
             
@@ -57,7 +56,7 @@ class MemoService(CacheableService):
             error_result = self.handle_error(e, "Create memo")
             raise HTTPException(status_code=500, detail=error_result["error"])
     
-    def get_user_memos(self, user_id: int) -> List[Dict[str, Any]]:
+    def get_user_memos(self, user_id: UserID) -> List[Dict[str, Any]]:
         """ユーザーの全メモ取得"""
         try:
             cache_key = f"user_memos_{user_id}"
@@ -66,11 +65,10 @@ class MemoService(CacheableService):
             if cached_memos:
                 return cached_memos['data']
             
-            result = self.supabase.table("memos")\
-                .select("id, title, content, project_id, created_at, updated_at")\
-                .eq("user_id", user_id)\
-                .order("updated_at", desc=True)\
-                .execute()
+            query = self.supabase.table("memos")\
+                .select("id, title, content, project_id, created_at, updated_at")
+            query = self.apply_user_scope(query, user_id)
+            result = query.order("updated_at", desc=True).execute()
             
             memos = [{
                 "id": memo["id"],
@@ -90,7 +88,7 @@ class MemoService(CacheableService):
             self.logger.error(f"Failed to get memos for user {user_id}: {e}")
             return []
     
-    def get_project_memos(self, user_id: int, project_id: int) -> List[Dict[str, Any]]:
+    def get_project_memos(self, user_id: UserID, project_id: int) -> List[Dict[str, Any]]:
         """プロジェクト内メモ一覧取得"""
         try:
             cache_key = f"project_memos_{project_id}_{user_id}"
@@ -99,12 +97,11 @@ class MemoService(CacheableService):
             if cached_memos:
                 return cached_memos['data']
             
-            result = self.supabase.table('memos')\
+            query = self.supabase.table('memos')\
                 .select('id, title, content, project_id, created_at, updated_at')\
-                .eq('project_id', project_id)\
-                .eq('user_id', user_id)\
-                .order('updated_at', desc=True)\
-                .execute()
+                .eq('project_id', project_id)
+            query = self.apply_user_scope(query, user_id)
+            result = query.order('updated_at', desc=True).execute()
             
             memos = [{
                 "id": memo['id'],
@@ -124,7 +121,7 @@ class MemoService(CacheableService):
             self.logger.error(f"Failed to get memos for project {project_id}: {e}")
             return []
     
-    def get_memo_by_id(self, memo_id: int, user_id: int) -> Dict[str, Any]:
+    def get_memo_by_id(self, memo_id: int, user_id: UserID) -> Dict[str, Any]:
         """特定メモ取得"""
         try:
             cache_key = f"memo_{memo_id}_{user_id}"
@@ -135,11 +132,10 @@ class MemoService(CacheableService):
             
             self.logger.info(f"メモ取得開始: memo_id={memo_id}, user_id={user_id}")
             
-            result = self.supabase.table('memos')\
+            query = self.supabase.table('memos')\
                 .select('id, title, content, project_id, created_at, updated_at')\
-                .eq('id', memo_id)\
-                .eq('user_id', user_id)\
-                .execute()
+                .eq('id', memo_id)
+            result = self.apply_user_scope(query, user_id).execute()
             
             self.logger.info(f"データベースクエリ結果: count={result.count if result.count else 0}, data_length={len(result.data) if result.data else 0}")
             
@@ -178,7 +174,7 @@ class MemoService(CacheableService):
     async def update_memo(
         self,
         memo_id: int,
-        user_id: int,
+        user_id: UserID,
         title: Optional[str] = None,
         content: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -201,11 +197,12 @@ class MemoService(CacheableService):
             try:
                 result = await asyncio.wait_for(
                     asyncio.to_thread(
-                        lambda: self.supabase.table('memos')\
-                            .update(update_data)\
-                            .eq('id', memo_id)\
-                            .eq('user_id', user_id)\
-                            .execute()
+                        lambda: self.apply_user_scope(
+                            self.supabase.table('memos')\
+                                .update(update_data)\
+                                .eq('id', memo_id),
+                            user_id
+                        ).execute()
                     ),
                     timeout=30.0
                 )
@@ -228,17 +225,16 @@ class MemoService(CacheableService):
             error_result = self.handle_error(e, "Update memo")
             raise HTTPException(status_code=500, detail=error_result["error"])
     
-    async def delete_memo(self, memo_id: int, user_id: int) -> Dict[str, str]:
+    async def delete_memo(self, memo_id: int, user_id: UserID) -> Dict[str, str]:
         """メモ削除"""
         try:
             # 削除前にメモ情報を取得（キャッシュクリア用）
             memo_info = self.get_memo_by_id(memo_id, user_id)
             
-            result = self.supabase.table('memos')\
+            query = self.supabase.table('memos')\
                 .delete()\
-                .eq('id', memo_id)\
-                .eq('user_id', user_id)\
-                .execute()
+                .eq('id', memo_id)
+            result = self.apply_user_scope(query, user_id).execute()
             
             if not result.data:
                 raise HTTPException(status_code=404, detail="メモが見つかりません")
@@ -254,31 +250,33 @@ class MemoService(CacheableService):
             error_result = self.handle_error(e, "Delete memo")
             raise HTTPException(status_code=500, detail=error_result["error"])
     
-    def get_memo_stats(self, user_id: int) -> Dict[str, Any]:
+    def get_memo_stats(self, user_id: UserID) -> Dict[str, Any]:
         """メモ統計情報取得"""
         try:
             # 総メモ数
-            total_result = self.supabase.table('memos')\
-                .select('id', count='exact')\
-                .eq('user_id', user_id)\
-                .execute()
+            total_result = self.apply_user_scope(
+                self.supabase.table('memos').select('id', count='exact'),
+                user_id
+            ).execute()
             
             # プロジェクト別メモ数
-            project_result = self.supabase.table('memos')\
-                .select('project_id', count='exact')\
-                .eq('user_id', user_id)\
-                .not_.is_('project_id', 'null')\
-                .execute()
+            project_result = self.apply_user_scope(
+                self.supabase.table('memos')
+                .select('project_id', count='exact')
+                .not_.is_('project_id', 'null'),
+                user_id
+            ).execute()
             
             # 今月作成したメモ数
             from datetime import datetime, timezone
             current_month_start = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
             
-            monthly_result = self.supabase.table('memos')\
-                .select('id', count='exact')\
-                .eq('user_id', user_id)\
-                .gte('created_at', current_month_start.isoformat())\
-                .execute()
+            monthly_result = self.apply_user_scope(
+                self.supabase.table('memos')
+                .select('id', count='exact')
+                .gte('created_at', current_month_start.isoformat()),
+                user_id
+            ).execute()
             
             return {
                 "total_memos": total_result.count or 0,
@@ -296,7 +294,7 @@ class MemoService(CacheableService):
                 "monthly_memos": 0
             }
     
-    def _clear_memo_cache(self, memo_id: int, user_id: int, project_id: Optional[int] = None) -> None:
+    def _clear_memo_cache(self, memo_id: int, user_id: UserID, project_id: Optional[int] = None) -> None:
         """メモ関連キャッシュクリア"""
         cache_keys_to_clear = [
             f"memo_{memo_id}_{user_id}",
@@ -310,7 +308,7 @@ class MemoService(CacheableService):
             if key in self._cache:
                 del self._cache[key]
     
-    def _clear_user_memo_cache(self, user_id: int, project_id: Optional[int] = None) -> None:
+    def _clear_user_memo_cache(self, user_id: UserID, project_id: Optional[int] = None) -> None:
         """ユーザーのメモ関連キャッシュクリア"""
         cache_keys = [key for key in self._cache.keys() 
                      if f"user_{user_id}" in key or f"memos_{user_id}" in key]
@@ -325,16 +323,18 @@ class MemoService(CacheableService):
     
     def search_memos(
         self,
-        user_id: int,
+        user_id: UserID,
         query: str,
         project_id: Optional[int] = None,
         limit: int = 20
     ) -> List[Dict[str, Any]]:
         """メモ検索"""
         try:
-            search_query = self.supabase.table('memos')\
-                .select('id, title, content, project_id, created_at, updated_at')\
-                .eq('user_id', user_id)
+            search_query = self.apply_user_scope(
+                self.supabase.table('memos')
+                .select('id, title, content, project_id, created_at, updated_at'),
+                user_id
+            )
             
             if project_id:
                 search_query = search_query.eq('project_id', project_id)

@@ -50,7 +50,7 @@ class MemoSearchRequest(BaseModel):
     limit: int = 20
 
 # 依存関数
-def get_memo_service(current_user_id: int = Depends(get_current_user)) -> MemoService:
+def get_memo_service(current_user_id: str = Depends(get_current_user)) -> MemoService:
     """メモサービス取得"""
     return get_service_manager().get_service(MemoService, current_user_id)
 
@@ -58,7 +58,7 @@ def get_memo_service(current_user_id: int = Depends(get_current_user)) -> MemoSe
 @router.post("", response_model=MemoResponse)
 async def create_memo(
     memo_data: MemoCreate,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     memo_service: MemoService = Depends(get_memo_service)
 ):
     """メモ作成"""
@@ -80,7 +80,7 @@ async def create_memo(
 
 @router.get("", response_model=List[MemoResponse])
 async def get_user_memos(
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     memo_service: MemoService = Depends(get_memo_service)
 ):
     """ユーザーの全メモ取得"""
@@ -100,7 +100,7 @@ async def get_user_memos(
 @router.get("/{memo_id}", response_model=MemoResponse)
 async def get_memo_by_id(
     memo_id: int,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     memo_service: MemoService = Depends(get_memo_service)
 ):
     """特定メモ取得"""
@@ -119,7 +119,7 @@ async def get_memo_by_id(
 async def update_memo(
     memo_id: int,
     memo_data: MemoUpdate,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     memo_service: MemoService = Depends(get_memo_service)
 ):
     """メモ更新"""
@@ -143,7 +143,7 @@ async def update_memo(
 @router.delete("/{memo_id}")
 async def delete_memo(
     memo_id: int,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     memo_service: MemoService = Depends(get_memo_service)
 ):
     """メモ削除"""
@@ -152,7 +152,7 @@ async def delete_memo(
 @router.get("/project/{project_id}", response_model=List[MemoResponse])
 async def get_project_memos(
     project_id: int,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     memo_service: MemoService = Depends(get_memo_service)
 ):
     """プロジェクト内メモ一覧取得"""
@@ -172,7 +172,7 @@ async def get_project_memos(
 @router.post("/search", response_model=List[MemoResponse])
 async def search_memos(
     search_data: MemoSearchRequest,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     memo_service: MemoService = Depends(get_memo_service)
 ):
     """メモ検索"""
@@ -197,7 +197,7 @@ async def search_memos(
 
 @router.get("/stats/overview")
 async def get_memo_stats(
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     memo_service: MemoService = Depends(get_memo_service)
 ):
     """メモ統計情報取得"""
@@ -207,7 +207,7 @@ async def get_memo_stats(
 @router.post("/save", response_model=MemoResponse, deprecated=True)
 async def save_memo_legacy(
     memo_data: MemoSave,
-    current_user_id: int = Depends(get_current_user)
+    current_user_id: str = Depends(get_current_user)
 ):
     """レガシーメモ保存（非推奨）"""
     raise HTTPException(
@@ -223,7 +223,7 @@ async def save_memo_legacy(
 async def create_project_memo_legacy(
     project_id: int,
     memo_data: MemoCreate,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     memo_service: MemoService = Depends(get_memo_service)
 ):
     """
@@ -250,7 +250,7 @@ async def create_project_memo_legacy(
 @router.get("/projects/{project_id}/memos", response_model=List[MemoResponse], deprecated=True)
 async def get_project_memos_legacy(
     project_id: int,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     memo_service: MemoService = Depends(get_memo_service)
 ):
     """

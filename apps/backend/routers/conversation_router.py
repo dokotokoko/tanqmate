@@ -23,6 +23,31 @@ def get_service_manager() -> ServiceManager:
             raise ValueError("Supabase client could not be initialized")
     return _service_manager
 
+
+def _resolved_user_id(conversation: Dict[str, Any]) -> str:
+    """Return the canonical user id exposed by the API."""
+    resolved = conversation.get("supabase_user_id") or conversation.get("user_id")
+    if resolved is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="会話データに user_id が存在しません"
+        )
+    return str(resolved)
+
+
+def _serialize_conversation(conversation: Dict[str, Any]) -> "ConversationResponse":
+    """Normalize a raw chat_conversations row into the API response shape."""
+    return ConversationResponse(
+        id=conversation["id"],
+        user_id=_resolved_user_id(conversation),
+        title=conversation["title"],
+        is_active=conversation["is_active"],
+        metadata=conversation.get("metadata"),
+        message_count=conversation.get("message_count", 0),
+        created_at=conversation["created_at"],
+        updated_at=conversation["updated_at"]
+    )
+
 # Pydanticモデル
 class ConversationCreate(BaseModel):
     title: str
@@ -35,7 +60,7 @@ class ConversationUpdate(BaseModel):
 
 class ConversationResponse(BaseModel):
     id: str
-    user_id: int
+    user_id: str
     title: str
     is_active: bool
     metadata: Optional[Dict[str, Any]]
@@ -57,7 +82,7 @@ class MessageResponse(BaseModel):
     created_at: str
 
 # 依存関数
-def get_conversation_service(current_user_id: int = Depends(get_current_user)) -> ConversationService:
+def get_conversation_service(current_user_id: str = Depends(get_current_user)) -> ConversationService:
     """会話サービス取得"""
     return get_service_manager().get_service(ConversationService, current_user_id)
 
@@ -65,7 +90,7 @@ def get_conversation_service(current_user_id: int = Depends(get_current_user)) -
 @router.post("", response_model=ConversationResponse)
 async def create_conversation(
     conversation_data: ConversationCreate,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     conversation_service: ConversationService = Depends(get_conversation_service)
 ):
     """新しい会話を作成"""
@@ -83,23 +108,14 @@ async def create_conversation(
             detail="会話の作成後の取得に失敗しました"
         )
     
-    return ConversationResponse(
-        id=conversation["id"],
-        user_id=conversation["user_id"],
-        title=conversation["title"],
-        is_active=conversation["is_active"],
-        metadata=conversation.get("metadata"),
-        message_count=conversation.get("message_count", 0),
-        created_at=conversation["created_at"],
-        updated_at=conversation["updated_at"]
-    )
+    return _serialize_conversation(conversation)
 
 @router.get("", response_model=ConversationListResponse)
 async def list_conversations(
     limit: Optional[int] = 20,
     offset: Optional[int] = 0,
     is_active: Optional[bool] = None,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     conversation_service: ConversationService = Depends(get_conversation_service)
 ):
     """会話リストを取得"""
@@ -115,16 +131,7 @@ async def list_conversations(
     )
     
     conversations = [
-        ConversationResponse(
-            id=conv["id"],
-            user_id=conv["user_id"],
-            title=conv["title"],
-            is_active=conv["is_active"],
-            metadata=conv.get("metadata"),
-            message_count=conv.get("message_count", 0),
-            created_at=conv["created_at"],
-            updated_at=conv["updated_at"]
-        )
+        _serialize_conversation(conv)
         for conv in result["conversations"]
     ]
     
@@ -138,7 +145,7 @@ async def list_conversations(
 @router.get("/{conversation_id}", response_model=ConversationResponse)
 async def get_conversation(
     conversation_id: str,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     conversation_service: ConversationService = Depends(get_conversation_service)
 ):
     """指定した会話の詳細を取得"""
@@ -149,22 +156,13 @@ async def get_conversation(
             detail="会話が見つからないか、アクセス権限がありません"
         )
     
-    return ConversationResponse(
-        id=conversation["id"],
-        user_id=conversation["user_id"],
-        title=conversation["title"],
-        is_active=conversation["is_active"],
-        metadata=conversation.get("metadata"),
-        message_count=conversation.get("message_count", 0),
-        created_at=conversation["created_at"],
-        updated_at=conversation["updated_at"]
-    )
+    return _serialize_conversation(conversation)
 
 @router.put("/{conversation_id}", response_model=ConversationResponse)
 async def update_conversation(
     conversation_id: str,
     update_data: ConversationUpdate,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     conversation_service: ConversationService = Depends(get_conversation_service)
 ):
     """会話情報を更新"""
@@ -188,21 +186,12 @@ async def update_conversation(
             detail="会話の更新後の取得に失敗しました"
         )
     
-    return ConversationResponse(
-        id=conversation["id"],
-        user_id=conversation["user_id"],
-        title=conversation["title"],
-        is_active=conversation["is_active"],
-        metadata=conversation.get("metadata"),
-        message_count=conversation.get("message_count", 0),
-        created_at=conversation["created_at"],
-        updated_at=conversation["updated_at"]
-    )
+    return _serialize_conversation(conversation)
 
 @router.delete("/{conversation_id}")
 async def delete_conversation(
     conversation_id: str,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     conversation_service: ConversationService = Depends(get_conversation_service)
 ):
     """会話を削除（論理削除）"""
@@ -221,7 +210,7 @@ async def get_conversation_messages(
     conversation_id: str,
     limit: Optional[int] = 50,
     offset: Optional[int] = 0,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     conversation_service: ConversationService = Depends(get_conversation_service)
 ):
     """会話のメッセージを取得"""
@@ -250,7 +239,7 @@ async def get_conversation_messages(
 # グローバルセッション用エンドポイント（内部用）
 @router.get("/global/session")
 async def get_global_session(
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     conversation_service: ConversationService = Depends(get_conversation_service)
 ):
     """ユーザーのグローバルチャットセッション取得"""

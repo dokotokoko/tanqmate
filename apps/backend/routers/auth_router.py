@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 import logging
 import os
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,8 +12,8 @@ from pydantic import BaseModel
 from supabase import Client
 
 from services.base import ServiceManager
-from utils.auth_utils import AuthUtils
 from utils.supabase_auth import get_current_user as get_supabase_user
+from utils.user_identity import resolve_legacy_user_id as lookup_legacy_user_id
 
 load_dotenv()
 
@@ -50,13 +50,20 @@ def get_service_manager() -> ServiceManager:
     return _service_manager
 
 
-def resolve_application_user_id(auth_user: Dict[str, Any]) -> Union[int, str]:
-    client = get_supabase_client()
-    if client is not None:
-        legacy_user_id = AuthUtils.convert_supabase_to_legacy_id(auth_user["id"], client)
-        if legacy_user_id is not None:
-            return legacy_user_id
+def resolve_application_user_id(auth_user: Dict[str, Any]) -> str:
+    """Use Supabase UUID as the canonical application user id."""
     return auth_user["id"]
+
+
+def resolve_legacy_user_id(auth_user: Dict[str, Any]) -> Optional[int]:
+    """Lookup legacy ids only for migration / handover flows."""
+    client = get_supabase_client()
+    if client is None:
+        return None
+    legacy_user_id = lookup_legacy_user_id(client, auth_user["id"])
+    if legacy_user_id is None:
+        logger.info("No legacy user mapping found for Supabase user %s", auth_user["id"])
+    return legacy_user_id
 
 
 def ensure_profile(
@@ -111,7 +118,7 @@ async def get_current_auth_user(
 
 async def get_current_user(
     auth_user: Dict[str, Any] = Depends(get_current_auth_user),
-) -> Union[int, str]:
+) -> str:
     return resolve_application_user_id(auth_user)
 
 
@@ -144,6 +151,7 @@ async def get_current_user_info(
         "user": auth_user,
         "profile": profile,
         "application_user_id": resolve_application_user_id(auth_user),
+        "legacy_user_id": resolve_legacy_user_id(auth_user),
     }
 
 

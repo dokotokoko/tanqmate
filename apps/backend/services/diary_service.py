@@ -7,22 +7,62 @@ import json
 import asyncio
 from uuid import uuid4
 from fastapi import HTTPException, status
-from .base import BaseService, CacheableService
+from .base import BaseService, CacheableService, UserID
 from module.claude_llm_api import get_claude_llm_client
 
 class DiaryService(CacheableService):
     """日誌管理を担当するサービスクラス"""
     
-    def __init__(self, supabase_client, user_id: Optional[int] = None):
+    def __init__(self, supabase_client, user_id: Optional[UserID] = None):
         super().__init__(supabase_client, user_id)
         self.llm_client = get_claude_llm_client()
     
     def get_service_name(self) -> str:
         return "DiaryService"
+
+    def _apply_student_scope(self, query, user_id: UserID):
+        return self.apply_user_scope(
+            query,
+            user_id,
+            legacy_column="student_id",
+            supabase_column="supabase_student_id",
+        )
+
+    def _attach_student_identity(self, payload: Dict[str, Any], user_id: UserID) -> Dict[str, Any]:
+        return self.attach_user_identity(
+            payload,
+            user_id,
+            legacy_column="student_id",
+            supabase_column="supabase_student_id",
+        )
+
+    def _normalize_diary_entry(self, diary: Dict[str, Any]) -> Dict[str, Any]:
+        normalized = dict(diary)
+        if normalized.get("supabase_student_id"):
+            normalized["student_id"] = normalized["supabase_student_id"]
+        elif normalized.get("student_id") is not None:
+            normalized["student_id"] = str(normalized["student_id"])
+        return normalized
+
+    def _get_profile_map(self, supabase_user_ids: List[str]) -> Dict[str, Dict[str, Any]]:
+        if not supabase_user_ids:
+            return {}
+
+        try:
+            result = (
+                self.supabase.table("profiles")
+                .select("id, name, email")
+                .in_("id", supabase_user_ids)
+                .execute()
+            )
+            return {row["id"]: row for row in (result.data or [])}
+        except Exception as exc:
+            self.logger.warning("Failed to load diary profile map: %s", exc)
+            return {}
     
     async def generate_draft(
         self,
-        user_id: int,
+        user_id: UserID,
         target_date: Optional[DateType] = None,
         conversation_id: Optional[str] = None
     ) -> Dict[str, Any]:
@@ -97,7 +137,7 @@ class DiaryService(CacheableService):
     
     async def submit_diary(
         self,
-        user_id: int,
+        user_id: UserID,
         target_date: Optional[DateType],
         published_body: str,
         published_quote: str,
@@ -116,8 +156,7 @@ class DiaryService(CacheableService):
                 published_body
             )
             
-            diary_data = {
-                "student_id": user_id,
+            diary_data = self._attach_student_identity({
                 "date": target_date.isoformat(),
                 "ai_draft": ai_draft,
                 "published_body": published_body,
@@ -128,14 +167,15 @@ class DiaryService(CacheableService):
                 "diff_removed": diff_removed,
                 "turning_point": ai_draft.get("turning_point_detected", False),
                 "submitted_at": datetime.now(timezone.utc).isoformat()
-            }
+            }, user_id)
             
             # 既存の日誌をチェック（上書き処理）
-            existing = self.supabase.table("diary_entries")\
+            existing = self._apply_student_scope(
+                self.supabase.table("diary_entries")\
                 .select("id")\
-                .eq("student_id", user_id)\
-                .eq("date", target_date.isoformat())\
-                .execute()
+                .eq("date", target_date.isoformat()),
+                user_id
+            ).execute()
             
             if existing.data:
                 # 更新
@@ -156,7 +196,7 @@ class DiaryService(CacheableService):
             # キャッシュクリア
             self._clear_user_diary_cache(user_id)
             
-            diary = result.data[0]
+            diary = self._normalize_diary_entry(result.data[0])
             diary["status"] = "submitted"
             return diary
             
@@ -166,21 +206,23 @@ class DiaryService(CacheableService):
     
     async def get_user_diaries(
         self,
-        user_id: int,
+        user_id: UserID,
         limit: int = 10,
         offset: int = 0
     ) -> List[Dict[str, Any]]:
         """ユーザーの日誌一覧取得"""
         try:
-            result = self.supabase.table("diary_entries")\
+            result = self._apply_student_scope(
+                self.supabase.table("diary_entries")\
                 .select("*")\
-                .eq("student_id", user_id)\
                 .order("date", desc=True)\
-                .range(offset, offset + limit - 1)\
-                .execute()
+                .range(offset, offset + limit - 1),
+                user_id
+            ).execute()
             
             diaries = []
             for diary in result.data:
+                diary = self._normalize_diary_entry(diary)
                 diary["status"] = "submitted" if diary.get("submitted_at") else "draft"
                 diaries.append(diary)
             
@@ -192,19 +234,20 @@ class DiaryService(CacheableService):
     
     async def get_diary_by_date(
         self,
-        user_id: int,
+        user_id: UserID,
         target_date: DateType
     ) -> Optional[Dict[str, Any]]:
         """特定日付の日誌取得"""
         try:
-            result = self.supabase.table("diary_entries")\
+            result = self._apply_student_scope(
+                self.supabase.table("diary_entries")\
                 .select("*")\
-                .eq("student_id", user_id)\
-                .eq("date", target_date.isoformat())\
-                .execute()
+                .eq("date", target_date.isoformat()),
+                user_id
+            ).execute()
             
             if result.data:
-                diary = result.data[0]
+                diary = self._normalize_diary_entry(result.data[0])
                 diary["status"] = "submitted" if diary.get("submitted_at") else "draft"
                 return diary
             
@@ -216,7 +259,7 @@ class DiaryService(CacheableService):
     
     async def get_teacher_dashboard(
         self,
-        teacher_id: int,
+        teacher_id: UserID,
         class_id: Optional[int] = None,
         date_from: Optional[DateType] = None,
         date_to: Optional[DateType] = None,
@@ -227,7 +270,7 @@ class DiaryService(CacheableService):
         try:
             # ベースクエリ
             query = self.supabase.table("diary_entries")\
-                .select("*, users!student_id(name, email)")\
+                .select("*")\
                 .filter("submitted_at", "not.is", "null")\
                 .order("submitted_at", desc=True)\
                 .limit(limit)
@@ -239,9 +282,18 @@ class DiaryService(CacheableService):
                 query = query.lte("date", date_to.isoformat())
             
             result = query.execute()
+            profile_map = self._get_profile_map(
+                [
+                    entry["supabase_student_id"]
+                    for entry in result.data
+                    if entry.get("supabase_student_id")
+                ]
+            )
             
             diaries = []
             for entry in result.data:
+                entry = self._normalize_diary_entry(entry)
+                profile = profile_map.get(entry.get("supabase_student_id", ""), {})
                 # フォローアップフラグ判定
                 follow_up_flag = None
                 if entry.get("turning_point"):
@@ -258,8 +310,8 @@ class DiaryService(CacheableService):
                 
                 diary_view = {
                     **entry,
-                    "student_name": entry.get("users", {}).get("name", "Unknown"),
-                    "student_email": entry.get("users", {}).get("email", ""),
+                    "student_name": profile.get("name", "Unknown"),
+                    "student_email": profile.get("email", ""),
                     "follow_up_flag": follow_up_flag
                 }
                 diaries.append(diary_view)
@@ -272,22 +324,24 @@ class DiaryService(CacheableService):
     
     async def get_student_diaries(
         self,
-        teacher_id: int,
-        student_id: int,
+        teacher_id: UserID,
+        student_id: UserID,
         limit: int = 20
     ) -> List[Dict[str, Any]]:
         """特定生徒の日誌履歴取得（先生用）"""
         try:
-            result = self.supabase.table("diary_entries")\
+            result = self._apply_student_scope(
+                self.supabase.table("diary_entries")\
                 .select("*")\
-                .eq("student_id", student_id)\
                 .filter("submitted_at", "not.is", "null")\
                 .order("date", desc=True)\
-                .limit(limit)\
-                .execute()
+                .limit(limit),
+                student_id
+            ).execute()
             
             diaries = []
             for diary in result.data:
+                diary = self._normalize_diary_entry(diary)
                 diary["status"] = "submitted"
                 diaries.append(diary)
             
@@ -297,13 +351,14 @@ class DiaryService(CacheableService):
             self.logger.error(f"Get student diaries error: {e}")
             return []
     
-    async def get_user_stats(self, user_id: int) -> Dict[str, Any]:
+    async def get_user_stats(self, user_id: UserID) -> Dict[str, Any]:
         """ユーザーの日誌統計取得"""
         try:
-            result = self.supabase.table("diary_entries")\
-                .select("*")\
-                .eq("student_id", user_id)\
-                .execute()
+            result = self._apply_student_scope(
+                self.supabase.table("diary_entries")\
+                .select("*"),
+                user_id
+            ).execute()
             
             total_entries = len(result.data)
             submitted_entries = sum(1 for d in result.data if d.get("submitted_at"))
@@ -332,7 +387,7 @@ class DiaryService(CacheableService):
     
     async def _get_day_conversations(
         self,
-        user_id: int,
+        user_id: UserID,
         target_date: DateType,
         conversation_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
@@ -344,10 +399,10 @@ class DiaryService(CacheableService):
             # chat_logsテーブルから会話ログを取得
             query = self.supabase.table("chat_logs")\
                 .select("*")\
-                .eq("user_id", user_id)\
                 .gte("created_at", start_time.isoformat())\
-                .lt("created_at", end_time.isoformat())\
-                .order("created_at")
+                .lt("created_at", end_time.isoformat())
+            query = self.apply_user_scope(query, user_id)
+            query = query.order("created_at")
             
             if conversation_id:
                 query = query.eq("conversation_id", conversation_id)
@@ -361,19 +416,20 @@ class DiaryService(CacheableService):
     
     async def _get_previous_diary(
         self,
-        user_id: int,
+        user_id: UserID,
         before_date: DateType
     ) -> Optional[str]:
         """前回の日誌取得"""
         try:
-            result = self.supabase.table("diary_entries")\
+            result = self._apply_student_scope(
+                self.supabase.table("diary_entries")\
                 .select("published_body")\
-                .eq("student_id", user_id)\
                 .lt("date", before_date.isoformat())\
                 .filter("submitted_at", "not.is", "null")\
                 .order("date", desc=True)\
-                .limit(1)\
-                .execute()
+                .limit(1),
+                user_id
+            ).execute()
             
             if result.data:
                 return result.data[0].get("published_body")
@@ -480,7 +536,7 @@ JSON形式のみ。マークダウンのコードブロックも含めず、純�
         
         return added, removed
     
-    def _clear_user_diary_cache(self, user_id: int):
+    def _clear_user_diary_cache(self, user_id: UserID):
         """ユーザー日誌キャッシュクリア"""
         cache_keys = [
             f"user_diaries_{user_id}",

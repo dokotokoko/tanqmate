@@ -8,7 +8,7 @@ import os
 import json
 import uuid
 import logging
-from .base import BaseService
+from .base import BaseService, UserID
 from .conversation_manager import ConversationManager
 from async_helpers import (
     parallel_fetch_context_and_history,
@@ -27,8 +27,31 @@ from .websearch_extractor import WebSearchExtractor
 
 class ChatService(BaseService):
     """チャット・対話管理を担当するサービスクラス"""
+
+    QUEST_CARD_GENERATION_PROMPT = """あなたは探究学習を支援するUI用カード生成アシスタントです。
+会話文脈と直前のAI本文をもとに、ユーザーが次に押しやすい具体的な行動カードを最大5件生成してください。
+
+要件:
+・出力はJSONのみ
+・説明文やMarkdownやコードフェンスは禁止
+・形式は必ず {"quest_cards":[...]} とする
+・各カードは id, label, emoji, color を持つ
+・label は日本語で8文字から18文字程度の短い行動表現にする
+・質問文ではなく「比較してみる」「整理してみる」のような行動提案にする
+・会話内容と無関係な一般論は禁止
+・重複したカードは禁止
+・カードが不要な場合は {"quest_cards": []} を返す
+
+利用可能な色:
+"teal", "yellow", "purple", "pink", "green"
+
+出力例:
+{"quest_cards":[
+  {"id":"card_1","label":"情報を整理する","emoji":"🗂️","color":"teal"},
+  {"id":"card_2","label":"別の視点を試す","emoji":"🌎","color":"green"}
+]}"""
     
-    def __init__(self, supabase_client, user_id: Optional[int] = None):
+    def __init__(self, supabase_client, user_id: Optional[UserID] = None):
         super().__init__(supabase_client, user_id)
         self.history_limit_default = int(os.environ.get("CHAT_HISTORY_LIMIT_DEFAULT", "50"))
         self.history_limit_max = int(os.environ.get("CHAT_HISTORY_LIMIT_MAX", "100"))
@@ -57,7 +80,7 @@ class ChatService(BaseService):
     async def process_chat_message(
         self,
         message: str,
-        user_id: int,
+        user_id: UserID,
         project_id: Optional[str] = None,
         session_type: str = "general",
         response_style: Optional[str] = "auto",
@@ -175,7 +198,7 @@ class ChatService(BaseService):
     async def _generate_ai_response(
         self,
         message: str,
-        user_id: int,
+        user_id: UserID,
         project_context: str,
         conversation_history: List[Dict],
         session_type: str,
@@ -247,6 +270,7 @@ class ChatService(BaseService):
                 system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
             else:
                 system_prompt = ResponseStyleManager.get_system_prompt(response_style)
+            system_prompt = self._remove_quest_card_instructions(system_prompt)
 
             # 応答スタイルに応じたトークン数制限を設定
             # 長考モード: research, deepen → 制限なし（従来通り）
@@ -306,29 +330,15 @@ class ChatService(BaseService):
                     self.logger.warning(f"Select style JSON parse failed: {parse_error}")
                     # パース失敗時は通常応答として返す
 
-            # すべてのレスポンスからクエストカードを抽出
-            quest_cards = self._extract_quest_cards(response)
-            
-            # クエストカードのJSONブロックを応答から削除
-            cleaned_response = response
-            if quest_cards:
-                import re
-                # JSONブロックパターン（```jsonで囲まれた部分）を削除
-                cleaned_response = re.sub(
-                    r'```json\s*\{[^}]*"quest_cards"[^}]*\}[^}]*\}\s*```', 
-                    '', 
-                    cleaned_response, 
-                    flags=re.DOTALL | re.IGNORECASE
-                )
-                # 単純なJSONブロック（```なし）も削除
-                cleaned_response = re.sub(
-                    r'\{[^}]*"quest_cards"\s*:\s*\[[^\]]*\][^}]*\}', 
-                    '', 
-                    cleaned_response,
-                    flags=re.DOTALL | re.IGNORECASE
-                )
-                # 余分な空白行を削除
-                cleaned_response = re.sub(r'\n\s*\n+', '\n\n', cleaned_response).strip()
+            # 旧プロンプト由来の quest_cards 断片が混入しても本文には出さない
+            cleaned_response = self._strip_quest_card_payload(response)
+            quest_cards = await self._generate_quest_cards(
+                llm_client=llm_client,
+                message=message,
+                context_data=context_data,
+                assistant_response=cleaned_response,
+                response_style=response_style
+            )
             
             result = {
                 "response": cleaned_response,
@@ -353,6 +363,129 @@ class ChatService(BaseService):
             self.logger.error(f"Async LLM error: {e}")
             raise
     
+    def _remove_quest_card_instructions(self, prompt: str) -> str:
+        """旧来の「本文末尾に quest_cards JSON を付ける」指示を実行時に除去する。"""
+        import re
+
+        cleaned = re.sub(
+            r'【重要】応答の最後に、会話の文脈に基づいて最大5つまでの関連アクション提案カードをJSONで生成してください。.*?カードは.*?提案してください。',
+            '',
+            prompt,
+            flags=re.DOTALL
+        )
+        return re.sub(r'\n\s*\n+', '\n\n', cleaned).strip()
+
+    def _strip_quest_card_payload(self, response: str) -> str:
+        """本文に混ざった quest_cards JSON や途中で切れた断片を除去する。"""
+        import re
+
+        if not response:
+            return response
+
+        cleaned = response
+        quest_marker = cleaned.find('"quest_cards"')
+        if quest_marker != -1:
+            fence_start = cleaned.rfind("```json", 0, quest_marker)
+            brace_start = cleaned.rfind("{", 0, quest_marker)
+            cut_index = fence_start if fence_start != -1 else brace_start
+            if cut_index == -1:
+                cut_index = quest_marker
+            cleaned = cleaned[:cut_index]
+
+        cleaned = re.sub(r'```json\s*$', '', cleaned, flags=re.IGNORECASE)
+        cleaned = re.sub(r'\n\s*\n+', '\n\n', cleaned)
+        return cleaned.strip()
+
+    def _parse_json_object_from_text(self, response_text: str) -> Optional[Dict[str, Any]]:
+        """レスポンス文字列から最初のJSONオブジェクトを抽出して返す。"""
+        if not response_text:
+            return None
+
+        cleaned_response = response_text.replace('{{', '{').replace('}}', '}')
+        json_start = cleaned_response.find('{')
+        json_end = cleaned_response.rfind('}') + 1
+        if json_start == -1 or json_end <= json_start:
+            return None
+
+        try:
+            return json.loads(cleaned_response[json_start:json_end])
+        except json.JSONDecodeError:
+            return None
+
+    def _normalize_quest_cards(self, quest_cards_raw: Any) -> List[Dict[str, Any]]:
+        """クエストカードをUI用に正規化する。"""
+        valid_colors = ['teal', 'yellow', 'purple', 'pink', 'green']
+        normalized_cards: List[Dict[str, Any]] = []
+
+        if not isinstance(quest_cards_raw, list):
+            return normalized_cards
+
+        for index, card in enumerate(quest_cards_raw, start=1):
+            if not isinstance(card, dict):
+                continue
+
+            label = str(card.get('label', '')).strip()
+            if not label:
+                continue
+
+            color = str(card.get('color', 'teal')).strip()
+            if color not in valid_colors:
+                color = 'teal'
+
+            card_id = str(card.get('id') or f"card_{index}").strip()
+            normalized_cards.append({
+                'id': card_id,
+                'label': label,
+                'emoji': str(card.get('emoji') or '🎯').strip() or '🎯',
+                'color': color,
+            })
+
+        return normalized_cards[:5]
+
+    async def _generate_quest_cards(
+        self,
+        llm_client,
+        message: str,
+        context_data: str,
+        assistant_response: str,
+        response_style: Optional[str],
+    ) -> List[Dict[str, Any]]:
+        """本文生成後に別リクエストで quest_cards を生成する。"""
+        if response_style == "select":
+            return []
+
+        if not assistant_response.strip():
+            return []
+
+        input_items = [
+            llm_client.text("system", self.QUEST_CARD_GENERATION_PROMPT),
+            llm_client.text(
+                "user",
+                (
+                    f"response_style: {response_style or 'auto'}\n\n"
+                    f"conversation_context:\n{context_data}\n\n"
+                    f"user_message:\n{message}\n\n"
+                    f"assistant_response:\n{assistant_response}"
+                )
+            ),
+        ]
+
+        try:
+            response_obj = await llm_client.generate_response_async(input_items, max_tokens=260)
+            response_text = llm_client.extract_output_text(response_obj)
+            parsed = self._parse_json_object_from_text(response_text)
+            if not parsed:
+                self.logger.warning("Quest card generation returned non-JSON response")
+                return []
+
+            quest_cards = self._normalize_quest_cards(parsed.get("quest_cards", []))
+            if quest_cards:
+                self.logger.info(f"✅ Generated {len(quest_cards)} quest cards in second pass")
+            return quest_cards
+        except Exception as e:
+            self.logger.warning(f"Quest card generation failed: {e}")
+            return []
+
     def _extract_quest_cards(self, response: str) -> List[Dict[str, Any]]:
         """
         AI応答からクエストカードJSONを抽出・パース
@@ -409,23 +542,7 @@ class ChatService(BaseService):
             # JSONをパース
             try:
                 parsed = json.loads(json_text)
-                quest_cards_raw = parsed.get('quest_cards', [])
-                
-                # クエストカードを正規化
-                quest_cards = []
-                for card in quest_cards_raw:
-                    if isinstance(card, dict) and 'id' in card and 'label' in card:
-                        normalized_card = {
-                            'id': card['id'],
-                            'label': card['label'],
-                            'emoji': card.get('emoji', '🎯'),
-                            'color': card.get('color', 'teal')
-                        }
-                        # colorが有効な値かチェック
-                        valid_colors = ['teal', 'yellow', 'purple', 'pink', 'green']
-                        if normalized_card['color'] not in valid_colors:
-                            normalized_card['color'] = 'teal'
-                        quest_cards.append(normalized_card)
+                quest_cards = self._normalize_quest_cards(parsed.get('quest_cards', []))
                 
                 if quest_cards:
                     self.logger.info(f"✅ Extracted {len(quest_cards)} quest cards from AI response")
@@ -441,7 +558,7 @@ class ChatService(BaseService):
     
     # 同期フォールバック処理は削除 - 軽量モデル非同期フォールバックに統合済み
     
-    def get_chat_history(self, user_id: int, conversation_id: str = None, limit: int = 20) -> List[Dict[str, Any]]:
+    def get_chat_history(self, user_id: UserID, conversation_id: str = None, limit: int = 20) -> List[Dict[str, Any]]:
         """チャット履歴取得 - 統一フォーマットで返す
         
         Args:
@@ -463,9 +580,11 @@ class ChatService(BaseService):
                     return []
             
             # 特定の会話のメッセージのみ取得
-            query = self.supabase.table("chat_logs")\
-                .select("id, message, sender, created_at, conversation_id")\
-                .eq("user_id", user_id)
+            query = self.apply_user_scope(
+                self.supabase.table("chat_logs")\
+                    .select("id, message, sender, created_at, conversation_id"),
+                user_id
+            )
             
             # conversation_idでフィルタリング
             if conversation_id:

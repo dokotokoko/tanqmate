@@ -7,6 +7,8 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 import uuid
 import logging
+from .base import UserID
+from utils.user_identity import apply_user_scope, attach_user_identity
 
 
 class ConversationManager:
@@ -18,7 +20,7 @@ class ConversationManager:
         # 会話の有効期限（24時間）
         self.conversation_timeout_hours = 24
     
-    def get_or_create_active_conversation(self, user_id: int, session_type: str = "general") -> Optional[str]:
+    def get_or_create_active_conversation(self, user_id: UserID, session_type: str = "general") -> Optional[str]:
         """
         ユーザーごとに1つのアクティブな会話を維持
         24時間以上経過した会話は自動的に新規作成
@@ -32,13 +34,13 @@ class ConversationManager:
         """
         try:
             # 既存のアクティブな会話を検索
-            result = self.supabase.table("chat_conversations")\
-                .select("id, updated_at")\
-                .eq("user_id", user_id)\
-                .eq("is_active", True)\
-                .order("updated_at.desc")\
-                .limit(1)\
-                .execute()
+            result = apply_user_scope(
+                self.supabase.table("chat_conversations")\
+                    .select("id, updated_at")\
+                    .eq("is_active", True),
+                self.supabase,
+                user_id
+            ).order("updated_at", desc=True).limit(1).execute()
             
             if result.data:
                 conversation = result.data[0]
@@ -60,10 +62,9 @@ class ConversationManager:
             
         except Exception as e:
             self.logger.error(f"会話管理エラー: {e}")
-            # エラー時はUUIDを生成してフォールバック
-            return str(uuid.uuid4())
+            return self._create_new_conversation(user_id, session_type)
     
-    def validate_conversation(self, user_id: int, conversation_id: str) -> bool:
+    def validate_conversation(self, user_id: UserID, conversation_id: str) -> bool:
         """
         会話IDが有効かチェック
         
@@ -75,34 +76,38 @@ class ConversationManager:
             有効な場合True
         """
         try:
-            result = self.supabase.table("chat_conversations")\
-                .select("id")\
-                .eq("id", conversation_id)\
-                .eq("user_id", user_id)\
-                .eq("is_active", True)\
-                .limit(1)\
-                .execute()
+            result = apply_user_scope(
+                self.supabase.table("chat_conversations")\
+                    .select("id")\
+                    .eq("id", conversation_id)\
+                    .eq("is_active", True),
+                self.supabase,
+                user_id
+            ).limit(1).execute()
             
             return bool(result.data)
         except Exception as e:
             self.logger.error(f"会話検証エラー: {e}")
             return False
     
-    def _create_new_conversation(self, user_id: int, session_type: str) -> str:
+    def _create_new_conversation(self, user_id: UserID, session_type: str) -> str:
         """新しい会話を作成"""
         try:
-            new_conversation = self.supabase.table("chat_conversations").insert({
-                "user_id": user_id,
+            new_conversation = self.supabase.table("chat_conversations").insert(attach_user_identity({
                 "title": "untitled",  # デフォルトをuntitledに設定
+                "metadata": {"session_type": session_type},
                 "is_active": True,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat()
-            }).execute()
-            
+            }, self.supabase, user_id)).execute()
+
+            if not new_conversation.data:
+                raise ValueError("chat_conversations insert returned no rows")
+
             return new_conversation.data[0]["id"]
         except Exception as e:
             self.logger.error(f"会話作成エラー: {e}")
-            return str(uuid.uuid4())
+            raise
     
     def _update_conversation_timestamp(self, conversation_id: str) -> None:
         """会話のタイムスタンプを更新"""
@@ -124,7 +129,7 @@ class ConversationManager:
         except Exception as e:
             self.logger.warning(f"会話アーカイブ失敗: {e}")
     
-    def archive_old_conversations(self, user_id: int, hours: int = 24) -> int:
+    def archive_old_conversations(self, user_id: UserID, hours: int = 24) -> int:
         """
         指定時間以上経過した会話を自動的にアーカイブ
         
@@ -138,12 +143,14 @@ class ConversationManager:
         try:
             cutoff_time = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
             
-            result = self.supabase.table("chat_conversations")\
-                .update({"is_active": False})\
-                .eq("user_id", user_id)\
-                .eq("is_active", True)\
-                .lt("updated_at", cutoff_time)\
-                .execute()
+            result = apply_user_scope(
+                self.supabase.table("chat_conversations")\
+                    .update({"is_active": False})\
+                    .eq("is_active", True)\
+                    .lt("updated_at", cutoff_time),
+                self.supabase,
+                user_id
+            ).execute()
             
             archived_count = len(result.data) if result.data else 0
             if archived_count > 0:
@@ -155,7 +162,7 @@ class ConversationManager:
             self.logger.error(f"会話アーカイブ処理エラー: {e}")
             return 0
     
-    def get_active_conversation(self, user_id: int) -> Optional[str]:
+    def get_active_conversation(self, user_id: UserID) -> Optional[str]:
         """
         最新のアクティブな会話IDを取得（作成はしない）
         
@@ -166,13 +173,13 @@ class ConversationManager:
             会話ID、存在しない場合はNone
         """
         try:
-            result = self.supabase.table("chat_conversations")\
-                .select("id")\
-                .eq("user_id", user_id)\
-                .eq("is_active", True)\
-                .order("updated_at.desc")\
-                .limit(1)\
-                .execute()
+            result = apply_user_scope(
+                self.supabase.table("chat_conversations")\
+                    .select("id")\
+                    .eq("is_active", True),
+                self.supabase,
+                user_id
+            ).order("updated_at", desc=True).limit(1).execute()
             
             if result.data:
                 return result.data[0]["id"]
@@ -196,11 +203,13 @@ class ConversationManager:
             if first_message:
                 update_data["first_message"] = first_message
             
-            result = self.supabase.table("conversations")\
-                .update(update_data)\
-                .eq("id", conversation_id)\
-                .eq("user_id", user_id)\
-                .execute()
+            result = apply_user_scope(
+                self.supabase.table("chat_conversations")\
+                    .update(update_data)\
+                    .eq("id", conversation_id),
+                self.supabase,
+                user_id
+            ).execute()
             
             if result.data:
                 self.logger.info(f"会話タイトル更新成功: {conversation_id} -> {title}")

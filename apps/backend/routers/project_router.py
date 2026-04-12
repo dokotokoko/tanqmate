@@ -65,11 +65,11 @@ class MemoResponse(BaseModel):
     updated_at: str
 
 # 依存関数
-def get_project_service(current_user_id: int = Depends(get_current_user)) -> ProjectService:
+def get_project_service(current_user_id: str = Depends(get_current_user)) -> ProjectService:
     """プロジェクトサービス取得"""
     return get_service_manager().get_service(ProjectService, current_user_id)
 
-def get_memo_service(current_user_id: int = Depends(get_current_user)) -> MemoService:
+def get_memo_service(current_user_id: str = Depends(get_current_user)) -> MemoService:
     """メモサービス取得"""
     return get_service_manager().get_service(MemoService, current_user_id)
 
@@ -77,7 +77,7 @@ def get_memo_service(current_user_id: int = Depends(get_current_user)) -> MemoSe
 @router.post("", response_model=ProjectResponse)
 async def create_project(
     project_data: ProjectCreate,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """プロジェクト作成"""
@@ -93,7 +93,7 @@ async def create_project(
 
 @router.get("", response_model=List[ProjectResponse])
 async def get_user_projects(
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """ユーザーのプロジェクト一覧取得"""
@@ -116,7 +116,7 @@ async def get_user_projects(
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project_by_id(
     project_id: int,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """プロジェクト詳細取得"""
@@ -137,7 +137,7 @@ async def get_project_by_id(
 async def update_project(
     project_id: int,
     project_data: ProjectUpdate,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """プロジェクト更新"""
@@ -166,7 +166,7 @@ async def update_project(
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: int,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """プロジェクト削除"""
@@ -175,7 +175,7 @@ async def delete_project(
 @router.get("/{project_id}/context")
 async def get_project_context(
     project_id: int,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     project_service: ProjectService = Depends(get_project_service)
 ):
     """プロジェクトコンテキスト取得（AI用）"""
@@ -190,7 +190,7 @@ async def get_project_context(
 @router.get("/{project_id}/memos", response_model=List[MemoResponse])
 async def get_project_memos(
     project_id: int,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     memo_service: MemoService = Depends(get_memo_service)
 ):
     """プロジェクトのメモ一覧取得"""
@@ -217,7 +217,7 @@ async def get_project_memos(
 async def create_project_memo(
     project_id: int,
     memo_data: MemoCreate,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     memo_service: MemoService = Depends(get_memo_service)
 ):
     """プロジェクトに新しいメモを作成"""

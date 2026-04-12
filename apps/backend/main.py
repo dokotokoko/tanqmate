@@ -24,6 +24,7 @@ from routers.conversations_router import router as conversations_router
 from routers.metrics_router import router as metrics_router, debug_router
 from routers.vibes_tanq_router import router as vibes_tanq_router
 from routers.migration_router import router as migration_router
+from routers.diary_router import router as diary_router
 
 # LLMクライアントをインポート
 from module.llm_api import get_async_llm_client
@@ -142,6 +143,7 @@ app.include_router(metrics_router)        # メトリクス関連
 app.include_router(debug_router)          # デバッグ関連
 app.include_router(vibes_tanq_router)     # Vibes Tanq関連
 app.include_router(migration_router)      # データ移行関連（Supabase認証必須）
+app.include_router(diary_router)          # 日誌関連
 app.include_router(inquiry_router)        # 探究学習API（既存）
 
 # 基本エンドポイント

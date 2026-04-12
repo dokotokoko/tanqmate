@@ -1,25 +1,18 @@
-"""
-Supabase認証ユーティリティ
-Supabase JWTトークンの検証と認証を処理
-"""
+"""Supabase Auth helpers backed by the official Supabase Auth API."""
 
 import os
-import jwt
 from typing import Optional, Dict, Any
-from datetime import datetime, timezone
 from fastapi import HTTPException, Security, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from supabase import create_client, Client
 from functools import lru_cache
-import httpx
 
 # 環境変数から設定を取得
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SECRET_KEY = os.environ.get("SUPABASE_SECRET_KEY", "")
-SUPABASE_JWT_SECRET = os.environ.get("SUPABASE_JWT_SECRET", SUPABASE_SECRET_KEY)
 
 # HTTPBearer認証スキーム
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 @lru_cache()
 def get_supabase_client() -> Client:
@@ -30,118 +23,48 @@ def get_supabase_client() -> Client:
     return create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
 
 class SupabaseAuth:
-    """Supabase認証クラス"""
+    """Supabase Auth API 経由でユーザー情報を取得するラッパー。"""
     
     def __init__(self):
         self.supabase = get_supabase_client()
-        self.jwt_secret = SUPABASE_JWT_SECRET
-    
-    def verify_jwt_token(self, token: str) -> Dict[str, Any]:
-        """
-        JWTトークンを検証して、ペイロードを返す
-        
-        Args:
-            token: JWTトークン文字列
-            
-        Returns:
-            デコードされたトークンペイロード
-            
-        Raises:
-            HTTPException: トークンが無効な場合
-        """
-        try:
-            # JWTトークンをデコード
-            payload = jwt.decode(
-                token,
-                self.jwt_secret,
-                algorithms=["HS256"],
-                options={"verify_aud": False}  # Supabaseのデフォルト設定
-            )
-            
-            # 有効期限をチェック
-            exp = payload.get("exp")
-            if exp:
-                exp_datetime = datetime.fromtimestamp(exp, tz=timezone.utc)
-                if exp_datetime < datetime.now(timezone.utc):
-                    raise HTTPException(
-                        status_code=401,
-                        detail="Token has expired"
-                    )
-            
-            return payload
-            
-        except jwt.ExpiredSignatureError:
-            raise HTTPException(
-                status_code=401,
-                detail="Token has expired"
-            )
-        except jwt.InvalidTokenError as e:
-            raise HTTPException(
-                status_code=401,
-                detail=f"Invalid token: {str(e)}"
-            )
-    
-    async def verify_user_token(self, token: str) -> Optional[Dict[str, Any]]:
-        """
-        Supabase APIを使用してユーザートークンを検証
-        
-        Args:
-            token: アクセストークン
-            
-        Returns:
-            ユーザー情報、または無効な場合はNone
-        """
-        try:
-            # Supabase Admin APIを使用してユーザー情報を取得
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{SUPABASE_URL}/auth/v1/user",
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "apikey": SUPABASE_SECRET_KEY
-                    }
-                )
-                
-                if response.status_code == 200:
-                    return response.json()
-                elif response.status_code == 401:
-                    return None
-                else:
-                    print(f"Unexpected status code: {response.status_code}")
-                    return None
-                    
-        except Exception as e:
-            print(f"Error verifying user token: {e}")
-            return None
+
+    def _normalize_user(self, user: Any) -> Dict[str, Any]:
+        user_metadata = getattr(user, "user_metadata", None) or {}
+        app_metadata = getattr(user, "app_metadata", None) or {}
+
+        return {
+            "id": getattr(user, "id", None),
+            "email": getattr(user, "email", None),
+            "role": user_metadata.get("role") or app_metadata.get("role") or "authenticated",
+            "app_metadata": app_metadata,
+            "user_metadata": user_metadata,
+            "aud": getattr(user, "aud", None),
+            "created_at": getattr(user, "created_at", None),
+            "updated_at": getattr(user, "updated_at", None),
+            "last_sign_in_at": getattr(user, "last_sign_in_at", None),
+        }
     
     def get_user_from_token(self, token: str) -> Dict[str, Any]:
-        """
-        トークンからユーザー情報を取得（JWT検証のみ）
-        
-        Args:
-            token: JWTトークン
-            
-        Returns:
-            ユーザー情報を含む辞書
-        """
-        payload = self.verify_jwt_token(token)
-        
-        # Supabaseのトークンペイロードからユーザー情報を抽出
-        user_info = {
-            "id": payload.get("sub"),  # Supabase user ID
-            "email": payload.get("email"),
-            "role": payload.get("role", "authenticated"),
-            "app_metadata": payload.get("app_metadata", {}),
-            "user_metadata": payload.get("user_metadata", {}),
-        }
-        
-        return user_info
+        """Supabase Auth の標準 API でトークンからユーザー情報を取得する。"""
+        try:
+            response = self.supabase.auth.get_user(token)
+            if not response or not response.user:
+                raise HTTPException(status_code=401, detail="Could not validate credentials")
+
+            return self._normalize_user(response.user)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=401,
+                detail="Could not validate credentials",
+            ) from exc
 
 # シングルトンインスタンス
 auth = SupabaseAuth()
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Security(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(security)
 ) -> Dict[str, Any]:
     """
     現在のユーザーを取得する依存関数
@@ -153,22 +76,13 @@ async def get_current_user(
         return {"user": user}
     ```
     """
-    token = credentials.credentials
-    
-    # まずJWT検証を試みる（高速）
-    try:
-        user = auth.get_user_from_token(token)
-        return user
-    except HTTPException:
-        # JWT検証が失敗した場合、Supabase APIで確認（低速だが確実）
-        user_data = await auth.verify_user_token(token)
-        if user_data:
-            return user_data
-        
+    if not credentials or not credentials.credentials:
         raise HTTPException(
             status_code=401,
             detail="Could not validate credentials"
         )
+
+    return auth.get_user_from_token(credentials.credentials)
 
 async def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(security)

@@ -11,6 +11,7 @@ import asyncio
 from fastapi import HTTPException, Depends, status
 from pydantic import BaseModel, Field
 from supabase import Client
+from utils.user_identity import apply_user_scope, attach_user_identity
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class ConversationUpdate(BaseModel):
 class ConversationResponse(BaseModel):
     """会話レスポンス"""
     id: str
-    user_id: int
+    user_id: str
     title: Optional[str]
     is_active: bool
     message_count: int = 0
@@ -71,10 +72,18 @@ class ConversationManager:
     
     def __init__(self, supabase: Client):
         self.supabase = supabase
+
+    @staticmethod
+    def _resolved_user_id(conversation: Dict[str, Any]) -> str:
+        """Return the canonical user id exposed by the API."""
+        resolved = conversation.get("supabase_user_id") or conversation.get("user_id")
+        if resolved is None:
+            raise ValueError("chat_conversations row has neither supabase_user_id nor user_id")
+        return str(resolved)
     
     async def create_conversation(
         self, 
-        user_id: int, 
+        user_id: str, 
         title: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None
     ) -> str:
@@ -90,11 +99,10 @@ class ConversationManager:
             conversation_id: 作成された会話のID
         """
         try:
-            conversation_data = {
-                "user_id": user_id,
+            conversation_data = attach_user_identity({
                 "metadata": json.dumps(metadata or {}, ensure_ascii=False),
                 "title": title if title else "untitled"  # デフォルトをuntitledに設定
-            }
+            }, self.supabase, user_id)
             
             # 同期的なSupabase呼び出しを非同期ラップ
             result = await asyncio.to_thread(
@@ -118,7 +126,7 @@ class ConversationManager:
                 detail=f"会話の作成に失敗しました: {str(e)}"
             )
     
-    async def get_conversation(self, conversation_id: str, user_id: int) -> Optional[ConversationResponse]:
+    async def get_conversation(self, conversation_id: str, user_id: str) -> Optional[ConversationResponse]:
         """
         会話情報を取得
         
@@ -132,11 +140,13 @@ class ConversationManager:
         try:
             # 会話情報を取得（非同期ラップ）
             result = await asyncio.to_thread(
-                lambda: self.supabase.table("chat_conversations")
-                .select("*")
-                .eq("id", conversation_id)
-                .eq("user_id", user_id)
-                .execute()
+                lambda: apply_user_scope(
+                    self.supabase.table("chat_conversations")
+                    .select("*")
+                    .eq("id", conversation_id),
+                    self.supabase,
+                    user_id
+                ).execute()
             )
             
             if not result.data:
@@ -180,7 +190,7 @@ class ConversationManager:
             
             return ConversationResponse(
                 id=conversation["id"],
-                user_id=conversation["user_id"],
+                user_id=self._resolved_user_id(conversation),
                 title=conversation.get("title"),
                 is_active=conversation.get("is_active", True),
                 message_count=message_count,
@@ -196,7 +206,7 @@ class ConversationManager:
     
     async def list_conversations(
         self, 
-        user_id: int,
+        user_id: str,
         limit: int = 20,
         offset: int = 0,
         is_active: Optional[bool] = None
@@ -218,9 +228,11 @@ class ConversationManager:
             logger.info(f"🔍 会話リスト取得開始: user_id={user_id}, type={type(user_id)}, limit={limit}, is_active={is_active}")
             
             # クエリを構築
-            query = self.supabase.table("chat_conversations")\
-                .select("*", count="exact")\
-                .eq("user_id", user_id)
+            query = apply_user_scope(
+                self.supabase.table("chat_conversations").select("*", count="exact"),
+                self.supabase,
+                user_id
+            )
             
             if is_active is not None:
                 query = query.eq("is_active", is_active)
@@ -266,7 +278,7 @@ class ConversationManager:
                 
                 conversations.append(ConversationResponse(
                     id=conv["id"],
-                    user_id=conv["user_id"],
+                    user_id=self._resolved_user_id(conv),
                     title=conv.get("title") or "無題の会話",
                     is_active=conv.get("is_active", True),
                     message_count=message_count,
@@ -295,7 +307,7 @@ class ConversationManager:
     async def update_conversation(
         self,
         conversation_id: str,
-        user_id: int,
+        user_id: str,
         update_data: ConversationUpdate
     ) -> bool:
         """
@@ -326,11 +338,13 @@ class ConversationManager:
             
             updates["updated_at"] = datetime.now(timezone.utc).isoformat()
             
-            result = self.supabase.table("chat_conversations")\
-                .update(updates)\
-                .eq("id", conversation_id)\
-                .eq("user_id", user_id)\
-                .execute()
+            result = apply_user_scope(
+                self.supabase.table("chat_conversations")
+                .update(updates)
+                .eq("id", conversation_id),
+                self.supabase,
+                user_id
+            ).execute()
             
             return bool(result.data)
             
@@ -338,7 +352,7 @@ class ConversationManager:
             logger.error(f"会話更新エラー: {e}")
             return False
     
-    async def delete_conversation(self, conversation_id: str, user_id: int) -> bool:
+    async def delete_conversation(self, conversation_id: str, user_id: str) -> bool:
         """
         会話を削除（論理削除）
         
@@ -351,11 +365,13 @@ class ConversationManager:
         """
         try:
             # 論理削除（is_active = false）
-            result = self.supabase.table("chat_conversations")\
-                .update({"is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()})\
-                .eq("id", conversation_id)\
-                .eq("user_id", user_id)\
-                .execute()
+            result = apply_user_scope(
+                self.supabase.table("chat_conversations")
+                .update({"is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()})
+                .eq("id", conversation_id),
+                self.supabase,
+                user_id
+            ).execute()
             
             return bool(result.data)
             
@@ -366,7 +382,7 @@ class ConversationManager:
     async def get_messages(
         self,
         conversation_id: str,
-        user_id: int,
+        user_id: str,
         limit: int = 50,
         offset: int = 0
     ) -> List[MessageResponse]:
@@ -384,11 +400,13 @@ class ConversationManager:
         """
         try:
             # まず会話の権限チェック
-            conv_check = self.supabase.table("chat_conversations")\
-                .select("id")\
-                .eq("id", conversation_id)\
-                .eq("user_id", user_id)\
-                .execute()
+            conv_check = apply_user_scope(
+                self.supabase.table("chat_conversations")
+                .select("id")
+                .eq("id", conversation_id),
+                self.supabase,
+                user_id
+            ).execute()
             
             if not conv_check.data:
                 raise HTTPException(
@@ -434,7 +452,7 @@ class ConversationManager:
                 detail=f"メッセージの取得に失敗しました: {str(e)}"
             )
     
-    async def get_or_create_global_session(self, user_id: int) -> str:
+    async def get_or_create_global_session(self, user_id: str) -> str:
         """
         ユーザーのグローバルチャットセッションを取得または作成
         

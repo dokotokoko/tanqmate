@@ -11,6 +11,8 @@ import time
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime, timezone
 from supabase import Client
+from services.base import UserID
+from utils.user_identity import apply_user_scope, attach_user_identity
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +26,7 @@ class AsyncDatabaseHelper:
     def __init__(self, supabase_client: Client):
         self.supabase = supabase_client
     
-    async def get_project_info(self, project_id: int, user_id: int) -> Optional[Dict[str, Any]]:
+    async def get_project_info(self, project_id: int, user_id: UserID) -> Optional[Dict[str, Any]]:
         """
         プロジェクト情報を非同期で取得
         
@@ -38,11 +40,13 @@ class AsyncDatabaseHelper:
         start_time = time.time()
         try:
             result = await asyncio.to_thread(
-                lambda: self.supabase.table('projects')
-                .select('*')
-                .eq('id', project_id)
-                .eq('user_id', user_id)
-                .execute()
+                lambda: apply_user_scope(
+                    self.supabase.table('projects')
+                    .select('*')
+                    .eq('id', project_id),
+                    self.supabase,
+                    user_id
+                ).execute()
             )
             
             response_time = time.time() - start_time
@@ -56,7 +60,7 @@ class AsyncDatabaseHelper:
             logger.error(f"プロジェクト情報取得エラー (async): {e}")
             return None
     
-    async def get_memo_project_id(self, memo_id: int, user_id: int) -> Optional[int]:
+    async def get_memo_project_id(self, memo_id: int, user_id: UserID) -> Optional[int]:
         """
         メモIDからプロジェクトIDを非同期で取得
         
@@ -70,11 +74,13 @@ class AsyncDatabaseHelper:
         start_time = time.time()
         try:
             result = await asyncio.to_thread(
-                lambda: self.supabase.table('memos')
-                .select('project_id')
-                .eq('id', memo_id)
-                .eq('user_id', user_id)
-                .execute()
+                lambda: apply_user_scope(
+                    self.supabase.table('memos')
+                    .select('project_id')
+                    .eq('id', memo_id),
+                    self.supabase,
+                    user_id
+                ).execute()
             )
             
             response_time = time.time() - start_time
@@ -88,7 +94,7 @@ class AsyncDatabaseHelper:
             logger.warning(f"メモからのプロジェクトID取得エラー (async): {e}")
             return None
     
-    async def get_latest_project(self, user_id: int) -> Optional[int]:
+    async def get_latest_project(self, user_id: UserID) -> Optional[int]:
         """
         最新のプロジェクトIDを非同期で取得
         
@@ -101,9 +107,12 @@ class AsyncDatabaseHelper:
         start_time = time.time()
         try:
             result = await asyncio.to_thread(
-                lambda: self.supabase.table('projects')
-                .select('id')
-                .eq('user_id', user_id)
+                lambda: apply_user_scope(
+                    self.supabase.table('projects')
+                    .select('id'),
+                    self.supabase,
+                    user_id
+                )
                 .order('updated_at', desc=True)
                 .limit(1)
                 .execute()
@@ -160,7 +169,7 @@ class AsyncDatabaseHelper:
     
     async def save_chat_log(
         self, 
-        user_id: int,
+        user_id: UserID,
         page_id: str,
         sender: str,
         message: str,
@@ -183,14 +192,13 @@ class AsyncDatabaseHelper:
         """
         start_time = time.time()
         try:
-            message_data = {
-                "user_id": user_id,
+            message_data = attach_user_identity({
                 "page": page_id,
                 "sender": sender,
                 "message": message,
                 "conversation_id": conversation_id,
                 "context_data": json.dumps(context_data, ensure_ascii=False)
-            }
+            }, self.supabase, user_id)
             
             await asyncio.to_thread(
                 lambda: self.supabase.table("chat_logs").insert(message_data).execute()
@@ -217,7 +225,7 @@ class AsyncProjectContextBuilder:
     async def build_context_from_page_id(
         self, 
         page_id: str, 
-        user_id: int
+        user_id: UserID
     ) -> Tuple[Optional[int], Optional[str], Optional[Dict[str, Any]]]:
         """
         ページIDから非同期でプロジェクトコンテキストを構築
@@ -284,7 +292,7 @@ async def parallel_fetch_context_and_history(
     context_builder: AsyncProjectContextBuilder,
     page_id: str,
     conversation_id: str,
-    user_id: int,
+    user_id: UserID,
     history_limit: int = None
 ) -> Tuple[Optional[int], Optional[str], Optional[Dict[str, Any]], List[Dict[str, Any]]]:
     """

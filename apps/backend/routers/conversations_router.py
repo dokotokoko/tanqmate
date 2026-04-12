@@ -25,7 +25,7 @@ def get_conversation_manager() -> ConversationManager:
 @router.post("", response_model=ConversationResponse)
 async def create_conversation(
     conversation_data: ConversationCreate,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     manager: ConversationManager = Depends(get_conversation_manager)
 ):
     """新しい会話を作成"""
@@ -59,7 +59,7 @@ async def get_conversations(
     limit: int = 20,
     offset: int = 0,
     is_active: Optional[bool] = True,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     manager: ConversationManager = Depends(get_conversation_manager)
 ):
     """ユーザーの会話リストを取得"""
@@ -80,7 +80,7 @@ async def get_conversations(
 @router.get("/{conversation_id}", response_model=ConversationResponse)
 async def get_conversation(
     conversation_id: str,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     manager: ConversationManager = Depends(get_conversation_manager)
 ):
     """特定の会話を取得"""
@@ -106,7 +106,7 @@ async def get_conversation(
 async def update_conversation(
     conversation_id: str,
     update_data: ConversationUpdate,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     manager: ConversationManager = Depends(get_conversation_manager)
 ):
     """会話情報を更新"""
@@ -136,7 +136,7 @@ async def update_conversation(
 @router.delete("/{conversation_id}")
 async def delete_conversation(
     conversation_id: str,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     manager: ConversationManager = Depends(get_conversation_manager)
 ):
     """会話を削除（論理削除）"""
@@ -164,7 +164,7 @@ async def get_conversation_messages(
     conversation_id: str,
     limit: int = 50,
     offset: int = 0,
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     manager: ConversationManager = Depends(get_conversation_manager)
 ):
     """会話のメッセージを取得"""
@@ -192,7 +192,7 @@ async def get_conversation_messages(
 
 @router.get("/global/session")
 async def get_global_session(
-    current_user_id: int = Depends(get_current_user),
+    current_user_id: str = Depends(get_current_user),
     manager: ConversationManager = Depends(get_conversation_manager)
 ):
     """ユーザーのグローバルチャットセッションを取得または作成"""
