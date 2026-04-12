@@ -966,7 +966,7 @@ const AIChat: React.FC<AIChatProps> = ({
             onStyleChange={setResponseStyle}
             onDiaryClick={() => {
               console.log('🔵 日誌ボタンクリック: 日誌ページへ遷移します');
-              navigate('/app/diary?autostart=1');
+              navigate('/diary?autostart=1');
             }}
           />
         </Suspense>

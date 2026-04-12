@@ -114,7 +114,7 @@ class ChatService(BaseService):
                 # 既存のconversation_idが有効か確認
                 conversation_id = self.get_or_create_conversation_sync(session_type, existing_id=conversation_id)
             
-            project_id, project_context, project, conversation_history = \
+            legacy_project_id, student_context, context_payload, conversation_history = \
                 await parallel_fetch_context_and_history(
                     db_helper, 
                     context_builder,
@@ -128,7 +128,7 @@ class ChatService(BaseService):
             # Phase 2: AI応答生成（フォールバック機構付き）
             llm_start = time.time()
             ai_response = await self._generate_ai_response(
-                message, user_id, project_context, conversation_history, session_type, response_style, custom_instruction
+                message, user_id, student_context, conversation_history, session_type, response_style, custom_instruction
             )
 
             metrics["llm_response_time"] = time.time() - llm_start
@@ -139,12 +139,14 @@ class ChatService(BaseService):
             # ログデータを準備
             context_data = {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "project_id": project_id
+                "legacy_project_id": legacy_project_id,
+                "student_profile": context_payload.get("student_profile") if context_payload else None,
+                "legacy_project": context_payload.get("legacy_project") if context_payload else None
             }
-            
+
             user_message_data = {
                 "user_id": user_id,
-                "page_id": project_id or "",
+                "page_id": legacy_project_id or "",
                 "sender": "user",
                 "message": message,
                 "conversation_id": conversation_id,
@@ -152,7 +154,7 @@ class ChatService(BaseService):
             }
             ai_message_data = {
                 "user_id": user_id,
-                "page_id": project_id or "",
+                "page_id": legacy_project_id or "",
                 "sender": "ai",
                 "message": ai_response["response"],
                 "conversation_id": conversation_id,
@@ -175,7 +177,7 @@ class ChatService(BaseService):
             
             return {
                 "response": ai_response["response"],
-                "project_id": project_id,
+                "project_id": legacy_project_id,
                 "metrics": metrics,
                 "agent_used": ai_response.get("agent_used", False),
                 "fallback_used": ai_response.get("fallback_used", False),
@@ -199,7 +201,7 @@ class ChatService(BaseService):
         self,
         message: str,
         user_id: UserID,
-        project_context: str,
+        student_context: str,
         conversation_history: List[Dict],
         session_type: str,
         response_style: Optional[str] = "auto",
@@ -230,20 +232,20 @@ class ChatService(BaseService):
         # 非同期LLMクライアントを優先的に使用
         try:
             return await self._process_with_async_llm(
-                message, project_context, conversation_history, response_style, custom_instruction
+                message, student_context, conversation_history, response_style, custom_instruction
             )
         except Exception as e:
             self.logger.warning(f"Async LLM failed, falling back to sync: {e}")
             # 同期LLMクライアント（フォールバック）
             return await self._process_with_sync_llm(
-                message, project_context, conversation_history, response_style, custom_instruction
+                message, student_context, conversation_history, response_style, custom_instruction
             )
     
     
     async def _process_with_async_llm(
         self,
         message: str,
-        project_context: str,
+        student_context: str,
         conversation_history: List[Dict],
         response_style: Optional[str] = "auto",
         custom_instruction: Optional[str] = None
@@ -262,7 +264,7 @@ class ChatService(BaseService):
             if not llm_client:
                 raise Exception("Async LLM client not available")
 
-            context_data = self._build_context_data(project_context, conversation_history)
+            context_data = self._build_context_data(student_context, conversation_history)
 
             # 応答スタイルに応じたシステムプロンプトを取得
             if response_style == "custom" and custom_instruction:
@@ -361,6 +363,66 @@ class ChatService(BaseService):
             
         except Exception as e:
             self.logger.error(f"Async LLM error: {e}")
+            raise
+
+    async def _process_with_sync_llm(
+        self,
+        message: str,
+        student_context: str,
+        conversation_history: List[Dict],
+        response_style: Optional[str] = "auto",
+        custom_instruction: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """同期LLMクライアントによるフォールバック処理"""
+        try:
+            from module.llm_api import learning_plannner
+            from .response_styles import ResponseStyleManager
+
+            self.logger.info(f"🎯 _process_with_sync_llm called with response_style: {response_style}")
+
+            llm_client = learning_plannner(pool_size=1)
+            context_data = self._build_context_data(student_context, conversation_history)
+
+            if response_style == "custom" and custom_instruction:
+                system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
+            else:
+                system_prompt = ResponseStyleManager.get_system_prompt(response_style)
+            system_prompt = self._remove_quest_card_instructions(system_prompt)
+
+            is_deep_thinking = response_style in ["research", "deepen"]
+            max_tokens = None if is_deep_thinking else int(os.environ.get("DEFAULT_MAX_TOKENS", "600"))
+
+            input_items = [
+                llm_client.text("system", system_prompt),
+                llm_client.text("user", f"{context_data}\n\n{message}")
+            ]
+            response_obj = await asyncio.to_thread(
+                llm_client.generate_response,
+                input_items,
+                max_tokens=max_tokens
+            )
+
+            self.dump_response_events(response_obj)
+            web_search_results = WebSearchExtractor.extract_web_search_results(response_obj)
+            response = llm_client.extract_output_text(response_obj)
+            cleaned_response = self._strip_quest_card_payload(response)
+
+            result = {
+                "response": cleaned_response,
+                "agent_used": False,
+                "fallback_used": True,
+                "fallback_model": "sync_openai",
+                "response_style_used": response_style
+            }
+
+            if web_search_results:
+                result["sources"] = web_search_results
+                self.logger.info(f"🔍 WebSearch results included: {len(web_search_results)} sources")
+
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Sync LLM error: {e}")
             raise
     
     def _remove_quest_card_instructions(self, prompt: str) -> str:
@@ -642,14 +704,14 @@ class ChatService(BaseService):
     
     def _build_context_data(
         self,
-        project_context: str,
+        student_context: str,
         conversation_history: List[Dict]
     ) -> str:
         """コンテキストデータ構築"""
         context_parts = []
         
-        if project_context:
-            context_parts.append(f"プロジェクト情報:\n{project_context}")
+        if student_context:
+            context_parts.append(f"生徒コンテキスト:\n{student_context}")
         
         if conversation_history:
             history_text = "\n".join([

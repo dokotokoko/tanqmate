@@ -9,7 +9,7 @@ const DiaryPage: React.FC = () => {
   const [searchParams] = useSearchParams();
 
   const handleComplete = () => {
-    navigate('/app/profile?tab=diaries');
+    navigate('/profile?tab=diaries');
   };
 
   return (

@@ -42,7 +42,7 @@ const HomePage: React.FC = () => {
       title: 'マイプロフィール',
       description: 'マイタグ管理と学習履歴の確認',
       icon: <Person sx={{ fontSize: 48 }} />,
-      action: () => navigate('/app/profile'),
+      action: () => navigate('/profile'),
       color: 'info',
     },
   ];

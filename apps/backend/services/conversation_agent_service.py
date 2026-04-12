@@ -24,7 +24,10 @@ class ConversationAgentService(BaseService):
     ) -> Dict[str, Any]:
         """会話エージェントとのチャット処理"""
         try:
-            # プロジェクトコンテキストを取得
+            # 生徒コンテキストを取得
+            student_context = await self._get_student_context(user_id)
+
+            # 既存のproject_idがある場合のみ旧コンテキストを補助的に取得
             project_context = None
             if project_id:
                 project_context = await self._get_project_context(project_id, user_id)
@@ -42,7 +45,10 @@ class ConversationAgentService(BaseService):
                 user_id=user_id,
                 project_id=project_id,
                 mode=conv_mode,
-                context=project_context or {}
+                context={
+                    "student_context": student_context or {},
+                    "legacy_project_context": project_context or {},
+                }
             )
             
             # オーケストレーターで処理
@@ -53,6 +59,7 @@ class ConversationAgentService(BaseService):
                 "response": result.response,
                 "agent_type": result.agent_type,
                 "project_context": project_context,
+                "student_context": student_context,
                 "metadata": {
                     "processing_time": result.processing_time,
                     "tokens_used": result.tokens_used if hasattr(result, 'tokens_used') else None,
@@ -148,7 +155,7 @@ class ConversationAgentService(BaseService):
             raise Exception(error_result["error"])
     
     async def _get_project_context(self, project_id: str, user_id: int) -> Optional[Dict[str, Any]]:
-        """プロジェクトコンテキストを取得"""
+        """旧プロジェクトコンテキストを取得"""
         try:
             # project_idの形式を判定
             if project_id.startswith('project-'):
@@ -190,4 +197,39 @@ class ConversationAgentService(BaseService):
             
         except Exception as e:
             self.logger.warning(f"Failed to get project context: {e}")
+            return None
+
+    async def _get_student_context(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """プロフィールベースの生徒コンテキストを取得"""
+        try:
+            profile_result = self.supabase.table("profiles")\
+                .select("id, email, username, role, school_id, grade, class_name, attendance_number, theme, question, hypothesis")\
+                .eq("id", str(user_id))\
+                .execute()
+
+            if not profile_result.data and isinstance(user_id, int):
+                profile_result = self.supabase.table("profiles")\
+                    .select("id, email, username, role, school_id, grade, class_name, attendance_number, theme, question, hypothesis")\
+                    .eq("legacy_user_id", user_id)\
+                    .execute()
+
+            if profile_result.data:
+                profile = profile_result.data[0]
+                return {
+                    "id": profile.get("id"),
+                    "name": profile.get("username") or profile.get("email") or "",
+                    "role": profile.get("role"),
+                    "school_id": profile.get("school_id"),
+                    "grade": profile.get("grade"),
+                    "class_name": profile.get("class_name"),
+                    "attendance_number": profile.get("attendance_number"),
+                    "theme": profile.get("theme"),
+                    "question": profile.get("question"),
+                    "hypothesis": profile.get("hypothesis"),
+                }
+
+            return None
+
+        except Exception as e:
+            self.logger.warning(f"Failed to get student context: {e}")
             return None

@@ -12,6 +12,9 @@ export interface ProfileData {
   grade?: string;
   class_name?: string;
   attendance_number?: number;
+  theme?: string;
+  question?: string;
+  hypothesis?: string;
   role: 'student' | 'teacher';
   school_id: string | null;
   school_code_locked?: boolean;

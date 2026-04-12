@@ -19,6 +19,8 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+INQUIRY_CONTEXT_FIELDS = ("theme", "question", "hypothesis")
+
 router = APIRouter(prefix="/auth", tags=["authentication"])
 security = HTTPBearer()
 
@@ -110,6 +112,22 @@ def ensure_profile(
     return insert_result.data[0]
 
 
+def extract_inquiry_context(profile: Dict[str, Any]) -> Dict[str, Optional[str]]:
+    return {field: profile.get(field) for field in INQUIRY_CONTEXT_FIELDS}
+
+
+def build_profile_response(profile: Dict[str, Any]) -> Dict[str, Any]:
+    inquiry_context = extract_inquiry_context(profile)
+    return {
+        "profile": profile,
+        "inquiry_context": inquiry_context,
+        "inquiry_context_complete": all(inquiry_context.values()),
+        "missing_inquiry_context_fields": [
+            field for field, value in inquiry_context.items() if not value
+        ],
+    }
+
+
 async def get_current_auth_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> Dict[str, Any]:
@@ -128,6 +146,9 @@ class OnboardingRequest(BaseModel):
     grade: Optional[str] = None
     class_name: Optional[str] = None
     attendance_number: Optional[int] = None
+    theme: Optional[str] = None
+    question: Optional[str] = None
+    hypothesis: Optional[str] = None
 
 
 class VerifySchoolCodeRequest(BaseModel):
@@ -139,6 +160,9 @@ class UpdateProfileRequest(BaseModel):
     grade: Optional[str] = None
     class_name: Optional[str] = None
     attendance_number: Optional[int] = None
+    theme: Optional[str] = None
+    question: Optional[str] = None
+    hypothesis: Optional[str] = None
 
 
 @router.get("/me")
@@ -149,7 +173,7 @@ async def get_current_user_info(
     profile = ensure_profile(supabase_client, auth_user)
     return {
         "user": auth_user,
-        "profile": profile,
+        **build_profile_response(profile),
         "application_user_id": resolve_application_user_id(auth_user),
         "legacy_user_id": resolve_legacy_user_id(auth_user),
     }
@@ -205,6 +229,11 @@ async def complete_onboarding(
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
 
+        for field in INQUIRY_CONTEXT_FIELDS:
+            value = getattr(request, field)
+            if value is not None:
+                update_data[field] = value
+
         if request.school_code:
             school_result = (
                 supabase_client.table("schools")
@@ -246,7 +275,7 @@ async def complete_onboarding(
         return {
             "success": True,
             "message": "Onboarding completed successfully",
-            "profile": result.data[0],
+            **build_profile_response(result.data[0]),
         }
     except HTTPException:
         raise
@@ -274,7 +303,7 @@ async def get_profile(
 
         return {
             "success": True,
-            "profile": result.data[0],
+            **build_profile_response(result.data[0]),
         }
     except HTTPException:
         raise
@@ -301,6 +330,12 @@ async def update_profile(
             update_data["class_name"] = request.class_name
         if request.attendance_number is not None:
             update_data["attendance_number"] = request.attendance_number
+        if request.theme is not None:
+            update_data["theme"] = request.theme
+        if request.question is not None:
+            update_data["question"] = request.question
+        if request.hypothesis is not None:
+            update_data["hypothesis"] = request.hypothesis
 
         if not update_data:
             raise HTTPException(
@@ -327,7 +362,7 @@ async def update_profile(
         return {
             "success": True,
             "message": "Profile updated successfully",
-            "profile": result.data[0],
+            **build_profile_response(result.data[0]),
         }
     except HTTPException:
         raise
@@ -348,7 +383,7 @@ async def check_onboarding_status(
         ensure_profile(supabase_client, auth_user)
         result = (
             supabase_client.table("profiles")
-            .select("name, school_id, school_code_locked")
+            .select("name, school_id, school_code_locked, theme, question, hypothesis")
             .eq("id", auth_user["id"])
             .execute()
         )
@@ -374,9 +409,16 @@ async def check_onboarding_status(
                 "can_set_school": True,
             }
 
+        missing_inquiry_context_fields = [
+            field for field in INQUIRY_CONTEXT_FIELDS if not profile.get(field)
+        ]
+
         return {
             "needs_onboarding": False,
             "profile": profile,
+            "inquiry_context": extract_inquiry_context(profile),
+            "inquiry_context_complete": not missing_inquiry_context_fields,
+            "missing_inquiry_context_fields": missing_inquiry_context_fields,
         }
     except Exception as exc:
         logger.error("Onboarding check error: %s", exc)

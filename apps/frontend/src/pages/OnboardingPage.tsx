@@ -12,6 +12,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Divider,
 } from '@mui/material';
 import {
   Person,
@@ -36,6 +37,9 @@ const OnboardingPage = () => {
     grade: '',
     className: '',
     attendanceNumber: '',
+    theme: '',
+    question: '',
+    hypothesis: '',
   });
 
   const [formErrors, setFormErrors] = useState({
@@ -44,6 +48,9 @@ const OnboardingPage = () => {
     grade: '',
     className: '',
     attendanceNumber: '',
+    theme: '',
+    question: '',
+    hypothesis: '',
   });
 
   const [schoolInfo, setSchoolInfo] = useState<{
@@ -120,6 +127,9 @@ const OnboardingPage = () => {
       grade: '',
       className: '',
       attendanceNumber: '',
+      theme: '',
+      question: '',
+      hypothesis: '',
     };
 
     if (!formData.name.trim()) {
@@ -156,6 +166,9 @@ const OnboardingPage = () => {
       const token = getAccessToken();
       const requestBody: Record<string, unknown> = {
         name: formData.name,
+        theme: formData.theme.trim() || null,
+        question: formData.question.trim() || null,
+        hypothesis: formData.hypothesis.trim() || null,
       };
 
       if (schoolInfo) {
@@ -367,6 +380,65 @@ const OnboardingPage = () => {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              <Divider sx={{ my: 3 }} />
+
+              <Box
+                sx={{
+                  p: 2,
+                  borderRadius: 2,
+                  bgcolor: 'background.default',
+                  border: '1px solid',
+                  borderColor: 'divider',
+                }}
+              >
+                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                  探究コンテキスト（任意）
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  AIがあなたの探究を理解するための基本情報です。後からプロフィールで更新できます。
+                </Typography>
+
+                <TextField
+                  margin="normal"
+                  fullWidth
+                  id="theme"
+                  label="探究テーマ"
+                  name="theme"
+                  value={formData.theme}
+                  onChange={handleInputChange}
+                  error={!!formErrors.theme}
+                  helperText={formErrors.theme || '探究したいテーマを短く入力'}
+                />
+
+                <TextField
+                  margin="normal"
+                  fullWidth
+                  id="question"
+                  label="問い"
+                  name="question"
+                  value={formData.question}
+                  onChange={handleInputChange}
+                  error={!!formErrors.question}
+                  helperText={formErrors.question || '今いちばん考えたい問いを入力'}
+                  multiline
+                  minRows={2}
+                />
+
+                <TextField
+                  margin="normal"
+                  fullWidth
+                  id="hypothesis"
+                  label="仮説"
+                  name="hypothesis"
+                  value={formData.hypothesis}
+                  onChange={handleInputChange}
+                  error={!!formErrors.hypothesis}
+                  helperText={formErrors.hypothesis || '現時点で考えている予想や見立て'}
+                  multiline
+                  minRows={2}
+                />
+              </Box>
 
               <Button
                 type="submit"

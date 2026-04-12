@@ -25,6 +25,53 @@ class AsyncDatabaseHelper:
     
     def __init__(self, supabase_client: Client):
         self.supabase = supabase_client
+
+    async def get_profile_context(self, user_id: UserID) -> Optional[Dict[str, Any]]:
+        """
+        プロフィールベースの学習コンテキストを非同期で取得
+
+        Args:
+            user_id: ユーザーID
+
+        Returns:
+            プロフィール情報、または None
+        """
+        start_time = time.time()
+        try:
+            def fetch_profile():
+                return self.supabase.table("profiles")\
+                    .select(
+                        "id, email, username, role, school_id, school_code_locked, "
+                        "grade, class_name, attendance_number, theme, question, hypothesis, "
+                        "created_at, updated_at"
+                    )\
+                    .eq("id", user_id)\
+                    .execute()
+
+            result = await asyncio.to_thread(fetch_profile)
+
+            if (not result.data) and isinstance(user_id, str) and user_id.isdigit():
+                result = await asyncio.to_thread(
+                    lambda: self.supabase.table("profiles")
+                    .select(
+                        "id, email, username, role, school_id, school_code_locked, "
+                        "grade, class_name, attendance_number, theme, question, hypothesis, "
+                        "created_at, updated_at"
+                    )
+                    .eq("legacy_user_id", int(user_id))
+                    .execute()
+                )
+
+            response_time = time.time() - start_time
+            logger.info(f"🔷 DB Query [get_profile_context]: 応答秒={response_time:.3f}s")
+
+            if result.data:
+                return result.data[0]
+            return None
+
+        except Exception as e:
+            logger.error(f"プロフィール情報取得エラー (async): {e}")
+            return None
     
     async def get_project_info(self, project_id: int, user_id: UserID) -> Optional[Dict[str, Any]]:
         """
@@ -216,7 +263,7 @@ class AsyncDatabaseHelper:
 
 class AsyncProjectContextBuilder:
     """
-    プロジェクトコンテキスト構築の非同期化ヘルパー
+    学習コンテキスト構築の非同期化ヘルパー
     """
     
     def __init__(self, db_helper: AsyncDatabaseHelper):
@@ -228,63 +275,93 @@ class AsyncProjectContextBuilder:
         user_id: UserID
     ) -> Tuple[Optional[int], Optional[str], Optional[Dict[str, Any]]]:
         """
-        ページIDから非同期でプロジェクトコンテキストを構築
+        ページIDとプロフィールから非同期で学習コンテキストを構築
         
         Args:
             page_id: ページID
             user_id: ユーザーID
             
         Returns:
-            (project_id, project_context_string, project_dict) のタプル
+            (legacy_project_id, student_context_string, context_payload) のタプル
         """
-        project_id = None
-        project_context = ""
-        project = None
+        legacy_project_id = None
+        student_context = ""
+        legacy_project = None
+        profile = await self.db_helper.get_profile_context(user_id)
+        context_payload: Dict[str, Any] = {"student_profile": profile, "legacy_project": None}
+        student_context_parts: List[str] = []
+
+        if profile:
+            profile_name = profile.get("username") or profile.get("email") or "未設定"
+            school_id = profile.get("school_id") or "未設定"
+            grade = profile.get("grade") or "未設定"
+            class_name = profile.get("class_name") or "未設定"
+            attendance_number = profile.get("attendance_number") or "未設定"
+            theme = (profile.get("theme") or "未設定")[:40]
+            question = (profile.get("question") or "未設定")[:40]
+            hypothesis = (profile.get("hypothesis") or "未設定")[:40]
+
+            student_context_parts.extend([
+                f"生徒名:{profile_name}",
+                f"学校:{school_id}",
+                f"学年:{grade}",
+                f"クラス:{class_name}",
+                f"出席番号:{attendance_number}",
+                f"探究テーマ:{theme}",
+                f"問い:{question}",
+                f"仮説:{hypothesis}",
+            ])
+            logger.info("✅ プロフィールベースの学習コンテキストを取得しました")
         
         # page_idの形式を判定して適切な処理を選択
         if page_id.startswith('project-'):
             try:
-                project_id = int(page_id.replace('project-', ''))
-                logger.info(f"✅ project-形式からプロジェクトIDを取得: {project_id}")
+                legacy_project_id = int(page_id.replace('project-', ''))
+                logger.info(f"✅ project-形式から旧プロジェクトIDを取得: {legacy_project_id}")
             except ValueError:
                 logger.warning(f"⚠️ project-形式の解析に失敗: {page_id}")
         
         elif page_id.isdigit():
             # メモIDからプロジェクトIDを取得
-            project_id = await self.db_helper.get_memo_project_id(int(page_id), user_id)
-            if project_id:
-                logger.info(f"✅ memo_id:{page_id}からプロジェクトIDを取得: {project_id}")
+            legacy_project_id = await self.db_helper.get_memo_project_id(int(page_id), user_id)
+            if legacy_project_id:
+                logger.info(f"✅ memo_id:{page_id}から旧プロジェクトIDを取得: {legacy_project_id}")
             else:
                 logger.info(f"🔴 memo_id:{page_id}にプロジェクト関連付けなし")
         
         elif page_id == 'conversation-agent-test':
-            # 最新のプロジェクトを取得
-            project_id = await self.db_helper.get_latest_project(user_id)
-            if project_id:
-                logger.info(f"✅ 最新のプロジェクトIDを取得: {project_id}")
-            else:
-                logger.info("🔴 利用可能なプロジェクトが見つかりませんでした")
+            # 既存のテスト経路は残しつつ、基本はプロフィールコンテキストを優先
+            if not profile:
+                legacy_project_id = await self.db_helper.get_latest_project(user_id)
+                if legacy_project_id:
+                    logger.info(f"✅ 最新の旧プロジェクトIDを取得: {legacy_project_id}")
+                else:
+                    logger.info("🔴 利用可能な旧プロジェクトが見つかりませんでした")
         
         elif page_id == '' or page_id is None:
-            # page_idが空またはNoneの場合、プロジェクトなしで続行
-            logger.info("ℹ️ page_idが空です。プロジェクトコンテキストなしで処理します。")
+            # page_idが空またはNoneの場合、プロフィールコンテキストのみで続行
+            logger.info("ℹ️ page_idが空です。プロフィールコンテキストを優先します。")
         else:
             logger.info(f"🔴 page_id形式が未対応: {page_id}")
         
-        # プロジェクト情報を取得
-        if project_id:
-            project = await self.db_helper.get_project_info(project_id, user_id)
-            if project:
-                # プロジェクト情報を軽量フォーマットで統合（トークン削減）
-                theme_short = (project['theme'] or '')[:30]
-                question_short = (project.get('question') or 'NA')[:25]
-                hypothesis_short = (project.get('hypothesis') or 'NA')[:25]
-                project_context = f"[テーマ:{theme_short}|問い:{question_short}|仮説:{hypothesis_short}]"
-                logger.info(f"✅ プロジェクト情報を軽量フォーマットで取得成功: {project['theme']}")
+        # 旧プロジェクト情報は必要な場合のみ追記
+        if legacy_project_id:
+            legacy_project = await self.db_helper.get_project_info(legacy_project_id, user_id)
+            if legacy_project:
+                theme_short = (legacy_project.get('theme') or '')[:30]
+                question_short = (legacy_project.get('question') or 'NA')[:25]
+                hypothesis_short = (legacy_project.get('hypothesis') or 'NA')[:25]
+                legacy_context = f"[テーマ:{theme_short}|問い:{question_short}|仮説:{hypothesis_short}]"
+                student_context_parts.append(f"旧プロジェクト情報:\n{legacy_context}")
+                logger.info(f"✅ 旧プロジェクト情報を軽量フォーマットで取得成功: {legacy_project.get('theme')}")
             else:
-                logger.warning(f"⚠️ プロジェクトが見つからない: project_id={project_id}")
-        
-        return project_id, project_context, project
+                logger.warning(f"⚠️ 旧プロジェクトが見つからない: project_id={legacy_project_id}")
+
+        if student_context_parts:
+            student_context = "\n".join(student_context_parts)
+
+        context_payload["legacy_project"] = legacy_project
+        return legacy_project_id, student_context, context_payload
 
 
 async def parallel_fetch_context_and_history(
@@ -296,7 +373,7 @@ async def parallel_fetch_context_and_history(
     history_limit: int = None
 ) -> Tuple[Optional[int], Optional[str], Optional[Dict[str, Any]], List[Dict[str, Any]]]:
     """
-    プロジェクトコンテキストと対話履歴を並列で取得
+    学習コンテキストと対話履歴を並列で取得
 
     Args:
         db_helper: データベースヘルパー
@@ -307,7 +384,7 @@ async def parallel_fetch_context_and_history(
         history_limit: 履歴取得数の上限（Noneの場合は環境変数から取得、デフォルト20件）
 
     Returns:
-        (project_id, project_context, project, conversation_history) のタプル
+        (legacy_project_id, student_context, context_payload, conversation_history) のタプル
     """
     if history_limit is None:
         history_limit = DEFAULT_HISTORY_LIMIT
@@ -318,7 +395,7 @@ async def parallel_fetch_context_and_history(
         history_task = db_helper.get_conversation_history(conversation_id, history_limit)
         
         # 両方のタスクを並列実行
-        (project_id, project_context, project), conversation_history = await asyncio.gather(
+        (legacy_project_id, student_context, context_payload), conversation_history = await asyncio.gather(
             context_task,
             history_task
         )
@@ -326,14 +403,14 @@ async def parallel_fetch_context_and_history(
         total_time = time.time() - start_time
         logger.info(f"🔷 DB Parallel Fetch [context+history]: 応答秒={total_time:.3f}s, 履歴件数={len(conversation_history)}")
         
-        return project_id, project_context, project, conversation_history
+        return legacy_project_id, student_context, context_payload, conversation_history
         
     except Exception as e:
         logger.error(f"並列データ取得エラー: {e}")
         # エラー時は個別に取得を試みる
-        project_id, project_context, project = await context_builder.build_context_from_page_id(page_id, user_id)
+        legacy_project_id, student_context, context_payload = await context_builder.build_context_from_page_id(page_id, user_id)
         conversation_history = await db_helper.get_conversation_history(conversation_id, history_limit)
-        return project_id, project_context, project, conversation_history
+        return legacy_project_id, student_context, context_payload, conversation_history
 
 
 async def parallel_save_chat_logs(

@@ -2,15 +2,12 @@ import React, { useState } from 'react';
 import { Box, Typography, IconButton, Tooltip, Menu, MenuItem } from '@mui/material';
 import {
   Chat as ChatIcon,
-  Folder as FolderIcon,
-  Timeline as TimelineIcon,
   Settings as SettingsIcon,
   Add as AddIcon,
   History as HistoryIcon,
   AccountCircle as AccountCircleIcon,
   Logout as LogoutIcon,
   Person as PersonIcon,
-  Dashboard as DashboardIcon,
   Book as BookIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -18,13 +15,11 @@ import { useAuthStore } from '../../stores/authStore';
 import { borderRadius, colors, shadows } from '../../styles/design-system';
 
 interface LeftSidebarProps {
-  onDashboardToggle: () => void;
   onNewChat?: () => void;
   onHistoryOpen?: () => void;
 }
 
-const LeftSidebar: React.FC<LeftSidebarProps> = ({ 
-  onDashboardToggle,
+const LeftSidebar: React.FC<LeftSidebarProps> = ({
   onNewChat,
   onHistoryOpen
 }) => {
@@ -49,38 +44,32 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
   };
 
   const handleDiaryOpen = () => {
-    navigate('/app/diary?autostart=1');
+    navigate('/diary?autostart=1');
   };
 
   const handleProfileOpen = () => {
     handleAccountMenuClose();
-    navigate('/app/profile');
+    navigate('/profile');
   };
 
   const menuItems = [
     {
       icon: <ChatIcon />,
       label: 'チャット',
-      path: '/app/chat',
-      action: () => navigate('/app/chat')
+      path: '/chat',
+      action: () => navigate('/chat')
     },
     {
-      icon: <FolderIcon />,
-      label: 'プロジェクト',
-      path: '#',
-      action: onDashboardToggle
+      icon: <SettingsIcon />,
+      label: 'プロフィール',
+      path: '/profile',
+      action: () => navigate('/profile')
     },
     {
-      icon: <DashboardIcon />,
+      icon: <SettingsIcon />,
       label: '先生用ダッシュボード',
       path: '/teacher',
       action: () => navigate('/teacher')
-    },
-    {
-      icon: <TimelineIcon />,
-      label: 'タイムライン',
-      path: '/timeline',
-      action: () => {} // 未実装
     },
     {
       icon: <SettingsIcon />,
@@ -198,7 +187,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
                   backgroundColor: colors.background.subtle,
                   color: colors.text.secondary,
                 },
-                ...(location.pathname === item.path && item.path !== '#' && {
+                ...(location.pathname === item.path && {
                   backgroundColor: colors.accentWarm.soft,
                   color: colors.accentWarm.main,
                 }),

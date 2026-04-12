@@ -14,8 +14,6 @@ load_dotenv()
 # ルーターインポート
 from routers.auth_router import router as auth_router
 from routers.chat_router import router as chat_router
-from routers.project_router import router as project_router
-from routers.memo_router import router as memo_router
 from routers.quest_router import router as quest_router, user_quest_router
 from routers.admin_router import router as admin_router
 from routers.theme_router import router as theme_router
@@ -131,8 +129,6 @@ else:
 # ルーター登録
 app.include_router(auth_router)           # 認証関連
 app.include_router(chat_router)           # チャット関連
-app.include_router(project_router)        # プロジェクト関連
-app.include_router(memo_router)           # メモ管理関連
 app.include_router(quest_router)          # クエストシステム関連
 app.include_router(user_quest_router)     # ユーザークエスト関連
 app.include_router(admin_router)          # 管理機能関連
@@ -158,8 +154,6 @@ async def root():
             "AuthService - 認証・ユーザー管理",
             "ChatService - チャット・対話管理",
             "ConversationService - 会話管理",
-            "ProjectService - プロジェクト管理",
-            "MemoService - メモ管理",
             "QuestService - クエストシステム",
             "AdminService - 管理機能・メトリクス",
             "ThemeService - テーマ探究ツール",

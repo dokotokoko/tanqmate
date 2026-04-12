@@ -70,6 +70,9 @@ const ProfilePage: React.FC = () => {
     grade: '',
     class_name: '',
     attendance_number: '',
+    theme: '',
+    question: '',
+    hypothesis: '',
   });
 
   useEffect(() => {
@@ -114,6 +117,9 @@ const ProfilePage: React.FC = () => {
         grade: nextProfile?.grade || '',
         class_name: nextProfile?.class_name || '',
         attendance_number: nextProfile?.attendance_number ? String(nextProfile.attendance_number) : '',
+        theme: nextProfile?.theme || '',
+        question: nextProfile?.question || '',
+        hypothesis: nextProfile?.hypothesis || '',
       });
 
       if (diaryResponse.ok) {
@@ -152,6 +158,9 @@ const ProfilePage: React.FC = () => {
           grade: formData.grade || null,
           class_name: formData.class_name || null,
           attendance_number: formData.attendance_number ? Number(formData.attendance_number) : null,
+          theme: formData.theme || null,
+          question: formData.question || null,
+          hypothesis: formData.hypothesis || null,
         }),
       });
 
@@ -249,11 +258,59 @@ const ProfilePage: React.FC = () => {
                         </Grid>
                       </Grid>
 
+                      <Divider sx={{ my: 3 }} />
+
+                      <Box
+                        sx={{
+                          p: 2.5,
+                          borderRadius: '20px',
+                          backgroundColor: colors.background.subtle,
+                          border: `1px solid ${colors.border.soft}`,
+                        }}
+                      >
+                        <Typography variant="h6" sx={{ fontWeight: 700, color: colors.text.primary, mb: 1 }}>
+                          探究コンテキスト
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: colors.text.secondary, mb: 2 }}>
+                          AIが探究を支援するときに参照する内容です。後から更新できます。
+                        </Typography>
+                        <Grid container spacing={2}>
+                          <Grid item xs={12}>
+                            <TextField
+                              fullWidth
+                              label="探究テーマ"
+                              value={formData.theme}
+                              onChange={(e) => setFormData((prev) => ({ ...prev, theme: e.target.value }))}
+                            />
+                          </Grid>
+                          <Grid item xs={12}>
+                            <TextField
+                              fullWidth
+                              label="問い"
+                              value={formData.question}
+                              onChange={(e) => setFormData((prev) => ({ ...prev, question: e.target.value }))}
+                              multiline
+                              minRows={2}
+                            />
+                          </Grid>
+                          <Grid item xs={12}>
+                            <TextField
+                              fullWidth
+                              label="仮説"
+                              value={formData.hypothesis}
+                              onChange={(e) => setFormData((prev) => ({ ...prev, hypothesis: e.target.value }))}
+                              multiline
+                              minRows={2}
+                            />
+                          </Grid>
+                        </Grid>
+                      </Box>
+
                       <Stack direction="row" spacing={1.5} sx={{ mt: 3 }}>
                         <Button variant="contained" onClick={handleProfileSave} disabled={saving}>
                           {saving ? '保存中...' : 'プロフィールを保存'}
                         </Button>
-                        <Button variant="outlined" onClick={() => navigate('/app/chat')}>
+                        <Button variant="outlined" onClick={() => navigate('/chat')}>
                           チャットに戻る
                         </Button>
                       </Stack>
