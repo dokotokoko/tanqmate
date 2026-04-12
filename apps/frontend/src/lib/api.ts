@@ -131,7 +131,7 @@ class ApiClient {
     // 必要に応じてログアウト処理を呼び出し
     if (typeof window !== 'undefined' && window.location) {
       // ログインページへリダイレクト
-      window.location.href = '/login';
+      window.location.href = '/signin';
     }
   }
 
@@ -401,8 +401,6 @@ class ApiClient {
         });
         this.token = result.data.access_token;
         
-        // 旧形式のトークンをクリア
-        localStorage.removeItem('auth-token');
       } else {
         console.warn('No tokens in login response, using legacy format'); // デバッグログ
       }
@@ -414,8 +412,6 @@ class ApiClient {
   logout() {
     this.token = null;
     tokenManager.clearTokens();
-    // 旧形式のトークンもクリア
-    localStorage.removeItem('auth-token');
   }
 
   // 興味関心関連

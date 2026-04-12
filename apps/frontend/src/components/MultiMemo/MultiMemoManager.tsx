@@ -53,6 +53,7 @@ import {
 import Fuse from 'fuse.js';
 import { debounce } from 'lodash';
 import { useNavigate } from 'react-router-dom';
+import { tokenManager } from '../../utils/tokenManager';
 
 import MemoCard from './MemoCard';
 import MemoEditor from './MemoEditor';
@@ -123,6 +124,14 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
   const [filterMenuAnchor, setFilterMenuAnchor] = useState<null | HTMLElement>(null);
   const [sortMenuAnchor, setSortMenuAnchor] = useState<null | HTMLElement>(null);
 
+  const getAccessToken = () => {
+    const token = tokenManager.getAccessToken();
+    if (!token) {
+      throw new Error('認証トークンが見つかりません');
+    }
+    return token;
+  };
+
   // ドラッグ&ドロップ
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -135,7 +144,7 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
   const fetchMemos = useCallback(async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = getAccessToken();
       const endpoint = selectedProject 
         ? `/projects/${selectedProject}/memos`
         : '/memos';
@@ -163,7 +172,7 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
   // プロジェクト一覧の取得
   const fetchProjects = useCallback(async () => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/projects`, {
         headers: {
@@ -256,7 +265,7 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
   // メモ作成
   const handleCreateMemo = async (memoData: Partial<MultiMemo>) => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = getAccessToken();
       const endpoint = selectedProject 
         ? `/projects/${selectedProject}/memos`
         : '/memos';
@@ -287,7 +296,7 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
   // メモ更新
   const handleUpdateMemo = async (memoId: number, memoData: Partial<MultiMemo>) => {
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         method: 'PUT',
@@ -313,7 +322,7 @@ const MultiMemoManager: React.FC<MultiMemoManagerProps> = ({
     if (!confirm('このメモを削除しますか？')) return;
 
     try {
-      const token = localStorage.getItem('auth-token');
+      const token = getAccessToken();
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/memos/${memoId}`, {
         method: 'DELETE',

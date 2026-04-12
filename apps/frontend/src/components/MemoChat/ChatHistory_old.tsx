@@ -27,6 +27,7 @@ import {
   Schedule as ScheduleIcon,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
+import { tokenManager } from '../../utils/tokenManager';
 
 interface ChatSession {
   id: string;
@@ -65,6 +66,14 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   const [sessionToClear, setSessionToClear] = useState<string | null>(null);
   const [expandedPages, setExpandedPages] = useState<Set<string>>(new Set());
 
+  const getAccessToken = () => {
+    const token = tokenManager.getAccessToken();
+    if (!token) {
+      throw new Error('認証トークンが見つかりません');
+    }
+    return token;
+  };
+
   // チャット履歴を取得
   const fetchChatHistory = async () => {
     setLoading(true);
@@ -72,11 +81,10 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
       // ユーザーIDを取得
       let userId: string | null = null;
       const authData = localStorage.getItem('auth-storage');
-      const authToken = localStorage.getItem('auth-token');
       
       console.log('🔍 認証情報デバッグ:', {
         authData: authData,
-        authToken: authToken,
+        hasAccessToken: Boolean(tokenManager.getAccessToken()),
       });
       
       if (authData) {
@@ -92,11 +100,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
         }
       }
       
-      const token = localStorage.getItem('auth-token');
-      if (!token) {
-        console.error('認証トークンが見つかりません');
-        return;
-      }
+      const token = getAccessToken();
 
       // chat/history APIから直接取得
       console.log('📡 chat/history API呼び出し...');
@@ -228,8 +232,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
 
   // メモタイトルを取得する関数（並列処理で高速化）
   const fetchMemoTitles = async (sessions: ChatSession[], userId: string) => {
-    // 統一した認証トークンの取得
-    const token = userId; // userIdをそのまま使用
+    const token = getAccessToken();
     const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
     
     // メモセッションのみをフィルタリング
@@ -332,8 +335,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   // セッションクリア
   const handleClearSession = async (pageId: string) => {
     try {
-      const token = localStorage.getItem('auth-token');
-      if (!token) return;
+      const token = getAccessToken();
 
       const apiBaseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiBaseUrl}/chat/history?page=${pageId}`, {
