@@ -135,6 +135,7 @@ Thumbs.db
 
 .claude
 .codex
+.agents
 
 # TLS / certs
 *.key
