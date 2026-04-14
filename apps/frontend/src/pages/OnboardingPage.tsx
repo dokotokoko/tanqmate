@@ -26,7 +26,7 @@ import { useAuthStore } from '../stores/authStore';
 
 const OnboardingPage = () => {
   const navigate = useNavigate();
-  const { user, getAccessToken } = useAuthStore();
+  const { user, getAccessToken, getProfile } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -191,18 +191,15 @@ const OnboardingPage = () => {
         throw new Error('プロフィールの更新に失敗しました');
       }
 
+      const payload = await response.json();
+      const updatedProfile = payload?.profile;
+      const syncedProfile = await getProfile();
+      const nextProfile = syncedProfile || updatedProfile;
+
       setSuccess(true);
       
-      const profileResponse = await fetch(`${API_BASE_URL}/auth/profile`, {
-        headers: {
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-      const profilePayload = profileResponse.ok ? await profileResponse.json() : null;
-      const updatedProfile = profilePayload?.profile;
-      
       setTimeout(() => {
-        if (updatedProfile?.role === 'teacher') {
+        if (nextProfile?.role === 'teacher') {
           navigate('/teacher');
         } else {
           navigate('/signup/complete');

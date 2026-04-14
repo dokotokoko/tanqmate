@@ -379,40 +379,41 @@ export const useAuthStore = create<AuthState>()(
               throw error;
             }
 
-            if (data.user) {
+            if (data.user && data.session) {
               const profile = await fetchProfileForUser(data.user);
-              if (data.session) {
-                syncTokenState(data.session);
-                set({
-                  user: enrichUser(data.user, profile),
-                  session: data.session,
-                  profile,
-                  userRole: profile?.role || 'student',
-                  isLoading: false,
-                  error: null,
-                  registrationMessage: null,
-                });
-                logAuthEvent('signUp:completed-with-session', {
-                  userId: data.user.id,
-                  email: data.user.email || email,
-                });
-                return { success: true, requiresEmailConfirmation: false };
-              }
+              syncTokenState(data.session);
+              set({
+                user: enrichUser(data.user, profile),
+                session: data.session,
+                profile,
+                userRole: profile?.role || 'student',
+                isLoading: false,
+                error: null,
+                registrationMessage: null,
+              });
+              logAuthEvent('signUp:completed-with-session', {
+                userId: data.user.id,
+                email: data.user.email || email,
+              });
+              return { success: true, requiresEmailConfirmation: false };
             }
 
-            const message = '確認メールを送信しました。メールのリンクから登録を完了してください。';
-            set({
-              isLoading: false,
-              registrationMessage: message,
-            });
-            logAuthEvent('signUp:confirmation-required', {
+            const authError = createAuthError(
+              '登録後のセッション確立に失敗しました。Supabase Auth のメール確認設定を確認してください。'
+            );
+            logAuthEvent('signUp:missing-session', {
               userId: data.user?.id || null,
               email,
             });
+            set({
+              isLoading: false,
+              error: authError,
+              registrationMessage: null,
+            });
             return {
-              success: true,
-              message,
-              requiresEmailConfirmation: true,
+              success: false,
+              error: authError,
+              requiresEmailConfirmation: false,
             };
           } catch (error) {
             const authError = error as AuthError;

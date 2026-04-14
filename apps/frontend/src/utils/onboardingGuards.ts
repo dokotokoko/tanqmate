@@ -1,7 +1,7 @@
 import type { ProfileData } from '../stores/authStore';
 
 export const isOnboardingComplete = (profile: ProfileData | null) =>
-  Boolean(profile?.name && (profile.school_id || profile.school_code_locked));
+  Boolean(profile?.name?.trim());
 
 export const getPostOnboardingRoute = (profile: ProfileData | null) => {
   if (!isOnboardingComplete(profile)) {

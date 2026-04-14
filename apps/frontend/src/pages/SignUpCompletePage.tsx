@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Container,
   Paper,
   Box,
   Typography,
   Button,
+  CircularProgress,
 } from '@mui/material';
 import {
   CheckCircleOutline,
@@ -19,6 +20,15 @@ import { getPostOnboardingRoute } from '../utils/onboardingGuards';
 const SignUpCompletePage = () => {
   const navigate = useNavigate();
   const profile = useAuthStore((state) => state.profile);
+  const getProfile = useAuthStore((state) => state.getProfile);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleStart = async () => {
+    setIsLoading(true);
+    const latestProfile = await getProfile();
+    setIsLoading(false);
+    navigate(getPostOnboardingRoute(latestProfile || profile));
+  };
 
   return (
     <Container component="main" maxWidth="sm">
@@ -74,7 +84,8 @@ const SignUpCompletePage = () => {
               variant="contained"
               size="large"
               startIcon={<Explore />}
-              onClick={() => navigate(getPostOnboardingRoute(profile))}
+              onClick={handleStart}
+              disabled={isLoading}
               sx={{
                 backgroundColor: colors.accentWarm.main,
                 color: colors.text.inverse,
@@ -85,7 +96,7 @@ const SignUpCompletePage = () => {
                 borderRadius: borderRadius.button,
               }}
             >
-              探Qメイトをはじめる
+              {isLoading ? <CircularProgress size={24} color="inherit" /> : '探Qメイトをはじめる'}
             </Button>
           </Paper>
         </motion.div>

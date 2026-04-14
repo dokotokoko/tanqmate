@@ -402,13 +402,6 @@ async def check_onboarding_status(
                 "reason": "name_not_set",
             }
 
-        if not profile.get("school_id") and not profile.get("school_code_locked"):
-            return {
-                "needs_onboarding": True,
-                "reason": "school_not_set",
-                "can_set_school": True,
-            }
-
         missing_inquiry_context_fields = [
             field for field in INQUIRY_CONTEXT_FIELDS if not profile.get(field)
         ]
