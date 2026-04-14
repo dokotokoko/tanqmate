@@ -72,6 +72,13 @@ interface AuthState {
 
 const createAuthError = (message: string): AuthError => ({ message } as AuthError);
 
+class ProfileLoadError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProfileLoadError';
+  }
+}
+
 const buildRedirectUrl = (path: string) => {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${window.location.origin}${normalizedPath}`;
@@ -106,24 +113,48 @@ export const useAuthStore = create<AuthState>()(
         }
       };
 
+      const resetAuthState = (error: AuthError | null = null) => {
+        syncTokenState(null);
+        set({
+          user: null,
+          session: null,
+          profile: null,
+          userRole: null,
+          isLoading: false,
+          isInitialized: true,
+          error,
+          migrationStatus: 'none',
+        });
+      };
+
       const fetchProfileViaBackend = async (accessToken: string): Promise<ProfileData | null> => {
+        let response: Response;
+
         try {
-          const response = await fetch(`${API_BASE_URL}/auth/profile`, {
+          response = await fetch(`${API_BASE_URL}/auth/profile`, {
             headers: {
               Authorization: `Bearer ${accessToken}`,
             },
           });
-
-          if (!response.ok) {
-            return null;
-          }
-
-          const payload = await response.json();
-          return payload.profile as ProfileData;
         } catch (error) {
           console.error('[Auth] Backend profile fetch failed:', error);
-          return null;
+          throw new ProfileLoadError('プロフィール取得中に通信エラーが発生しました。再度ログインしてください。');
         }
+
+        if (response.ok) {
+          const payload = await response.json();
+          return payload.profile as ProfileData;
+        }
+
+        if (response.status >= 500) {
+          throw new ProfileLoadError('プロフィール取得に失敗しました。時間をおいて再度ログインしてください。');
+        }
+
+        if (response.status === 401 || response.status === 403) {
+          throw new ProfileLoadError('認証情報の確認に失敗しました。再度ログインしてください。');
+        }
+
+        return null;
       };
 
       const fetchProfileForUser = async (user: User): Promise<ProfileData | null> => {
@@ -144,7 +175,7 @@ export const useAuthStore = create<AuthState>()(
             .maybeSingle();
 
           if (error) {
-            throw error;
+            throw new ProfileLoadError('プロフィール情報の取得に失敗しました。再度ログインしてください。');
           }
 
           if (data) {
@@ -166,20 +197,16 @@ export const useAuthStore = create<AuthState>()(
             .single();
 
           if (createError) {
-            throw createError;
+            throw new ProfileLoadError('プロフィールの初期化に失敗しました。再度ログインしてください。');
           }
 
           return createdProfile as ProfileData;
         } catch (error) {
+          if (error instanceof ProfileLoadError) {
+            throw error;
+          }
           console.error('[Auth] Failed to fetch profile:', error);
-          return {
-            id: user.id,
-            email: user.email || '',
-            username: user.user_metadata?.username || user.email?.split('@')[0] || user.id,
-            role: 'student',
-            school_id: null,
-            school_code_locked: false,
-          };
+          throw new ProfileLoadError('プロフィール情報の取得に失敗しました。再度ログインしてください。');
         }
       };
 
@@ -205,22 +232,40 @@ export const useAuthStore = create<AuthState>()(
           return;
         }
 
-        const profile = await fetchProfileForUser(session.user);
-        syncTokenState(session);
-        set({
-          user: enrichUser(session.user, profile),
-          session,
-          profile,
-          userRole: profile?.role || 'student',
-          isLoading: false,
-          isInitialized: true,
-          error: null,
-        });
-        logAuthEvent('applySessionState:completed', {
-          userId: session.user.id,
-          email: session.user.email || null,
-          role: profile?.role || 'student',
-        });
+        try {
+          const profile = await fetchProfileForUser(session.user);
+          syncTokenState(session);
+          set({
+            user: enrichUser(session.user, profile),
+            session,
+            profile,
+            userRole: profile?.role || 'student',
+            isLoading: false,
+            isInitialized: true,
+            error: null,
+          });
+          logAuthEvent('applySessionState:completed', {
+            userId: session.user.id,
+            email: session.user.email || null,
+            role: profile?.role || 'student',
+          });
+        } catch (error) {
+          const authError = createAuthError(
+            error instanceof ProfileLoadError
+              ? error.message
+              : 'プロフィール取得に失敗しました。再度ログインしてください。'
+          );
+          logAuthEvent('applySessionState:error', {
+            userId: session.user.id,
+            message: authError.message,
+          });
+          try {
+            await supabase.auth.signOut();
+          } catch (signOutError) {
+            console.error('[Auth] Failed to sign out after profile error:', signOutError);
+          }
+          resetAuthState(authError);
+        }
       };
 
       return {
@@ -578,13 +623,28 @@ export const useAuthStore = create<AuthState>()(
             return null;
           }
 
-          const profile = await fetchProfileForUser(currentUser);
-          set({
-            profile,
-            user: enrichUser(currentUser, profile),
-            userRole: profile?.role || 'student',
-          });
-          return profile;
+          try {
+            const profile = await fetchProfileForUser(currentUser);
+            set({
+              profile,
+              user: enrichUser(currentUser, profile),
+              userRole: profile?.role || 'student',
+            });
+            return profile;
+          } catch (error) {
+            const authError = createAuthError(
+              error instanceof ProfileLoadError
+                ? error.message
+                : 'プロフィール取得に失敗しました。再度ログインしてください。'
+            );
+            try {
+              await supabase.auth.signOut();
+            } catch (signOutError) {
+              console.error('[Auth] Failed to sign out after getProfile error:', signOutError);
+            }
+            resetAuthState(authError);
+            return null;
+          }
         },
 
         fetchProfile: async () => get().getProfile(),

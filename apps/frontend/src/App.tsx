@@ -14,6 +14,7 @@ import ChatPage from './pages/ChatPage';
 import Layout from './components/Layout/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import LoadingScreen from './components/LoadingScreen';
+import { getPostOnboardingRoute } from './utils/onboardingGuards';
 
 // 新しい認証ページ
 const SignInPage = lazy(() => import('./pages/SignInPage'));
@@ -70,6 +71,13 @@ const LegacyMemoRedirect: React.FC = () => {
   return <Navigate to="/chat" replace />;
 };
 
+const getAuthenticatedRedirectPath = getPostOnboardingRoute;
+
+const AuthenticatedRedirect: React.FC = () => {
+  const profile = useAuthStore((state) => state.profile);
+  return <Navigate to={getAuthenticatedRedirectPath(profile)} replace />;
+};
+
 function App() {
   const auth = useAuthStore();
   const { isDarkMode } = useThemeStore();
@@ -81,6 +89,7 @@ function App() {
   }, [initializeAuth]);
   
   const user = auth.user;
+  const profile = auth.profile;
   const isLoading = auth.isLoading || !auth.isInitialized;
   
   console.log('[App] Auth state:', {
@@ -125,7 +134,7 @@ function App() {
               <Route
                 path="/signin"
                 element={
-                  user ? <Navigate to="/chat" replace /> :
+                  user ? <Navigate to={getAuthenticatedRedirectPath(profile)} replace /> :
                   <LazyWrapper><SignInPage /></LazyWrapper>
                 }
               />
@@ -134,7 +143,7 @@ function App() {
               <Route
                 path="/signup"
                 element={
-                  user ? <Navigate to="/chat" replace /> :
+                  user ? <Navigate to={getAuthenticatedRedirectPath(profile)} replace /> :
                   <LazyWrapper><SignUpPage /></LazyWrapper>
                 }
               />
@@ -143,7 +152,7 @@ function App() {
               <Route 
                 path="/onboarding" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute allowIncompleteOnboarding>
                     <LazyWrapper><OnboardingPage /></LazyWrapper>
                   </ProtectedRoute>
                 } 
@@ -153,7 +162,7 @@ function App() {
               <Route 
                 path="/signup/complete" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute allowIncompleteOnboarding>
                     <LazyWrapper><SignUpCompletePage /></LazyWrapper>
                   </ProtectedRoute>
                 } 
@@ -246,13 +255,13 @@ function App() {
               </Route>
 
               {/* 旧 /app 配下の互換ルート */}
-              <Route path="/app" element={<Navigate to="/chat" replace />} />
+              <Route path="/app" element={<AuthenticatedRedirect />} />
               <Route path="/app/chat" element={<Navigate to="/chat" replace />} />
               <Route path="/app/home" element={<Navigate to="/home" replace />} />
               <Route path="/app/inquiry" element={<Navigate to="/inquiry" replace />} />
               <Route path="/app/diary" element={<Navigate to="/diary" replace />} />
               <Route path="/app/profile" element={<Navigate to="/profile" replace />} />
-              <Route path="/app/dashboard" element={<Navigate to="/chat" replace />} />
+              <Route path="/app/dashboard" element={<AuthenticatedRedirect />} />
               <Route path="/app/projects/:projectId" element={<Navigate to="/chat" replace />} />
               <Route path="/app/projects/:projectId/memos/:memoId" element={<Navigate to="/chat" replace />} />
               <Route path="/app/memos" element={<Navigate to="/chat" replace />} />
@@ -270,10 +279,10 @@ function App() {
               />
               
               {/* ダッシュボード旧導線 */}
-              <Route path="/dashboard" element={<Navigate to="/chat" replace />} />
+              <Route path="/dashboard" element={<AuthenticatedRedirect />} />
               
               {/* /studentは/dashboardへリダイレクト */}
-              <Route path="/student" element={<Navigate to="/chat" replace />} />
+              <Route path="/student" element={<AuthenticatedRedirect />} />
               <Route path="/projects/:projectId" element={<LegacyProjectRedirect />} />
               <Route path="/projects/:projectId/memos/:memoId" element={<LegacyMemoRedirect />} />
               <Route path="/memos" element={<Navigate to="/chat" replace />} />

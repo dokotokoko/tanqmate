@@ -24,6 +24,7 @@ import { motion } from 'framer-motion';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { borderRadius, colors, shadows } from '../styles/design-system';
+import { getPostOnboardingRoute } from '../utils/onboardingGuards';
 
 const SignInPage = () => {
   const navigate = useNavigate();
@@ -69,13 +70,12 @@ const SignInPage = () => {
 
     const result = await signIn(formData.email, formData.password);
     if (result.success) {
-      // プロフィールを取得してroleに基づいてリダイレクト
       const profile = await getProfile();
-      if (profile?.role === 'teacher') {
-        navigate('/teacher');
-      } else {
-        navigate('/dashboard');
+      if (!profile) {
+        navigate('/signin', { replace: true });
+        return;
       }
+      navigate(getPostOnboardingRoute(profile));
     }
   };
 

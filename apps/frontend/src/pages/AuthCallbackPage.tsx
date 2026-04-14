@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress, Typography, Alert } from '@mui/material';
 import { supabase } from '../lib/supabase';
 import { useAuthStore } from '../stores/authStore';
+import { getPostOnboardingRoute } from '../utils/onboardingGuards';
 
 const AuthCallbackPage = () => {
   const navigate = useNavigate();
@@ -22,12 +23,11 @@ const AuthCallbackPage = () => {
       }
 
       const profile = await getProfile();
-      if (!profile?.name || (!profile?.school_id && !profile?.school_code_locked)) {
-        navigate('/onboarding', { replace: true });
+      if (!profile) {
+        navigate('/signin', { replace: true });
         return;
       }
-
-      navigate(profile.role === 'teacher' ? '/teacher' : '/dashboard', { replace: true });
+      navigate(getPostOnboardingRoute(profile), { replace: true });
     };
 
     const handleCallback = async () => {

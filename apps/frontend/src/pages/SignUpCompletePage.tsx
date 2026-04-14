@@ -13,9 +13,12 @@ import {
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { borderRadius, colors, shadows } from '../styles/design-system';
+import { useAuthStore } from '../stores/authStore';
+import { getPostOnboardingRoute } from '../utils/onboardingGuards';
 
 const SignUpCompletePage = () => {
   const navigate = useNavigate();
+  const profile = useAuthStore((state) => state.profile);
 
   return (
     <Container component="main" maxWidth="sm">
@@ -71,7 +74,7 @@ const SignUpCompletePage = () => {
               variant="contained"
               size="large"
               startIcon={<Explore />}
-              onClick={() => navigate('/student')}
+              onClick={() => navigate(getPostOnboardingRoute(profile))}
               sx={{
                 backgroundColor: colors.accentWarm.main,
                 color: colors.text.inverse,
