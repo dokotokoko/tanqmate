@@ -1,6 +1,6 @@
 # 探Qメイト リリース実行チェックリスト
 
-この文書は [release_plan.md](/abs/path/C:/Users/kouta/tanqmates/docs/release_plan.md) を実行に落とすための別紙です。
+この文書は [release_plan.md](../release_plan.md) を実行に落とすための別紙です。
 
 方針よりも、各フェーズで何を終わらせるか、何をもって完了とするかを明確にすることを目的にしています。
 

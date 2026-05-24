@@ -1,0 +1,27 @@
+flowchart TD
+  A["生徒の発話<br/>MemoChat / AIChat"] --> B["Frontend<br/>POST /chat"]
+  B --> C["chat_router<br/>認証・レート制限・入力検証"]
+  C --> D["ChatService.process_chat_message"]
+
+  D --> E["ConversationManager<br/>conversation_id 取得/作成"]
+  D --> F["parallel_fetch_context_and_history"]
+  F --> F1["Supabase<br/>プロフィール / 探究テーマ / 問い / 仮説"]
+  F --> F2["Supabase<br/>chat_logs 会話履歴"]
+
+  D --> G["_generate_ai_response"]
+  G --> H{"抽象的な質問か"}
+  H -->|Yes| I["_generate_clarification_questions<br/>意図を明確化する質問と選択肢"]
+  H -->|No| J["_process_with_async_llm<br/>通常応答生成"]
+
+  J --> K["ResponseStyleManager<br/>応答スタイル選択"]
+  K --> L["TANQMATE_COMPANION_PRINCIPLES<br/>探究の隣を走るAI相棒としての共通方針"]
+  L --> M["OpenAI Responses API<br/>必要に応じて web_search"]
+  M --> N["extract_output_text<br/>sources 抽出"]
+  N --> O["_generate_quest_cards<br/>次の一歩カード生成"]
+
+  I --> P["AI応答パッケージ"]
+  O --> P
+  P --> Q["support_intent / next_action_suggestions / telemetry_event_id 付与"]
+  Q --> R["parallel_save_chat_logs<br/>user発話とAI応答を保存"]
+  R --> S["ChatResponse"]
+  S --> T["Frontend<br/>AI本文・選択肢・クエストカード・出典を表示"]

@@ -10,11 +10,8 @@
 - 今後の画面追加や改修で、色・余白・部品の判断がぶれないようにする
 - `レビュー文書` と `実装` の間にある抽象度の差を埋め、すぐ運用できる基準にする
 
-この仕様は、以下を統合したマスター文書として扱う。
-
-- [docs/design_system_review_report.md](/abs/path/C:/Users/kouta/tanqmates/docs/design_system_review_report.md)
-- [docs/design_system_foundation_spec.md](/abs/path/C:/Users/kouta/tanqmates/docs/design_system_foundation_spec.md)
-- [docs/design_system_governance_spec.md](/abs/path/C:/Users/kouta/tanqmates/docs/design_system_governance_spec.md)
+この仕様は、foundation / governance / review の必要方針を統合したマスター文書として扱う。
+通常の設計判断ではこの正本だけを参照する。
 
 ## 正本と責務
 
@@ -50,6 +47,20 @@
 - 青は信頼、情報、整理の補助
 - 全画面はチャット画面の空気感を基準に揃える
 
+### 設計原則
+
+1. Warm first, blue second
+   - ベース環境は紙、クリーム、暖かい光のように扱う
+   - 青は信頼、情報、ナビゲーションに限定する
+2. Surfaces do the work
+   - 強い色面ではなく、面の重なり、低刺激な境界線、控えめな影で構造を見せる
+3. Supportive, not loud
+   - 内省、対話、AI支援の画面では、ユーザーへの圧を下げる
+4. One system, many contexts
+   - Chat / Diary / Dashboard / Forms は同じ視覚文法を共有する
+5. No isolated palette usage
+   - 色は役割で選び、画面や部品ごとの場当たり的な色選択をしない
+
 ## ブランドトーン
 
 ### 目指す印象
@@ -74,10 +85,10 @@
 
 対象:
 
-- [apps/frontend/src/pages/ChatPage.tsx](/abs/path/C:/Users/kouta/tanqmates/apps/frontend/src/pages/ChatPage.tsx)
-- [apps/frontend/src/components/MemoChat/AIChat.tsx](/abs/path/C:/Users/kouta/tanqmates/apps/frontend/src/components/MemoChat/AIChat.tsx)
-- [apps/frontend/src/components/MemoChat/ChatMessage.tsx](/abs/path/C:/Users/kouta/tanqmates/apps/frontend/src/components/MemoChat/ChatMessage.tsx)
-- [apps/frontend/src/components/MemoChat/ChatInputArea.tsx](/abs/path/C:/Users/kouta/tanqmates/apps/frontend/src/components/MemoChat/ChatInputArea.tsx)
+- [apps/frontend/src/pages/ChatPage.tsx](../apps/frontend/src/pages/ChatPage.tsx)
+- [apps/frontend/src/components/MemoChat/AIChat.tsx](../apps/frontend/src/components/MemoChat/AIChat.tsx)
+- [apps/frontend/src/components/MemoChat/ChatMessage.tsx](../apps/frontend/src/components/MemoChat/ChatMessage.tsx)
+- [apps/frontend/src/components/MemoChat/ChatInputArea.tsx](../apps/frontend/src/components/MemoChat/ChatInputArea.tsx)
 
 理由:
 
@@ -99,6 +110,22 @@
 | `surface` | `#FFFDF7` | 標準カード、標準パネル、標準入力面 |
 | `surfaceSubtle` | `#FFF6E8` | 補助面、入力背景、やわらかい区切り |
 | `surfaceRaised` | `#FFFFFF` | ダイアログ、ポップオーバー、最上位面 |
+
+面の階層:
+
+| Level | Token | 用途 |
+|---|---|---|
+| Level 0 | `canvas` | ページ全体、外側の舞台 |
+| Level 1 | `surface` | 標準コンテンツ面、カード、チャットシェル |
+| Level 2 | `surfaceSubtle` | インセット、補助パネル、二次コンテナ |
+| Level 3 | `surfaceRaised` | ダイアログ、ポップオーバー、高い明瞭度が必要な面 |
+
+ルール:
+
+- アプリ全体の既定背景を純白にしない
+- 重い境界線より面の階層で構造を見せる
+- 読みやすさを保てる範囲で、できるだけ低い階層の面を使う
+- `surfaceRaised` は例外的な強調に残す
 
 #### 境界線
 
@@ -346,6 +373,18 @@
 
 ## レイアウトシェル
 
+### AppShell
+
+役割:
+
+- アプリ全体の標準フレーム
+
+特徴:
+
+- 全体背景は `canvas`
+- 共有ナビゲーションとページガターを統一
+- ページごとの独自背景色を持ち込まない
+
 ### ChatShell
 
 役割:
@@ -441,6 +480,13 @@
 
 ## ガバナンス
 
+### Source of Truth
+
+- デザイン方針の正本はこの文書
+- トークン実装の正本は `apps/frontend/src/styles/design-system.ts`
+- `global.css` は補助変数を持てるが、独立した別テーマを再定義しない
+- 共通コンポーネントはトークンを消費し、画面単位で新しい palette を作らない
+
 ### 変更ルール
 
 新しいトークン、variant、レイアウト規則を追加する場合は、最低限以下を記録する。
@@ -450,6 +496,8 @@
 - 既存トークンで代替できない理由
 - 使う場所
 - 使わない場所
+- 変更の責任者
+- 移行中の一時例外であれば、対象範囲と削除条件
 
 ### レビュー観点
 
@@ -460,6 +508,8 @@ UI変更時は次を確認する。
 - 主CTA色が正しいか
 - 暖色と青の役割が競合していないか
 - 余白と角丸が既存ルールに沿っているか
+- focus / hover / disabled / error 状態があるか
+- mobile / tablet / desktop のレスポンシブ表示が崩れていないか
 
 ### ドリフト防止
 
@@ -467,6 +517,12 @@ UI変更時は次を確認する。
 - 良い例外はトークンに昇格する
 - 悪い例外は削除する
 - `チャットだけ特別` な状態を放置しない
+
+### 廃止ポリシー
+
+- 旧値や旧variantは、担当領域の移行に必要な期間だけ残す
+- 最後の利用箇所が移行されたら、deprecated な色、variant、余白値は削除する
+- deprecated なパターンを残す場合は、先にこの仕様へ昇格条件と用途を追記する
 
 ## 移行順序
 

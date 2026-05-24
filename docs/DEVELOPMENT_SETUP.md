@@ -1,324 +1,229 @@
 # 開発環境セットアップ手順
 
-## 概要
-探Qメイト（TanQMates）の開発環境をローカルで構築するための完全ガイドです。
-Gitからクローンした直後から開発開始までの全手順を記載しています。
+探Qメイトの現行開発環境は `apps/backend`、`apps/frontend`、`infra` を正とします。古い `backend/` や `react-app/` は通常参照しません。
 
 ## 前提条件
+
 - Git
 - Docker Desktop
-- Node.js (v18以上推奨)
-- Python 3.10以上
+- Node.js 18 以上
+- Python 3.10 以上
+- mkcert（ローカル HTTPS を使う場合）
 
-## セットアップ手順
+## リポジトリ取得
 
-### 1. リポジトリのクローン
 ```bash
-git clone https://github.com/your-username/learning-assistant.git
-cd learning-assistant
+git clone https://github.com/your-username/tanqmates.git
+cd tanqmates
 ```
 
-### 2. 環境変数ファイルの作成
+## 環境変数
 
-#### バックエンド用 .env ファイル
-プロジェクトルートに `.env` ファイルを作成:
+ルートの `.env.example` と `apps/backend/.env.example` を参考に、必要な値を設定します。API キーや Supabase secret key は README やコードに書かないでください。
+
+### ルート `.env`
+
 ```bash
-# プロジェクトルートで
-touch .env
+cp .env.example .env
 ```
 
-以下の内容を記入（実際の値は管理者から取得）:
+主な値:
+
 ```env
-# Supabase設定
 SUPABASE_URL=https://your-project-id.supabase.co
 SUPABASE_KEY=your-supabase-anon-key
-
-# OpenAI API設定
 OPENAI_API_KEY=your-openai-api-key
-
-# 開発環境用設定（オプション）
-ENABLE_CORS=false  # Docker環境では不要
 ```
 
-#### フロントエンド用環境変数
-`react-app/.env` ファイルを作成:
+### フロントエンド `.env`
+
 ```bash
-cd react-app
-touch .env
+cd apps/frontend
+New-Item -ItemType File -Force .env
 ```
 
-以下の内容を記入:
+Docker / Nginx 経由:
+
 ```env
-# API エンドポイント（Docker環境の場合）
 VITE_API_URL=https://dev.tanqmates.local.test/api
-
-# 直接アクセスする場合（非Docker）
-# VITE_API_URL=http://localhost:8000
 ```
 
-### 3. 必要なディレクトリ構造の作成
+フロントエンド単体起動:
 
-```bash
-# プロジェクトルートで
-mkdir -p nginx/certs
-mkdir -p backend/logs
-mkdir -p react-app/dist
+```env
+VITE_API_URL=http://localhost:8000
 ```
 
-### 4. SSL証明書の生成（Docker環境用）
+## ローカル HTTPS
 
-#### mkcertのインストール
+Docker 開発環境では `https://dev.tanqmates.local.test` を使います。
+
+### 証明書
+
 ```bash
-# Windows (Chocolatey)
-choco install mkcert
-
-# Mac (Homebrew)
-brew install mkcert
-
-# Linux
-# https://github.com/FiloSottile/mkcert#installation を参照
-```
-
-#### 証明書の生成
-```bash
-# mkcertのCA証明書をシステムに登録
 mkcert -install
-
-# 証明書の生成
 cd nginx/certs
 mkcert dev.tanqmates.local.test
-
-# ファイル名を統一
 mv dev.tanqmates.local.test.pem cert.pem
 mv dev.tanqmates.local.test-key.pem key.pem
-
-# プロジェクトルートに戻る
 cd ../..
 ```
 
-### 5. hostsファイルの編集
+### hosts
 
-#### Windows
-管理者権限でメモ帳を開き、以下のファイルを編集:
-```
-C:\Windows\System32\drivers\etc\hosts
-```
+Windows では管理者権限で `C:\Windows\System32\drivers\etc\hosts` を編集します。Mac / Linux では `/etc/hosts` を編集します。
 
-#### Mac/Linux
-```bash
-sudo nano /etc/hosts
-```
-
-以下の行を追加:
-```
+```text
 127.0.0.1 dev.tanqmates.local.test
 ```
 
-### 6. 依存関係のインストール
+## Docker で起動
 
-#### バックエンド（Python）
+リポジトリルートから実行します。
+
 ```bash
-cd backend
+docker compose -f infra/docker-compose.dev.yml up --build
+```
+
+バックグラウンド起動:
+
+```bash
+docker compose -f infra/docker-compose.dev.yml up -d --build
+```
+
+停止:
+
+```bash
+docker compose -f infra/docker-compose.dev.yml down
+```
+
+ログ:
+
+```bash
+docker compose -f infra/docker-compose.dev.yml logs -f backend
+docker compose -f infra/docker-compose.dev.yml logs -f frontend
+```
+
+アクセス先:
+
+- Web: `https://dev.tanqmates.local.test`
+- API: `https://dev.tanqmates.local.test/api`
+
+## 直接起動
+
+### バックエンド
+
+```bash
+cd apps/backend
 python -m venv venv
-# Windows
 venv\Scripts\activate
-# Mac/Linux
-source venv/bin/activate
-
 pip install -r requirements.txt
-cd ..
-```
-
-#### フロントエンド（React）
-```bash
-cd react-app
-npm install
-cd ..
-```
-
-## 起動方法
-
-### Docker環境で起動（推奨）
-
-```bash
-# 開発環境の起動（初回はビルド含む）
-docker-compose -f docker-compose.dev.yml up --build
-
-# バックグラウンドで起動する場合
-docker-compose -f docker-compose.dev.yml up -d --build
-
-# ログを確認
-docker-compose -f docker-compose.dev.yml logs -f
-```
-
-アクセスURL:
-```
-https://dev.tanqmates.local.test
-```
-
-### 直接起動（非Docker環境）
-
-#### バックエンド起動
-```bash
-cd backend
-# 仮想環境を有効化
-# Windows: venv\Scripts\activate
-# Mac/Linux: source venv/bin/activate
-
-# 起動
-python main.py
-# または
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-#### フロントエンド起動
+Mac / Linux:
+
 ```bash
-cd react-app
+cd apps/backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+API ドキュメント:
+
+- `http://localhost:8000/docs`
+- `http://localhost:8000/redoc`
+
+### フロントエンド
+
+```bash
+cd apps/frontend
+npm install
 npm run dev
 ```
 
-アクセスURL:
-```
-http://localhost:5173
-```
+アクセス先:
 
-## アーキテクチャ
+- `http://localhost:5173`
 
-### Docker環境
-```
-[ブラウザ] 
-    ↓
-https://dev.tanqmates.local.test
-    ↓
-[Nginx (リバースプロキシ)]
-    ├── /api/* → [Backend:8000]
-    └── /* → [Frontend:5173]
-```
+## 検証
 
-### 直接起動環境
-```
-[ブラウザ]
-    ├── http://localhost:5173 → [Frontend]
-    └── http://localhost:8000 → [Backend API]
-```
+### フロントエンド
 
-## 環境の停止
-
-### Docker環境
 ```bash
-# コンテナの停止
-docker-compose -f docker-compose.dev.yml down
-
-# ボリュームも含めて完全にクリーンアップ
-docker-compose -f docker-compose.dev.yml down -v
+cd apps/frontend
+npm run build
 ```
 
-### 直接起動環境
-各ターミナルで `Ctrl+C` で停止
+### バックエンド
+
+```bash
+cd apps/backend
+python -m pytest
+```
+
+`pytest` やテスト依存が不足している場合は、依存を整えるか Docker 環境で確認してください。
 
 ## トラブルシューティング
 
-### 証明書の警告が出る場合
-1. `mkcert -install` が実行されているか確認
-2. ブラウザを完全に再起動
-3. それでも解決しない場合は、証明書を再生成
+### 証明書の警告が出る
 
-### APIアクセスできない場合
+1. `mkcert -install` を実行済みか確認する
+2. ブラウザを完全に再起動する
+3. `nginx/certs/cert.pem` と `nginx/certs/key.pem` を再生成する
+
+### API にアクセスできない
+
 ```bash
-# Docker環境のログ確認
-docker-compose -f docker-compose.dev.yml logs backend
-docker-compose -f docker-compose.dev.yml logs nginx
-
-# ネットワーク確認
-docker network ls
-docker network inspect learning-assistant_default
+docker compose -f infra/docker-compose.dev.yml logs backend
+docker compose -f infra/docker-compose.dev.yml logs nginx
 ```
 
-### ポート競合の場合
+直接起動時は `VITE_API_URL=http://localhost:8000` になっているか確認してください。
+
+### ポートが競合する
+
+Windows:
+
 ```bash
-# 使用中のポート確認（Windows）
 netstat -an | findstr :8000
 netstat -an | findstr :5173
 netstat -an | findstr :443
+```
 
-# 使用中のポート確認（Mac/Linux）
+Mac / Linux:
+
+```bash
 lsof -i :8000
 lsof -i :5173
 lsof -i :443
 ```
 
-### Supabaseに接続できない場合
-1. `.env` ファイルの `SUPABASE_URL` と `SUPABASE_KEY` を確認
-2. Supabaseダッシュボードでプロジェクトのステータスを確認
-3. IPアドレス制限がある場合は、ローカルIPを許可リストに追加
-
 ### フロントエンドのビルドエラー
+
 ```bash
-cd react-app
-# キャッシュクリア
+cd apps/frontend
+Remove-Item -Recurse -Force node_modules
+Remove-Item -Force package-lock.json
+npm install
+npm run build
+```
+
+Mac / Linux:
+
+```bash
+cd apps/frontend
 rm -rf node_modules package-lock.json
 npm install
 npm run build
 ```
 
-### Dockerイメージの再ビルド
-```bash
-# キャッシュを使わずに完全に再ビルド
-docker-compose -f docker-compose.dev.yml build --no-cache
-```
+## 関連ドキュメント
 
-## データベース構造の確認
-Supabaseダッシュボードにアクセスして、以下のテーブルが存在することを確認:
-- users
-- projects
-- memos
-- chat_logs
-- chat_conversations
-- quests
-- user_quests
-- quest_submissions
-- user_learning_profiles
-
-## 開発のヒント
-
-### ホットリロード
-- **バックエンド**: uvicornの`--reload`オプションで自動リロード
-- **フロントエンド**: Viteが自動的にホットリロード対応
-
-### ログの確認
-```bash
-# Docker環境
-docker-compose -f docker-compose.dev.yml logs -f backend
-
-# 直接起動環境
-# backend/logs/ ディレクトリ内のログファイルを確認
-```
-
-### APIドキュメント
-バックエンドが起動している状態で以下にアクセス:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-## 本番環境との違い
-
-| 項目 | 開発環境 | 本番環境 |
-|------|----------|----------|
-| URL | https://dev.tanqmates.local.test | https://demo.tanqmates.org |
-| SSL証明書 | mkcert (自己署名) | Cloudflare |
-| CORS | 無効（同一オリジン） | 有効 |
-| デバッグ | 有効 | 無効 |
-| ログレベル | DEBUG/INFO | WARNING/ERROR |
-
-## よくある質問
-
-### Q: `.env`ファイルの値はどこで取得できますか？
-A: プロジェクト管理者に問い合わせるか、Supabaseで新規プロジェクトを作成してください。
-
-### Q: Dockerを使わずに開発できますか？
-A: はい、可能です。「直接起動（非Docker環境）」の手順に従ってください。
-
-### Q: Windows以外のOSでも動作しますか？
-A: はい、Mac/Linuxでも動作します。適宜コマンドを読み替えてください。
-
-## サポート
-問題が解決しない場合は、GitHubのIssuesに報告してください。
+- [ルート README](../README.md)
+- [設計入口](../DESIGN.md)
+- [バックエンド README](../apps/backend/README.md)
+- [フロントエンド README](../apps/frontend/README.md)
+- [チェックリスト](checklists/README.md)

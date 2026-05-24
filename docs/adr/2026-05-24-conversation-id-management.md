@@ -1,4 +1,6 @@
-# Issue: conversation_id の管理改善
+# ADR: conversation_id の管理改善
+
+この文書は `docs/ISSUE_CONVERSATION_ID_IMPROVEMENT.md` から移動した設計判断メモです。会話 ID の正準化と履歴管理に関する今後の実装判断として扱います。
 
 ## 作成日
 2024-03-18
@@ -148,9 +150,9 @@ class ConversationManager:
    - 高度な検索機能
 
 ## 参考資料
-- 現在の実装: `backend/services/chat_service.py:477-522`
-- フロントエンド: `react-app/src/components/MemoChat/AIChat.tsx:352-397`
-- Store管理: `react-app/src/stores/chatStore.ts:355-358`
+- 現在の実装: `apps/backend/services/chat_service.py`
+- フロントエンド: `apps/frontend/src/components/MemoChat/AIChat.tsx`
+- Store管理: `apps/frontend/src/stores/chatStore.ts`
 
 ## 備考
 この改善は、チャットシステム全体の安定性と信頼性を大幅に向上させる重要な取り組みである。特に、ユーザーが「次の日に開いたら表示がおかしくなる」という問題の根本的な解決につながる。

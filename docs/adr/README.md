@@ -1,0 +1,7 @@
+# ADR
+
+重要な設計判断を管理します。
+
+- [2026-05-24 conversation id management](2026-05-24-conversation-id-management.md)
+
+過去の作業メモではなく、今後の実装判断に影響する内容だけを残します。
