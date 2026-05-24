@@ -1,142 +1,89 @@
-# 探Qメイト - React版
+# 探Qメイト Frontend
 
-AIを活用した探究学習支援アプリケーションのReact版です。Streamlitの制限を克服し、より柔軟で高機能なメモ&チャット統合UIを提供します。
+`apps/frontend` は、探Qメイトの Vite + React フロントエンドです。生徒の探究チャット、メモ、日誌、クエスト、教師・管理者向け画面を提供し、FastAPI バックエンドと Supabase Auth に接続します。
 
-## 🚀 新機能
+現行構成の正本はリポジトリルートの [README.md](../../README.md)、[AGENTS.md](../../AGENTS.md)、[DESIGN.md](../../DESIGN.md) です。フロントエンド実装はこの `apps/frontend` を正とします。
 
-### メモ&チャット統合UI
-- **リサイズ可能な分割パネル**: 左側メモ、右側チャットのサイズを自由に調整
-- **リアルタイム連携**: メモ内容がAI回答に自動反映
-- **レスポンシブデザイン**: モバイルでは縦並び配置
-- **スムーズなアニメーション**: Framer Motionによる美しいトランジション
+## 技術スタック
 
-### 探究学習の4ステップ
-1. **Step 1: テーマ設定** - 興味から探究テーマを決定
-2. **Step 2: 目標設定** - AIとの対話で学習目標を明確化
-3. **Step 3: アイディエーション** - 活動計画の立案（サイドバーヒント付き）
-4. **Step 4: まとめ** - 学習成果の整理と振り返り
+- Vite
+- React 18
+- TypeScript
+- Material UI v5
+- Zustand
+- React Query
+- React Router
+- Supabase Auth
+- Framer Motion
 
-### AI相談機能
-- **統合メモ&チャット**: 相談内容をメモで整理しながらAIと対話
-- **よくある相談例**: ワンクリックで典型的な質問を送信
-- **カテゴリ別相談**: テーマ設定、目標・計画、研究方法の3カテゴリ
+## セットアップ
 
-## 🛠️ 技術スタック
+フロントエンドの起動・ビルドは Docker Compose 経由を標準とします。環境変数はリポジトリルートの `.env.example` を参考に設定します。Docker 開発環境では `VITE_API_URL=/api` が使われます。
 
-- **Frontend**: React 18 + TypeScript
-- **UI Framework**: Material-UI (MUI) v5
-- **Animation**: Framer Motion
-- **Layout**: React Resizable Panels
-- **State Management**: Zustand
-- **Routing**: React Router v6
-- **HTTP Client**: React Query
-- **Build Tool**: Vite
+## 起動
 
-## 📦 インストールと実行
+リポジトリルートから実行します。
 
-### 前提条件
-- Node.js 18.0以上
-- npm または yarn
-
-### セットアップ
-
-1. 依存関係のインストール:
 ```bash
-cd react-app
-npm install
+docker compose -f infra/docker-compose.dev.yml up --build
 ```
 
-2. 開発サーバーの起動:
+バックグラウンド起動:
+
 ```bash
-npm run dev
+docker compose -f infra/docker-compose.dev.yml up -d --build
 ```
 
-3. ブラウザで http://localhost:5173 を開く
+フロントエンドのログ確認:
 
-### ビルド
 ```bash
-npm run build
+docker compose -f infra/docker-compose.dev.yml logs -f frontend
 ```
 
-## 🎨 主要コンポーネント
+Nginx 経由の Web/API は `https://dev.tanqmates.local.test` で確認します。hosts と証明書の設定は [docs/DEVELOPMENT_SETUP.md](../../docs/DEVELOPMENT_SETUP.md) を参照してください。
 
-### MemoChat
-リサイズ可能なメモ&チャット統合コンポーネント
-```tsx
-<MemoChat
-  pageId="step2"
-  memoTitle="💭 思考メモ"
-  memoPlaceholder="考えを整理してください..."
-  chatPlaceholder="AIに質問してください..."
-  initialMessage="初期メッセージ"
-  onMessageSend={handleAIMessage}
-/>
+## ビルド / 検証
+
+```bash
+docker compose -f infra/docker-compose.dev.yml run --rm frontend npm run build
 ```
 
-### StepPage
-探究学習の各ステップを表示する統一コンポーネント
-- ステップ別のメモ&チャットUI
-- プログレスバー
-- ナビゲーション機能
+追加の静的検査を行う場合も Docker 経由で実行します。現時点ではビルド成功と対象画面の手動確認を基本の確認基準にします。
 
-## 🌟 Streamlit版との違い
+## 主要ディレクトリ
 
-| 機能 | Streamlit版 | React版 |
-|------|------------|---------|
-| レイアウト | 固定 | リサイズ可能な分割パネル |
-| レスポンシブ | 限定的 | 完全対応 |
-| アニメーション | なし | Framer Motion |
-| UI制御 | 制限あり | 完全カスタマイズ可能 |
-| パフォーマンス | 中 | 高 |
-| 開発効率 | 高 | 中 |
-
-## 🔧 今後の実装予定
-
-- [ ] Supabase連携（データ永続化）
-- [ ] 実際のAI API統合
-- [ ] PWA対応
-- [ ] オフライン機能
-- [ ] エクスポート機能（PDF、Word）
-- [ ] チーム共有機能
-- [ ] プラグインシステム
-
-## 📁 プロジェクト構造
-
-```
-react-app/
+```text
+apps/frontend/
 ├── src/
-│   ├── components/
-│   │   ├── MemoChat/          # メモ&チャット統合UI
-│   │   ├── Layout/            # レイアウトコンポーネント
-│   │   └── ...
-│   ├── pages/
-│   │   ├── StepPage.tsx       # 統一ステップページ
-│   │   ├── GeneralInquiryPage.tsx  # AI相談ページ
-│   │   └── ...
-│   ├── stores/                # Zustand状態管理
-│   ├── styles/                # グローバルスタイル
-│   └── lib/                   # ユーティリティ
+│   ├── components/          # 画面内 UI と再利用部品
+│   ├── components/common/   # 共通 UI 部品
+│   ├── pages/               # ルーティング単位の画面
+│   ├── services/            # API クライアントと機能別通信処理
+│   ├── stores/              # Zustand によるアプリ状態
+│   ├── hooks/               # 画面横断の振る舞い
+│   ├── lib/                 # 共通ライブラリ
+│   ├── styles/              # design-system token とグローバル CSS
+│   └── utils/               # 汎用ユーティリティ
+├── public/
 ├── package.json
-└── README.md
+├── vite.config.ts
+├── vite.config.docker.ts
+└── Dockerfile
 ```
 
-## 🚀 Getting Started
+## 実装メモ
 
-1. 新規ユーザー登録またはログイン
-2. Step 1でテーマ設定
-3. 各ステップでメモを書きながらAIと対話
-4. パネルサイズを調整して最適な作業環境を構築
+- API 呼び出しは `src/services` または `src/lib/api.ts` の既存方針に合わせます。
+- 認証状態は `src/stores/authStore.ts` と Supabase 関連 hook / lib の責務を尊重します。
+- 共通 UI は `src/components/common` を優先します。
+- 色、余白、角丸、影、タイポグラフィは `src/styles/design-system.ts` のトークンに寄せます。
+- 固定色の直書きや画面単位の独自パレットは避けます。
+- 画面の雰囲気は [DESIGN.md](../../DESIGN.md) を正本にします。詳細背景が必要な場合は [docs/design_system_master_spec.md](../../docs/design_system_master_spec.md) も参照します。
 
-## 📱 モバイル対応
+## 関連ドキュメント
 
-- タブレット: 縦並び自動切替
-- スマートフォン: タッチ最適化UI
-- PWA: ホーム画面追加対応（実装予定）
-
-## 🎯 目標
-
-Reactの柔軟性を活かして、AIコードエディターのような直感的で生産性の高い学習環境を提供することを目指しています。
-
----
-
-**Note**: このアプリは教育目的で作成されており、実際のAI APIは現在モックアップです。本格運用の際は適切なAPI連携を行ってください。 
+- [ルート README](../../README.md)
+- [設計入口](../../DESIGN.md)
+- [開発環境セットアップ](../../docs/DEVELOPMENT_SETUP.md)
+- [デザインシステム正本](../../DESIGN.md)
+- [チャット応答生成アーキテクチャ](../../docs/chat_response_architecture.mmd)

@@ -187,7 +187,7 @@
 - HTML を扱うならサニタイズポリシーを明示する
 
 8. ビルドとテストを誰でも再現できる状態にする
-- `npm ci` / `npm run build` が通る
+- Docker 経由のフロントエンドビルドが通る
 - Python venv と `pytest` が揃う
 - README または手順書に実行コマンドを固定化する
 
@@ -204,7 +204,7 @@
 
 確認方法:
 1. `apps/frontend` で依存関係をクリーンインストールする
-2. `npm run build` を実行する
+2. `docker compose -f infra/docker-compose.dev.yml run --rm frontend npm run build` を実行する
 3. エラーなく完了することを確認する
 4. `dist` 配下に `index.html`、JS、CSS、manifest、icon 類が出力されることを確認する
 
@@ -223,7 +223,7 @@
 確認方法:
 1. `.venv` もしくは指定の Python 環境を有効化する
 2. `apps/backend/requirements.txt` を導入する
-3. `python -m pytest` を実行する
+3. `docker compose -f infra/docker-compose.dev.yml run --rm backend python -m pytest` を実行する
 4. 失敗時は依存不足かテスト失敗かを切り分ける
 
 手動チェックポイント:
