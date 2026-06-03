@@ -1,0 +1,143 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+.wrap { font-family: var(--font-sans); padding: 2px; }
+.header { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 12px; border-bottom: 0.5px solid var(--color-border-tertiary); margin-bottom: 18px; }
+.class-name { font-size: 15px; font-weight: 500; color: var(--color-text-primary); }
+.header-sub { font-size: 12px; color: var(--color-text-secondary); }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.jcard {
+  background: var(--color-background-primary);
+  border: 0.5px solid var(--color-border-tertiary);
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+.jcard:hover { border-color: var(--color-border-secondary); }
+.jcard-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.jcard-name { font-size: 12px; font-weight: 500; color: var(--color-text-primary); }
+.jcard-num { font-size: 10px; color: var(--color-text-secondary); margin-top: 1px; }
+.jcard-preview {
+  font-size: 11px; color: var(--color-text-secondary); line-height: 1.6;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.jcard-preview em { font-style: normal; color: var(--color-text-primary); }
+</style>
+
+<div class="wrap">
+  <div class="header">
+    <span class="class-name">3年2組 総合探究</span>
+    <span class="header-sub">32名 · 本日更新 29件</span>
+  </div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+<script>
+var emos = {
+  wakuwaku: { fill:'#FAEEDA', stroke:'#EF9F27', text:'#854F0B', dur:1.8, s0:0.93, s1:1.07,
+    p0:'M50,12 C68,10 88,22 90,40 C93,58 82,75 68,82 C54,90 32,90 20,78 C8,66 7,46 16,30 C24,15 32,14 50,12 Z',
+    p1:'M50,10 C70,8 92,20 93,42 C94,62 80,78 62,85 C44,92 24,88 14,72 C4,56 6,34 18,20 C28,8 32,12 50,10 Z' },
+  tanoshii: { fill:'#FAECE7', stroke:'#D85A30', text:'#993C1D', dur:1.6, s0:0.92, s1:1.08,
+    p0:'M50,8 C68,4 90,18 92,38 C94,56 80,76 62,84 C44,92 22,90 10,76 C-2,62 2,38 14,22 C24,8 34,12 50,8 Z',
+    p1:'M50,6 C70,2 92,16 94,38 C96,58 80,78 60,86 C40,94 20,92 8,78 C-4,64 0,38 12,22 C22,8 32,10 50,6 Z' },
+  omoshiroi: { fill:'#EAF3DE', stroke:'#639922', text:'#3B6D11', dur:2.0, s0:0.92, s1:1.08,
+    p0:'M50,10 C66,6 86,16 90,34 C94,52 82,72 64,82 C46,92 24,90 12,76 C0,62 4,38 16,24 C26,10 34,14 50,10 Z',
+    p1:'M50,8 C68,4 90,16 94,36 C98,56 82,76 62,86 C42,96 22,92 10,78 C-2,64 2,38 14,24 C24,10 34,12 50,8 Z' },
+  sukkiri: { fill:'#E1F5EE', stroke:'#1D9E75', text:'#0F6E56', dur:3.2, s0:0.97, s1:1.03,
+    p0:'M50,10 C65,8 82,20 86,38 C90,55 80,74 64,82 C48,90 28,86 16,72 C4,58 6,36 18,22 C28,10 36,12 50,10 Z',
+    p1:'M50,12 C63,10 80,22 84,40 C88,57 78,76 62,84 C46,92 26,88 14,74 C2,60 4,38 16,24 C26,12 36,14 50,12 Z' },
+  moyamoya: { fill:'#EEEDFE', stroke:'#7F77DD', text:'#534AB7', dur:4.5, s0:0.94, s1:1.06,
+    p0:'M48,14 C62,8 84,18 88,36 C92,52 80,72 64,82 C48,90 26,88 14,74 C2,60 6,38 18,24 C28,12 36,18 48,14 Z',
+    p1:'M52,10 C68,6 88,20 90,40 C92,56 78,76 60,86 C42,94 22,86 12,70 C2,54 8,32 22,20 C34,8 38,14 52,10 Z' },
+  fuan: { fill:'#E6F1FB', stroke:'#378ADD', text:'#185FA5', dur:2.4, s0:0.94, s1:1.04,
+    p0:'M50,16 C66,10 86,24 88,42 C90,58 78,76 62,84 C46,92 24,88 14,74 C4,60 8,38 20,26 C30,14 36,20 50,16 Z',
+    p1:'M50,14 C68,8 90,22 90,44 C90,62 76,78 58,86 C40,94 20,88 12,72 C4,56 8,34 20,22 C30,10 34,18 50,14 Z' },
+  muzukashii: { fill:'#FBEAF0', stroke:'#D4537E', text:'#993556', dur:3.8, s0:0.95, s1:1.05,
+    p0:'M50,14 C64,10 82,22 86,40 C90,56 80,74 64,84 C48,92 28,88 16,74 C4,60 6,40 16,26 C26,12 36,18 50,14 Z',
+    p1:'M50,12 C66,8 84,24 86,42 C88,58 76,76 60,86 C44,94 26,90 14,76 C2,62 4,42 14,28 C24,14 36,16 50,12 Z' },
+  ikizumari: { fill:'#FCEBEB', stroke:'#E24B4A', text:'#A32D2D', dur:6.0, s0:0.98, s1:1.02,
+    p0:'M50,18 C64,14 80,26 84,44 C88,60 76,76 60,84 C44,92 24,86 14,70 C4,54 10,34 24,22 C34,12 38,22 50,18 Z',
+    p1:'M50,20 C62,16 78,28 82,46 C86,62 74,78 58,86 C42,94 22,88 12,72 C2,56 8,36 22,24 C32,14 38,24 50,20 Z' },
+};
+
+var students = [
+  {name:'佐藤 葵',     num:'1番',  emo:'wakuwaku',  preview:'「使う動機の構造が問題だ」という気づきを語っていました。探究が深まっています。'},
+  {name:'鈴木 蓮',     num:'2番',  emo:'tanoshii',  preview:'フィールド調査のアポ取りに成功。「本物の声が聞けた」と喜んでいました。'},
+  {name:'高橋 陽菜',   num:'3番',  emo:'muzukashii',preview:'問いの言語化で詰まっています。「言いたいことはあるのに言葉にならない」と。'},
+  {name:'田中 健司',   num:'4番',  emo:'moyamoya',  preview:'テーマを食品ロスに絞ったが、問いの型がまだ告発型にとどまっています。'},
+  {name:'伊藤 翔',     num:'5番',  emo:'fuan',      preview:'eスポーツの定義調査を進めています。自分の問いとの接続がまだ弱い様子。'},
+  {name:'渡辺 さくら', num:'6番',  emo:'sukkiri',   preview:'今日ようやく「問い」の形が定まった様子。次のステップが見えてきています。'},
+  {name:'山本 大地',   num:'7番',  emo:'omoshiroi', preview:'図書館調査で意外な資料を発見。「こんなデータあったんだ」と興奮気味。'},
+  {name:'中村 結衣',   num:'8番',  emo:'ikizumari', preview:'5日間ログが途絶えています。「何を調べればいいかわからない」状態が続いています。'},
+  {name:'小林 澪',     num:'9番',  emo:'fuan',      preview:'テーマに精神医療を選んだ。個人的な動機がある様子で慎重に関わりたい。'},
+  {name:'加藤 悠',     num:'10番', emo:'moyamoya',  preview:'方向は定まっているが「何から手をつければいいか」で止まっています。'},
+  {name:'吉田 花音',   num:'11番', emo:'tanoshii',  preview:'インタビュー準備を開始。「聞きたいこと多すぎてどうしよう」と楽しそう。'},
+  {name:'山田 涼',     num:'12番', emo:'moyamoya',  preview:'商店街の取材イメージが出てきました。問いが自分ごとになってきた手応えあり。'},
+  {name:'松本 陸',     num:'13番', emo:'muzukashii',preview:'統計データを読んでいるが、解釈の方法がわからず詰まっています。'},
+  {name:'井上 美咲',   num:'14番', emo:'wakuwaku',  preview:'比較対象の国が決まり、調査の方向性が一気に明確になってきた様子。'},
+  {name:'木村 花',     num:'15番', emo:'omoshiroi', preview:'インフルエンサーの変遷を時系列で整理中。「時代ごとに全然違う」と発見を楽しんでいます。'},
+  {name:'林 颯太',     num:'16番', emo:'sukkiri',   preview:'先週のフィードバックを受けて問いを整理し直した。スッキリした様子。'},
+  {name:'清水 莉奈',   num:'17番', emo:'fuan',      preview:'発表が近いことを意識して焦りがある様子。内容はしっかり進んでいます。'},
+  {name:'山崎 拓海',   num:'18番', emo:'tanoshii',  preview:'地域の人へのアンケートを自分で設計。「こんなに楽しいとは」と話していました。'},
+  {name:'池田 ひなた', num:'19番', emo:'wakuwaku',  preview:'新しい文献を見つけ、問いがさらに深まりそうな予感がしている段階。'},
+  {name:'橋本 颯',     num:'20番', emo:'muzukashii',preview:'問いは立てたが、どんな方法で検証すればよいかわからず止まっています。'},
+  {name:'石川 つばさ', num:'21番', emo:'omoshiroi', preview:'仮説と実態が食い違っていることに気づき「これが面白い」と前向きに捉えています。'},
+  {name:'前田 心',     num:'22番', emo:'moyamoya',  preview:'テーマへの関心は本物だが、問いの射程が広すぎて絞り込みに苦労しています。'},
+  {name:'藤田 葉月',   num:'23番', emo:'sukkiri',   preview:'今日は落ち着いて作業に集中できた様子。進捗もしっかり出ています。'},
+  {name:'後藤 蒼',     num:'24番', emo:'ikizumari', preview:'前回から進展なし。テーマ自体を変えたいという気持ちが出てきている様子。'},
+  {name:'岡田 凜',     num:'25番', emo:'fuan',      preview:'グループ発表のフィードバックが気になっている様子。自信が揺らいでいます。'},
+  {name:'長谷川 悠斗', num:'26番', emo:'wakuwaku',  preview:'新しい切り口を思いついたと興奮気味。問いが「問いらしくなってきた」段階。'},
+  {name:'村上 柚希',   num:'27番', emo:'tanoshii',  preview:'取材先から快諾の返事。「本当に会えるんだ」と実感が湧いてきた様子。'},
+  {name:'鈴木 大輝',   num:'28番', emo:'omoshiroi', preview:'AIに詩を書かせて比較実験中。「これ哲学じゃん」と自分で気づいていました。'},
+  {name:'中島 彩',     num:'29番', emo:'muzukashii',preview:'データ収集は進んでいるが、そこから何が言えるのかがまだわかっていない状態。'},
+  {name:'小川 歩夢',   num:'30番', emo:'sukkiri',   preview:'長かったモヤモヤ期を抜けて、今日ようやく問いの形が決まりました。'},
+  {name:'西村 朱音',   num:'31番', emo:'fuan',      preview:'問いは立てたが「これでいいのか」という不安が続いています。背中を押したい。'},
+  {name:'中田 倫太郎', num:'32番', emo:'moyamoya',  preview:'何に興味があるかはわかっているが、それをどう問いにするかで迷走中。'},
+];
+
+var svgNS = 'http://www.w3.org/2000/svg';
+var grid = document.getElementById('grid');
+
+students.forEach(function(s, i) {
+  var e = emos[s.emo];
+  var card = document.createElement('div');
+  card.className = 'jcard';
+
+  var iconSVG = '<svg width="36" height="36" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" id="ico-' + i + '" style="flex-shrink:0;">'
+    + '<path id="icp-' + i + '" d="' + e.p0 + '" fill="' + e.fill + '" stroke="' + e.stroke + '" stroke-width="2"/>'
+    + '<text x="50" y="56" text-anchor="middle" font-size="38" font-family="sans-serif" fill="' + e.text + '" font-weight="500">' + s.name[0] + '</text>'
+    + '</svg>';
+
+  card.innerHTML = '<div class="jcard-head">'
+    + iconSVG
+    + '<div><div class="jcard-name">' + s.name + '</div><div class="jcard-num">' + s.num + '</div></div>'
+    + '</div>'
+    + '<div class="jcard-preview">' + s.preview + '</div>';
+
+  grid.appendChild(card);
+});
+
+setTimeout(function() {
+  students.forEach(function(s, i) {
+    var e = emos[s.emo];
+    var path = document.getElementById('icp-' + i);
+    if (path) {
+      gsap.to(path, {
+        duration: e.dur, repeat: -1, yoyo: true, ease: 'sine.inOut',
+        attr: { d: e.p1 }, delay: (i * 0.13) % e.dur
+      });
+    }
+    var ico = document.getElementById('ico-' + i);
+    if (ico) {
+      gsap.fromTo(ico,
+        { scale: e.s0, transformOrigin: '50% 50%' },
+        { scale: e.s1, transformOrigin: '50% 50%',
+          duration: e.dur, repeat: -1, yoyo: true, ease: 'sine.inOut',
+          delay: (i * 0.13) % e.dur }
+      );
+    }
+  });
+}, 200);
+</script>

@@ -1,76 +1,66 @@
-# Node.js関連
-node_modules
-npm-debug.log
-yarn-debug.log
-yarn-error.log
-.pnpm-debug.log
+# Node modules and build files
+apps/frontend/node_modules
+apps/frontend/dist
+apps/frontend/archive
+apps/frontend/.parcel-cache
+apps/frontend/.cache
+apps/frontend/coverage
 
-# ビルド出力
-dist
-build
-.next
-.nuxt
+# Python cache
+apps/backend/__pycache__
+apps/backend/*.py[cod]
+apps/backend/*$py.class
+apps/backend/.pytest_cache
+apps/backend/.coverage
+apps/backend/htmlcov
 
-# 環境変数ファイル
-.env
-.env.local
-.env.development
-.env.test.local
-.env.production.local
+# Documentation
+*.md
+README*
+CHANGELOG*
+LICENSE*
 
-# ログファイル
-*.log
+# Version control
+.git
+.gitignore
+.github
 
-# IDE・エディタ設定
+# IDE files
 .vscode
 .idea
 *.swp
 *.swo
 *~
 
-# OS関連
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+# Environment files (copy them separately if needed)
+.env.local
+.env.development
+.env.test
 
-# Git関連
-.git
-.gitignore
-.gitattributes
+# Test files
+test_*
+*_test.*
+*.test.*
+**/tests
+**/test
 
-# Docker関連
-Dockerfile
-docker-compose*.yml
-.dockerignore
-
-# テスト・カバレッジ
-coverage
-.nyc_output
-.jest
-test-results
-
-# 一時ファイル
+# Temporary files
 tmp
 temp
+*.tmp
+*.temp
+*.log
 
-# Python関連
-__pycache__
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.egg-info
-.pytest_cache
-.coverage
+# OS files
+.DS_Store
+Thumbs.db
 
-# ドキュメント
-README.md
-*.md
-docs
+# Experiment and archive folders
+experiment
+archive
 
-# 負荷テスト結果
-load_test_result_*.json 
+# SQL files
+*.sql
+
+# Static files (if not needed)
+static/*.css

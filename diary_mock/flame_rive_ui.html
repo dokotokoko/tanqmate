@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>探究の温度 — 炎UI</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500&family=Noto+Serif+JP:wght@400;600&display=swap" rel="stylesheet">
+
+<!-- ① Rive web runtime -->
+<script src="https://unpkg.com/@rive-app/canvas@2.21.6/rive.js"></script>
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --cream: #F5F1EA;
+  --ink: #1C1A16;
+  --ink-muted: #6B6558;
+  --ink-faint: #B8B0A2;
+  --border: #D8D2C8;
+  --fire-lo: #B8B0A2;
+  --fire-hi: #CC3300;
+}
+body {
+  background: var(--cream);
+  font-family: 'Noto Sans JP', sans-serif;
+  font-weight: 300;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+
+/* ── Card ── */
+.card {
+  width: 100%;
+  max-width: 400px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.card-header {
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.hnum {
+  width: 20px; height: 20px;
+  background: var(--ink); color: white;
+  border-radius: 50%; font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.htitle {
+  font-size: 11px; letter-spacing: 0.14em;
+  color: var(--ink-muted); font-weight: 500;
+}
+
+/* ── Rive canvas ──────────────────────────────────────────
+   ② ここを差し替えるだけ。
+   canvas のサイズは .riv アートボードに合わせて変更してください。
+────────────────────────────────────────────────────────── */
+.flame-area {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 220px;
+  background: #FDFAF6;
+  cursor: ns-resize;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#rive-canvas {
+  display: block;
+  width: 160px;
+  height: 200px;
+  /* pointer-events: none でドラッグを通過させる */
+  pointer-events: none;
+}
+
+/* placeholder: .riv を読み込めていない開発中に表示 */
+.flame-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+}
+.placeholder-icon {
+  font-size: 64px;
+  line-height: 1;
+  transition: transform 0.15s, filter 0.15s;
+  filter: grayscale(0.6);
+}
+.placeholder-hint {
+  font-size: 10px;
+  color: var(--ink-faint);
+  letter-spacing: 0.08em;
+}
+/* riveが読み込まれたらplaceholderを隠す */
+.rive-loaded .flame-placeholder { display: none; }
+
+/* ── Motivation text ── */
+.motivation-wrap {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 24px 0;
+}
+.motivation-text {
+  font-family: 'Noto Serif JP', serif;
+  font-size: 17px;
+  color: var(--ink);
+  text-align: center;
+  line-height: 1.6;
+  transition: color 0.2s, opacity 0.15s;
+  min-height: 28px;
+}
+.motivation-text.idle {
+  font-size: 12px;
+  color: var(--ink-faint);
+  letter-spacing: 0.06em;
+  font-family: 'Noto Sans JP', sans-serif;
+}
+
+/* ── Score badge ── */
+.score-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 24px 0;
+}
+.score-num {
+  font-family: 'Noto Serif JP', serif;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--ink);
+  min-width: 44px;
+  text-align: right;
+  transition: color 0.2s;
+  line-height: 1;
+}
+.score-unit {
+  font-size: 11px;
+  color: var(--ink-faint);
+  letter-spacing: 0.06em;
+  align-self: flex-end;
+  padding-bottom: 2px;
+}
+
+/* ── Track ── */
+.track-section {
+  padding: 16px 24px 28px;
+}
+.tick-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.tick {
+  font-size: 9px;
+  color: var(--ink-faint);
+  letter-spacing: 0.04em;
+  text-align: center;
+  flex: 1;
+  line-height: 1.4;
+  transition: color 0.2s, font-weight 0.15s;
+}
+.tick.on { color: var(--fire-hi); font-weight: 500; }
+
+.track {
+  position: relative;
+  height: 5px;
+  background: var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  touch-action: none;
+}
+/* 4分の1ごとのノッチ */
+.track::before, .track::after,
+.track .notch-1, .track .notch-2 {
+  content: '';
+  position: absolute;
+  top: -3px; bottom: -3px;
+  width: 1px;
+  background: white;
+  z-index: 2;
+}
+.track::before { left: 25%; }
+.track::after  { left: 50%; }
+.track .notch-3 {
+  position: absolute;
+  top: -3px; bottom: -3px; left: 75%;
+  width: 1px; background: white; z-index: 2;
+}
+
+.track-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  border-radius: 3px;
+  background: linear-gradient(to right, #FFAA44, #FF4400);
+  width: 0%;
+  transition: width 0.04s;
+  pointer-events: none;
+}
+.thumb {
+  position: absolute;
+  top: 50%; left: 0;
+  transform: translate(-50%, -50%);
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: white;
+  border: 2.5px solid #FF5500;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.16);
+  cursor: grab;
+  transition: box-shadow 0.1s, transform 0.06s;
+  touch-action: none;
+  z-index: 3;
+}
+.thumb:active {
+  cursor: grabbing;
+  transform: translate(-50%, -50%) scale(1.2);
+  box-shadow: 0 0 0 5px rgba(255,80,0,0.15), 0 1px 5px rgba(0,0,0,0.16);
+}
+</style>
+</head>
+<body>
+
+<div class="card" id="card">
+  <div class="card-header">
+    <div class="hnum">4</div>
+    <span class="htitle">今日の探究心の温度</span>
+  </div>
+
+  <!-- ─────────────────────────────────────────────────────
+       炎エリア
+       .riv を読み込んだら canvas が前面に表示される
+       placeholder は開発確認用（本番では不要）
+  ───────────────────────────────────────────────────────── -->
+  <div class="flame-area" id="flame-area">
+
+    <!-- ③ Rive canvas ここだけ差し替え -->
+    <canvas id="rive-canvas"></canvas>
+
+    <!-- 開発時placeholder（Riveロード後は非表示） -->
+    <div class="flame-placeholder">
+      <div class="placeholder-icon" id="placeholder-icon">🕯️</div>
+      <div class="placeholder-hint">← ここに .riv の炎が入ります</div>
+    </div>
+  </div>
+
+  <!-- モチベーションテキスト -->
+  <div class="motivation-wrap">
+    <div class="motivation-text idle" id="mot-text">
+      スライダーを動かしてみよう
+    </div>
+  </div>
+
+  <!-- スコア -->
+  <div class="score-row">
+    <span class="score-num" id="score-num">—</span>
+    <span class="score-unit">/ 100</span>
+  </div>
+
+  <!-- Track -->
+  <div class="track-section">
+    <div class="tick-row">
+      <span class="tick" id="tk0">消えそう</span>
+      <span class="tick" id="tk1">弱火</span>
+      <span class="tick" id="tk2">中火</span>
+      <span class="tick" id="tk3">強火</span>
+    </div>
+    <div class="track" id="track">
+      <div class="notch-3"></div>
+      <div class="track-fill" id="track-fill"></div>
+      <div class="thumb" id="thumb"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   モチベーション文言マップ（0–100の連続スペクトラム）
+   ================================================================ */
+const MOTIVATIONS = [
+  { min: 0,   max: 8,   text: "もう疲れた。",                     emoji: "💤" },
+  { min: 8,   max: 20,  text: "うーん、ちょっと立ち止まってきたかも。", emoji: "😶" },
+  { min: 20,  max: 35,  text: "なんか気になってきた。",             emoji: "👀" },
+  { min: 35,  max: 50,  text: "楽しくなってきた！",                 emoji: "😊" },
+  { min: 50,  max: 65,  text: "もっとやりたい！",                   emoji: "😄" },
+  { min: 65,  max: 80,  text: "まだまだやりたい！",                 emoji: "🔥" },
+  { min: 80,  max: 101, text: "まだまだやりたい！放課後もやりたい！", emoji: "🔥🔥" },
+];
+
+/* ================================================================
+   ④ Rive セットアップ
+   ここを実際の .riv に差し替えるだけで完成します。
+
+   【差し替え手順】
+   1. flame.riv を /public などに配置（またはCDN URL）
+   2. src を実際のパスに変更
+   3. stateMachines を .riv 内のState Machine名に変更
+   4. INPUT_NAME を Number Input の名前に変更
+   5. 不要なら placeholderIcon の更新処理を削除
+
+   State Machine Input の仕様:
+     Type   : Number
+     Range  : 0 〜 100（または 0.0 〜 1.0 — スケールは下で調整）
+     Name   : 例 "heat" / "intensity" / "flame_level"
+   ================================================================ */
+const RIVE_SRC        = 'flame1.riv';   // ← ② .riv ファイルパス
+const STATE_MACHINE   = 'FlameControl'; // ← ③ State Machine 名
+const INPUT_NAME      = 'heat';         // ← ④ Number Input 名
+const INPUT_SCALE     = 1.0;            // 1.0 = 0–100 渡す / 0.01 = 0.0–1.0 に変換
+
+let heatInput = null;
+let riveLoaded = false;
+
+try {
+  const r = new rive.Rive({
+    src: RIVE_SRC,
+    canvas: document.getElementById('rive-canvas'),
+    autoplay: true,
+    stateMachines: STATE_MACHINE,
+    onLoad: () => {
+      const inputs = r.stateMachineInputs(STATE_MACHINE);
+      heatInput = inputs?.find(i => i.name === INPUT_NAME) ?? null;
+      if (heatInput) {
+        riveLoaded = true;
+        document.getElementById('card').classList.add('rive-loaded');
+      }
+    },
+    onLoadError: () => {
+      // .riv が見つからない場合はplaceholderのまま継続
+      console.info('[探Qメイト] flame.riv が見つかりません。placeholderで動作します。');
+    },
+  });
+} catch (e) {
+  console.info('[探Qメイト] Rive初期化スキップ:', e.message);
+}
+
+/* ================================================================
+   スライダー / ドラッグ ロジック
+   ================================================================ */
+const track     = document.getElementById('track');
+const trackFill = document.getElementById('track-fill');
+const thumb     = document.getElementById('thumb');
+const scoreNum  = document.getElementById('score-num');
+const motText   = document.getElementById('mot-text');
+const flameArea = document.getElementById('flame-area');
+const placeholderIcon = document.getElementById('placeholder-icon');
+const ticks     = [
+  document.getElementById('tk0'),
+  document.getElementById('tk1'),
+  document.getElementById('tk2'),
+  document.getElementById('tk3'),
+];
+
+let value = -1;
+let dragging = false;
+
+function getMotivation(v) {
+  return MOTIVATIONS.find(m => v >= m.min && v < m.max) ?? MOTIVATIONS.at(-1);
+}
+
+function applyValue(v) {
+  v = Math.max(0, Math.min(100, v));
+  if (value === Math.round(v)) return; // 変化なし
+  value = v;
+
+  const pct = v;
+
+  /* Track UI */
+  trackFill.style.width = pct + '%';
+  thumb.style.left      = pct + '%';
+
+  /* Score */
+  scoreNum.textContent  = Math.round(v);
+  const hue = Math.round(25 - v * 0.2);
+  const sat = Math.round(v * 0.8);
+  const lit = Math.round(42 - v * 0.1);
+  scoreNum.style.color = v > 5
+    ? `hsl(${hue},${sat}%,${lit}%)`
+    : 'var(--ink)';
+
+  /* Motivation text */
+  const m = getMotivation(v);
+  motText.textContent   = m.text;
+  motText.classList.remove('idle');
+  motText.style.color   = v > 5
+    ? `hsl(${hue},${Math.round(sat * 0.7)}%,${Math.round(lit * 0.9)}%)`
+    : 'var(--ink)';
+
+  /* Tick highlight */
+  const ti = v < 25 ? 0 : v < 50 ? 1 : v < 75 ? 2 : 3;
+  ticks.forEach((t, i) => t.classList.toggle('on', i === ti));
+
+  /* Placeholder emoji（Riveが未ロードの場合のフォールバック） */
+  if (!riveLoaded) {
+    placeholderIcon.textContent = m.emoji;
+    placeholderIcon.style.fontSize = `${40 + v * 0.5}px`;
+    placeholderIcon.style.filter   = v > 5 ? 'grayscale(0)' : 'grayscale(0.8)';
+  }
+
+  /* ⑤ Rive Input に値を渡す（ロード済みの場合のみ） */
+  if (heatInput) {
+    heatInput.value = v * INPUT_SCALE;
+  }
+}
+
+/* Track クリック */
+function clientXToValue(clientX) {
+  const r = track.getBoundingClientRect();
+  return ((clientX - r.left) / r.width) * 100;
+}
+
+track.addEventListener('pointerdown', e => {
+  dragging = true;
+  track.setPointerCapture(e.pointerId);
+  applyValue(clientXToValue(e.clientX));
+  e.preventDefault();
+});
+track.addEventListener('pointermove', e => {
+  if (!dragging) return;
+  applyValue(clientXToValue(e.clientX));
+});
+track.addEventListener('pointerup', () => { dragging = false; });
+
+/* 炎エリアの縦ドラッグ（炎を直接触る感覚） */
+let sceneDragY    = null;
+let sceneDragVal  = null;
+flameArea.addEventListener('pointerdown', e => {
+  sceneDragY   = e.clientY;
+  sceneDragVal = value < 0 ? 0 : value;
+  flameArea.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+flameArea.addEventListener('pointermove', e => {
+  if (sceneDragY === null) return;
+  const dy    = sceneDragY - e.clientY; // 上 = 正
+  const delta = (dy / 160) * 100;
+  applyValue(sceneDragVal + delta);
+});
+flameArea.addEventListener('pointerup', () => { sceneDragY = null; });
+
+/* 初期化 */
+applyValue(0);
+scoreNum.textContent = '—';
+motText.textContent  = 'スライダーを動かしてみよう';
+motText.classList.add('idle');
+</script>
+</body>
+</html>
