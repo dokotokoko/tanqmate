@@ -12,6 +12,8 @@ This document records the current data model concepts for 探Qメイト. SQL fil
 - Class / class membership
 - Inquiry theme
 - Conversation / message
+- ITS chat turn log
+- ITS observation profile
 - Quest
 - Diary
 - Shared summary
@@ -34,6 +36,15 @@ Student private reflections, raw chat logs, AI drafts, and edit details must not
 
 Teacher-facing views should use student-confirmed summaries and support cues rather than raw private data.
 
+ITS chat turn logs and observation profiles are internal AI-support metadata. They must not be exposed in student-facing chat responses or teacher-facing diary/dashboard APIs unless a future requirement explicitly changes that visibility rule.
+
+The ITS runtime keeps four internal model snapshots for each chat turn:
+
+- Learner model: grade band, interests, support preferences, confusion signs, and observation profile summary.
+- Teaching model: response style, question budget, disclosure/action-pressure limits, and preferred support types.
+- Inquiry task/domain model: inquiry phase, theme, question, hypothesis, artifacts, and quality signals.
+- Observation/evaluation model: aggregate AI observation summary, recent observation records, reaction signals, evidence sources, and caveats.
+
 ## Schema Changes
 
 When changing schema:
@@ -52,4 +63,5 @@ Update this file when:
 - Identity or ownership rules change
 - Teacher/student visibility changes
 - Diary, summary, or conversation persistence changes
+- ITS chat turn log or observation profile persistence changes
 - School/class membership rules change

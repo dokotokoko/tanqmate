@@ -9,6 +9,7 @@ This document records the current API architecture. The exact router registratio
 - Make authentication and authorization requirements explicit.
 - Return response shapes that frontend service layers can consume predictably.
 - Do not leak internal exception details or sensitive student data to clients.
+- Internal ITS metadata such as support type, speech acts, disclosure level, and observation profiles stays out of public chat and teacher-facing response contracts unless a feature requirement explicitly changes that boundary.
 
 ## Main Router Areas
 
