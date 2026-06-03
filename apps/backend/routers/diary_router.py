@@ -28,6 +28,10 @@ class DiaryDraftRequest(BaseModel):
     """日誌下書き生成リクエスト"""
     date: Optional[DateType] = Field(None, description="日誌の日付（省略時は今日）")
     conversation_id: Optional[str] = Field(None, description="会話ID（特定の会話に基づく場合）")
+    emotion_tags: List[str] = Field(default_factory=list, description="生徒が先に置いた感情タグ")
+    primary_emotion: Optional[str] = Field(None, description="一番近い感情")
+    motivation_level: Optional[int] = Field(None, ge=0, le=100, description="探究の熱量")
+    student_note: Optional[str] = Field(None, description="生徒自身の短い記述")
 
 class DiaryDraft(BaseModel):
     """AIが生成した日誌下書き"""
@@ -38,6 +42,9 @@ class DiaryDraft(BaseModel):
     suggested_tags: List[str] = Field(..., description="テーマタグ（2-3個）")
     turning_point_detected: bool = Field(False, description="転換点の有無")
     turning_point_note: Optional[str] = Field(None, description="転換点の説明")
+    ai_diary_draft: Optional[str] = Field(None, description="AI視点の日誌下書き")
+    shared_summary_draft: Optional[str] = Field(None, description="先生共有用summary案")
+    reflection_question: Optional[str] = Field(None, description="違和感や納得を確認する問い")
 
 class EmotionEvaluation(BaseModel):
     """感情・手ごたえの評価"""
@@ -53,6 +60,8 @@ class DiarySubmitRequest(BaseModel):
     emotion: EmotionEvaluation = Field(..., description="感情評価")
     ai_draft: DiaryDraft = Field(..., description="元のAI下書き")
     date: Optional[DateType] = Field(None, description="日誌の日付")
+    shared_summary: Optional[str] = Field(None, description="先生共有用summary")
+    student_note: Optional[str] = Field(None, description="生徒自身の私的な短い記述")
 
 class DiaryResponse(BaseModel):
     """日誌レスポンス"""
@@ -62,6 +71,9 @@ class DiaryResponse(BaseModel):
     published_body: Optional[str]
     published_quote: Optional[str]
     published_tags: List[str]
+    shared_summary: Optional[str] = None
+    share_status: Optional[str] = None
+    shared_at: Optional[datetime] = None
     emotion: Optional[Dict[str, Any]]
     turning_point: bool
     submitted_at: Optional[datetime]
@@ -73,14 +85,20 @@ class TeacherDiaryView(BaseModel):
     student_id: str
     student_name: str
     student_email: str
-    date: DateType
-    published_body: str
-    published_quote: str
+    grade: Optional[str] = None
+    class_name: Optional[str] = None
+    attendance_number: Optional[int] = None
+    date: Optional[DateType] = None
+    published_body: Optional[str] = None
+    shared_summary: Optional[str] = None
+    published_quote: Optional[str] = None
     published_tags: List[str]
-    emotion: Dict[str, Any]
+    emotion: Optional[Dict[str, Any]] = None
     turning_point: bool
-    submitted_at: datetime
+    submitted_at: Optional[datetime] = None
     follow_up_flag: Optional[str]
+    entry_count: int = 0
+    has_submission: bool = False
 
 # 依存関数
 def get_diary_service(current_user_id: str = Depends(get_current_user)) -> DiaryService:
@@ -116,7 +134,13 @@ async def generate_diary_draft(
         draft = await diary_service.generate_draft(
             user_id=current_user_id,
             target_date=request.date,
-            conversation_id=request.conversation_id
+            conversation_id=request.conversation_id,
+            emotion_context={
+                "emotion_tags": request.emotion_tags,
+                "primary_emotion": request.primary_emotion,
+                "motivation_level": request.motivation_level,
+                "student_note": request.student_note,
+            }
         )
         return draft
     except Exception as e:
@@ -137,7 +161,9 @@ async def submit_diary(
             published_quote=request.published_quote,
             published_tags=request.published_tags,
             emotion=request.emotion.model_dump(),
-            ai_draft=request.ai_draft.model_dump()
+            ai_draft=request.ai_draft.model_dump(),
+            shared_summary=request.shared_summary,
+            student_note=request.student_note
         )
         return DiaryResponse(**diary)
     except Exception as e:
@@ -174,22 +200,23 @@ async def get_today_diary(
 
 @router.get("/teacher/dashboard", response_model=List[TeacherDiaryView])
 async def get_teacher_dashboard(
-    class_id: Optional[int] = Query(None, description="クラスID"),
+    class_name: Optional[str] = Query(None, description="クラス名"),
     date_from: Optional[DateType] = Query(None, description="開始日"),
     date_to: Optional[DateType] = Query(None, description="終了日"),
     follow_up_only: bool = Query(False, description="要フォローのみ"),
+    include_inactive: bool = Query(True, description="未提出の生徒も含める"),
     limit: int = Query(50, ge=1, le=200),
     current_user_id: str = Depends(get_current_user),
     diary_service: DiaryService = Depends(get_diary_service)
 ):
     """先生用ダッシュボードデータ取得"""
-    # TODO: 先生権限チェック
     diaries = await diary_service.get_teacher_dashboard(
         teacher_id=current_user_id,
-        class_id=class_id,
+        class_name=class_name,
         date_from=date_from,
         date_to=date_to,
         follow_up_only=follow_up_only,
+        include_inactive=include_inactive,
         limit=limit
     )
     return [TeacherDiaryView(**diary) for diary in diaries]

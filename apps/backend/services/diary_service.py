@@ -8,6 +8,7 @@ import asyncio
 from uuid import uuid4
 from fastapi import HTTPException, status
 from .base import BaseService, CacheableService, UserID
+from .its_observation_service import ITSObservationService
 from module.claude_llm_api import get_claude_llm_client
 
 class DiaryService(CacheableService):
@@ -16,6 +17,7 @@ class DiaryService(CacheableService):
     def __init__(self, supabase_client, user_id: Optional[UserID] = None):
         super().__init__(supabase_client, user_id)
         self.llm_client = get_claude_llm_client()
+        self.its_observation_service = ITSObservationService(supabase_client, user_id)
     
     def get_service_name(self) -> str:
         return "DiaryService"
@@ -59,12 +61,48 @@ class DiaryService(CacheableService):
         except Exception as exc:
             self.logger.warning("Failed to load diary profile map: %s", exc)
             return {}
+
+    def _get_single_profile(
+        self,
+        user_id: UserID,
+        fields: str = "id, email, name, role, school_id",
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            result = (
+                self.supabase.table("profiles")
+                .select(fields)
+                .eq("id", user_id)
+                .limit(1)
+                .execute()
+            )
+            if result.data:
+                return result.data[0]
+            return None
+        except Exception as exc:
+            self.logger.error("Get single profile error: %s", exc)
+            return None
+
+    def _derive_follow_up_flag(self, entry: Dict[str, Any]) -> Optional[str]:
+        emotion = entry.get("emotion") or {}
+        mood_tags = emotion.get("mood_tags") or []
+        effort_score = emotion.get("effort_score") or 0
+
+        if entry.get("turning_point"):
+            return "turning_point"
+        if isinstance(effort_score, (int, float)) and effort_score <= 2:
+            return "low_effort"
+        if any(tag in mood_tags for tag in ("fuan", "不安", "不安だった", "心配")):
+            return "anxious"
+        if any(tag in mood_tags for tag in ("ikizumari", "悔しかった", "frustrated")):
+            return "frustrated"
+        return None
     
     async def generate_draft(
         self,
         user_id: UserID,
         target_date: Optional[DateType] = None,
-        conversation_id: Optional[str] = None
+        conversation_id: Optional[str] = None,
+        emotion_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """AI日誌下書きを生成"""
         try:
@@ -90,11 +128,17 @@ class DiaryService(CacheableService):
                     detail="今日の会話ログが見つかりません"
                 )
             
-            # 前回の日誌を取得（繰り返し防止用）
+            # 直近の日誌を取得（同日2回目以降の繰り返し防止用）
             previous_diary = await self._get_previous_diary(user_id, target_date)
+            aggregate_profile = self.its_observation_service.get_aggregate_profile(user_id)
             
             # プロンプト作成
-            prompt = self._create_diary_prompt(conversations, previous_diary)
+            prompt = self._create_diary_prompt(
+                conversations,
+                previous_diary,
+                emotion_context or {},
+                aggregate_profile=aggregate_profile,
+            )
             
             self.logger.info("Creating AI draft with prompt")
             
@@ -116,17 +160,42 @@ class DiaryService(CacheableService):
                     draft_text = draft_text[4:]
             
             draft = json.loads(draft_text.strip())
+            ai_diary_draft = draft.get("ai_diary_draft") or draft.get("draft_body", "")
+            reflection_question = draft.get("reflection_question") or draft.get("closing_question", "")
+            shared_summary_draft = draft.get("shared_summary_draft") or self._fallback_shared_summary(ai_diary_draft)
             
             # 検証と型変換
-            return {
-                "draft_body": draft.get("draft_body", ""),
+            result = {
+                "draft_body": ai_diary_draft,
                 "quote": draft.get("quote", ""),
                 "quote_context": draft.get("quote_context", ""),
-                "closing_question": draft.get("closing_question", ""),
+                "closing_question": reflection_question,
                 "suggested_tags": draft.get("suggested_tags", []),
                 "turning_point_detected": draft.get("turning_point_detected", False),
-                "turning_point_note": draft.get("turning_point_note", None)
+                "turning_point_note": draft.get("turning_point_note", None),
+                "ai_diary_draft": ai_diary_draft,
+                "shared_summary_draft": shared_summary_draft,
+                "reflection_question": reflection_question
             }
+            observation_record_id = self.its_observation_service.record_diary_observation(
+                user_id=user_id,
+                target_date=target_date,
+                conversation_id=conversation_id,
+                ai_draft={**result, "model_info": diary_model},
+                conversations=conversations,
+                previous_diary=previous_diary,
+                emotion_context=emotion_context or {},
+            )
+            self.logger.info(
+                "ITS diary observation hook completed: user_id=%s date=%s conversation_id=%s "
+                "observation_record_id=%s draft_model=%s",
+                user_id,
+                target_date.isoformat(),
+                conversation_id,
+                observation_record_id,
+                diary_model,
+            )
+            return result
             
         except json.JSONDecodeError as e:
             self.logger.error(f"Failed to parse AI response: {e}")
@@ -143,7 +212,9 @@ class DiaryService(CacheableService):
         published_quote: str,
         published_tags: List[str],
         emotion: Dict[str, Any],
-        ai_draft: Dict[str, Any]
+        ai_draft: Dict[str, Any],
+        shared_summary: Optional[str] = None,
+        student_note: Optional[str] = None
     ) -> Dict[str, Any]:
         """日誌を送信・保存"""
         try:
@@ -162,6 +233,10 @@ class DiaryService(CacheableService):
                 "published_body": published_body,
                 "published_quote": published_quote,
                 "published_tags": published_tags,
+                "student_note": student_note,
+                "shared_summary": shared_summary or self._fallback_shared_summary(published_body),
+                "share_status": "shared",
+                "shared_at": datetime.now(timezone.utc).isoformat(),
                 "emotion": emotion,
                 "diff_added": diff_added,
                 "diff_removed": diff_removed,
@@ -169,26 +244,10 @@ class DiaryService(CacheableService):
                 "submitted_at": datetime.now(timezone.utc).isoformat()
             }, user_id)
             
-            # 既存の日誌をチェック（上書き処理）
-            existing = self._apply_student_scope(
-                self.supabase.table("diary_entries")\
-                .select("id")\
-                .eq("date", target_date.isoformat()),
-                user_id
-            ).execute()
-            
-            if existing.data:
-                # 更新
-                result = self.supabase.table("diary_entries")\
-                    .update(diary_data)\
-                    .eq("id", existing.data[0]["id"])\
-                    .execute()
-            else:
-                # 新規作成
-                diary_data["id"] = str(uuid4())
-                result = self.supabase.table("diary_entries")\
-                    .insert(diary_data)\
-                    .execute()
+            diary_data["id"] = str(uuid4())
+            result = self.supabase.table("diary_entries")\
+                .insert(diary_data)\
+                .execute()
             
             if not result.data:
                 raise HTTPException(status_code=500, detail="日誌の保存に失敗しました")
@@ -215,7 +274,8 @@ class DiaryService(CacheableService):
             result = self._apply_student_scope(
                 self.supabase.table("diary_entries")\
                 .select("*")\
-                .order("date", desc=True)\
+                .order("submitted_at", desc=True)\
+                .order("created_at", desc=True)\
                 .range(offset, offset + limit - 1),
                 user_id
             ).execute()
@@ -244,7 +304,7 @@ class DiaryService(CacheableService):
                 .select("*")\
                 .eq("date", target_date.isoformat()),
                 user_id
-            ).execute()
+            ).order("submitted_at", desc=True).order("created_at", desc=True).limit(1).execute()
             
             if result.data:
                 diary = self._normalize_diary_entry(result.data[0])
@@ -260,67 +320,169 @@ class DiaryService(CacheableService):
     async def get_teacher_dashboard(
         self,
         teacher_id: UserID,
-        class_id: Optional[int] = None,
+        class_name: Optional[str] = None,
         date_from: Optional[DateType] = None,
         date_to: Optional[DateType] = None,
         follow_up_only: bool = False,
+        include_inactive: bool = True,
         limit: int = 50
     ) -> List[Dict[str, Any]]:
         """先生用ダッシュボードデータ取得"""
         try:
-            # ベースクエリ
-            query = self.supabase.table("diary_entries")\
-                .select("*")\
-                .filter("submitted_at", "not.is", "null")\
-                .order("submitted_at", desc=True)\
-                .limit(limit)
-            
-            # フィルター適用
-            if date_from:
-                query = query.gte("date", date_from.isoformat())
-            if date_to:
-                query = query.lte("date", date_to.isoformat())
-            
-            result = query.execute()
-            profile_map = self._get_profile_map(
-                [
-                    entry["supabase_student_id"]
-                    for entry in result.data
-                    if entry.get("supabase_student_id")
-                ]
+            teacher_profile = self._get_single_profile(teacher_id)
+            if not teacher_profile or teacher_profile.get("role") not in ("teacher", "admin"):
+                raise HTTPException(status_code=403, detail="Teacher access is required")
+
+            school_id = teacher_profile.get("school_id")
+            if not school_id:
+                raise HTTPException(status_code=400, detail="Teacher school is not configured")
+
+            student_query = (
+                self.supabase.table("profiles")
+                .select("id, email, name, grade, class_name, attendance_number, legacy_user_id")
+                .eq("role", "student")
+                .eq("school_id", school_id)
+                .order("class_name")
+                .order("attendance_number")
             )
-            
-            diaries = []
-            for entry in result.data:
-                entry = self._normalize_diary_entry(entry)
-                profile = profile_map.get(entry.get("supabase_student_id", ""), {})
-                # フォローアップフラグ判定
-                follow_up_flag = None
-                if entry.get("turning_point"):
-                    follow_up_flag = "turning_point"
-                elif entry.get("emotion", {}).get("effort_score", 5) <= 2:
-                    follow_up_flag = "low_effort"
-                elif "不安だった" in entry.get("emotion", {}).get("mood_tags", []):
-                    follow_up_flag = "anxious"
-                elif "悔しかった" in entry.get("emotion", {}).get("mood_tags", []):
-                    follow_up_flag = "frustrated"
-                
+            if class_name:
+                student_query = student_query.eq("class_name", class_name)
+
+            student_result = student_query.execute()
+            students = student_result.data or []
+            if not students:
+                return []
+
+            student_map = {student["id"]: student for student in students}
+            legacy_map = {
+                str(student["legacy_user_id"]): student["id"]
+                for student in students
+                if student.get("legacy_user_id") is not None
+            }
+
+            diary_entries: List[Dict[str, Any]] = []
+            seen_diary_ids = set()
+
+            def _append_entries(rows: List[Dict[str, Any]]):
+                for raw_entry in rows:
+                    diary_id = raw_entry.get("id")
+                    if diary_id in seen_diary_ids:
+                        continue
+                    seen_diary_ids.add(diary_id)
+                    entry = self._normalize_diary_entry(raw_entry)
+                    resolved_student_id = entry.get("supabase_student_id")
+                    if not resolved_student_id and entry.get("student_id") is not None:
+                        resolved_student_id = legacy_map.get(str(entry["student_id"]))
+                    if not resolved_student_id or resolved_student_id not in student_map:
+                        continue
+                    if raw_entry.get("share_status") not in (None, "shared") and not raw_entry.get("shared_at"):
+                        continue
+                    if raw_entry.get("share_status") is None and not raw_entry.get("shared_at") and not raw_entry.get("shared_summary"):
+                        continue
+                    entry["student_id"] = resolved_student_id
+                    diary_entries.append(entry)
+
+            supabase_student_ids = list(student_map.keys())
+            supabase_query = (
+                self.supabase.table("diary_entries")
+                .select("*")
+                .in_("supabase_student_id", supabase_student_ids)
+                .filter("submitted_at", "not.is", "null")
+                .order("submitted_at", desc=True)
+            )
+            if date_from:
+                supabase_query = supabase_query.gte("date", date_from.isoformat())
+            if date_to:
+                supabase_query = supabase_query.lte("date", date_to.isoformat())
+            supabase_result = supabase_query.execute()
+            _append_entries(supabase_result.data or [])
+
+            legacy_student_ids = [student["legacy_user_id"] for student in students if student.get("legacy_user_id") is not None]
+            if legacy_student_ids:
+                legacy_query = (
+                    self.supabase.table("diary_entries")
+                    .select("*")
+                    .in_("student_id", legacy_student_ids)
+                    .filter("submitted_at", "not.is", "null")
+                    .order("submitted_at", desc=True)
+                )
+                if date_from:
+                    legacy_query = legacy_query.gte("date", date_from.isoformat())
+                if date_to:
+                    legacy_query = legacy_query.lte("date", date_to.isoformat())
+                legacy_result = legacy_query.execute()
+                _append_entries(legacy_result.data or [])
+
+            latest_by_student: Dict[str, Dict[str, Any]] = {}
+            entry_counts: Dict[str, int] = {}
+            for entry in diary_entries:
+                student_id = entry["student_id"]
+                entry_counts[student_id] = entry_counts.get(student_id, 0) + 1
+                if student_id not in latest_by_student:
+                    latest_by_student[student_id] = entry
+
+            student_views: List[Dict[str, Any]] = []
+            for student in students:
+                student_id = student["id"]
+                latest_entry = latest_by_student.get(student_id)
+                follow_up_flag = self._derive_follow_up_flag(latest_entry or {}) if latest_entry else None
+
                 if follow_up_only and not follow_up_flag:
                     continue
-                
-                diary_view = {
-                    **entry,
-                    "student_name": profile.get("name", "Unknown"),
-                    "student_email": profile.get("email", ""),
-                    "follow_up_flag": follow_up_flag
-                }
-                diaries.append(diary_view)
-            
-            return diaries
-            
+                if not include_inactive and not latest_entry:
+                    continue
+
+                student_views.append(
+                    {
+                        "id": latest_entry.get("id") if latest_entry else f"student-{student_id}",
+                        "student_id": student_id,
+                        "student_name": student.get("name") or "氏名未設定",
+                        "student_email": student.get("email") or "",
+                        "grade": student.get("grade"),
+                        "class_name": student.get("class_name"),
+                        "attendance_number": student.get("attendance_number"),
+                        "date": latest_entry.get("date") if latest_entry else None,
+                        "published_body": None,
+                        "shared_summary": latest_entry.get("shared_summary") if latest_entry else None,
+                        "published_quote": latest_entry.get("published_quote") if latest_entry else None,
+                        "published_tags": latest_entry.get("published_tags", []) if latest_entry else [],
+                        "emotion": latest_entry.get("emotion") if latest_entry else None,
+                        "turning_point": bool(latest_entry.get("turning_point")) if latest_entry else False,
+                        "submitted_at": latest_entry.get("submitted_at") if latest_entry else None,
+                        "share_status": latest_entry.get("share_status") if latest_entry else None,
+                        "shared_at": latest_entry.get("shared_at") if latest_entry else None,
+                        "follow_up_flag": follow_up_flag,
+                        "entry_count": entry_counts.get(student_id, 0),
+                        "has_submission": latest_entry is not None,
+                    }
+                )
+
+            def _submitted_timestamp(submitted_at: Optional[str]) -> float:
+                if not submitted_at:
+                    return 0.0
+                try:
+                    return datetime.fromisoformat(submitted_at.replace("Z", "+00:00")).timestamp()
+                except ValueError:
+                    return 0.0
+
+            def _sort_key(item: Dict[str, Any]):
+                attendance_number = item.get("attendance_number") or 9999
+                class_value = item.get("class_name") or ""
+                return (
+                    0 if item.get("follow_up_flag") else 1,
+                    0 if item.get("has_submission") else 1,
+                    -_submitted_timestamp(item.get("submitted_at")),
+                    class_value,
+                    attendance_number,
+                )
+
+            student_views.sort(key=_sort_key)
+            return student_views[:limit]
         except Exception as e:
             self.logger.error(f"Get teacher dashboard error: {e}")
-            return []
+            if isinstance(e, HTTPException):
+                raise
+            raise HTTPException(status_code=500, detail="Failed to load teacher dashboard")
     
     async def get_student_diaries(
         self,
@@ -334,7 +496,7 @@ class DiaryService(CacheableService):
                 self.supabase.table("diary_entries")\
                 .select("*")\
                 .filter("submitted_at", "not.is", "null")\
-                .order("date", desc=True)\
+                .order("submitted_at", desc=True)\
                 .limit(limit),
                 student_id
             ).execute()
@@ -343,6 +505,7 @@ class DiaryService(CacheableService):
             for diary in result.data:
                 diary = self._normalize_diary_entry(diary)
                 diary["status"] = "submitted"
+                diary["published_body"] = None
                 diaries.append(diary)
             
             return diaries
@@ -419,14 +582,14 @@ class DiaryService(CacheableService):
         user_id: UserID,
         before_date: DateType
     ) -> Optional[str]:
-        """前回の日誌取得"""
+        """直近の日誌取得"""
         try:
             result = self._apply_student_scope(
                 self.supabase.table("diary_entries")\
                 .select("published_body")\
-                .lt("date", before_date.isoformat())\
+                .lte("date", before_date.isoformat())\
                 .filter("submitted_at", "not.is", "null")\
-                .order("date", desc=True)\
+                .order("submitted_at", desc=True)\
                 .limit(1),
                 user_id
             ).execute()
@@ -442,7 +605,9 @@ class DiaryService(CacheableService):
     def _create_diary_prompt(
         self,
         conversations: List[Dict[str, Any]],
-        previous_diary: Optional[str]
+        previous_diary: Optional[str],
+        emotion_context: Optional[Dict[str, Any]] = None,
+        aggregate_profile: Optional[Dict[str, Any]] = None,
     ) -> str:
         """日誌生成用プロンプト作成"""
         # 会話ログを整形（chat_logsテーブルの形式に合わせる）
@@ -469,8 +634,28 @@ class DiaryService(CacheableService):
 {previous_diary}
 
 """
+        aggregate_summary = (aggregate_profile or {}).get("aggregate_summary")
+        if aggregate_summary:
+            prompt += f"""
+AI観測プロファイル（過去のAI見立ての集約。現在の会話と生徒自身の言葉を優先し、断定に使わないでください）：
+{str(aggregate_summary)[:900]}
+
+"""
+        if emotion_context:
+            emotion_tags = ", ".join(emotion_context.get("emotion_tags") or [])
+            primary_emotion = emotion_context.get("primary_emotion") or "未選択"
+            motivation_level = emotion_context.get("motivation_level")
+            student_note = emotion_context.get("student_note") or ""
+            prompt += f"""
+生徒がAI日誌を見る前に自分で置いた感情・感覚：
+感情タグ: {emotion_tags or "未選択"}
+一番近い感情: {primary_emotion}
+探究の熱量: {motivation_level if motivation_level is not None else "未入力"}
+生徒自身の短い記述: {student_note or "未入力"}
+
+"""
         
-        prompt += "上記の会話から、ユーザーが編集するための日誌の下書きを生成してください。"
+        prompt += "上記の会話と生徒自身が先に置いた感情・感覚から、ユーザーが違和感や納得をもとに編集するための日誌下書きと、先生共有用のsummary案を生成してください。"
         
         return prompt
     
@@ -482,12 +667,15 @@ class DiaryService(CacheableService):
 
 ## あなたの役割
 完成品ではなく、ユーザーが自分の言葉に直すための出発点を作ること。
-「私はあなたの今日をこう読みました」というトーンで書く。
+AI視点で「私はあなたの今日をこう読みました」と返し、生徒が自分の感情・感覚と照らして違和感や納得を見つけられるようにする。
 
 ## 重要な方針
 - 読み手はユーザー本人
 - 解釈を一歩踏み込んで書く → 「そうじゃなくて、本当はこういうこと」と言いたくなる余白を意図的に作る
 - 断定しない。「〜のように見えました」「〜かもしれません」
+- 行動記録だけで終わらせず、興味の揺れ、身体感覚、感情の温度と結びつける
+- 生徒が先に置いた感情・感覚を正解扱いせず、AI視点の読みと重ねる
+- 先生共有用summaryは、生徒の生の言葉や私的な記述を直接出さず、確認済み共有情報として安全な粒度にする
 
 ## 下書きの構成
 1. 書き出し（1文）: 今日の「空気」を二人称で
@@ -508,14 +696,26 @@ AIの発言は引用しないこと。
 JSON形式のみ。マークダウンのコードブロックも含めず、純粋なJSONのみ返すこと。
 
 {
-  "draft_body": "（下書き本文。引用を除く、100〜150字）",
+  "ai_diary_draft": "（AI視点の日誌下書き。引用を除く、140〜220字）",
+  "draft_body": "（ai_diary_draftと同じ内容）",
   "quote": "（ユーザー発話の原文引用）",
   "quote_context": "（引用の文脈を10字以内で）",
-  "closing_question": "（ユーザーへの問いかけ1文）",
+  "reflection_question": "（AIの見立てと自分の感覚のズレを確認する問い1文）",
+  "closing_question": "（reflection_questionと同じ内容）",
+  "shared_summary_draft": "（先生に共有してもよい粒度のsummary案。生の私的記述を直接出さない。80〜140字）",
   "suggested_tags": ["タグ1", "タグ2"],
   "turning_point_detected": false,
   "turning_point_note": ""
 }"""
+
+    def _fallback_shared_summary(self, body: str) -> str:
+        """先生共有summaryのフォールバックを生成する。"""
+        text = (body or "").strip()
+        if not text:
+            return ""
+        if len(text) <= 140:
+            return text
+        return text[:137] + "..."
     
     def _calculate_diff(self, original: str, edited: str) -> tuple[int, int]:
         """差分文字数を計算"""

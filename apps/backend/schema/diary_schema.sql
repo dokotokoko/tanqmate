@@ -9,22 +9,26 @@ CREATE TABLE IF NOT EXISTS diary_entries (
     published_body TEXT,
     published_quote TEXT,
     published_tags TEXT[] DEFAULT '{}',
+    student_note TEXT,
+    shared_summary TEXT,
+    share_status TEXT DEFAULT 'private' CHECK (share_status IN ('private', 'shared')),
+    shared_at TIMESTAMP WITH TIME ZONE,
     emotion JSONB DEFAULT '{}',
     diff_added INTEGER DEFAULT 0,
     diff_removed INTEGER DEFAULT 0,
     turning_point BOOLEAN DEFAULT false,
     submitted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    
-    -- インデックス
-    CONSTRAINT unique_student_date UNIQUE (student_id, date)
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 -- インデックスの作成
 CREATE INDEX idx_diary_entries_student_id ON diary_entries (student_id);
 CREATE INDEX idx_diary_entries_date ON diary_entries (date DESC);
+CREATE INDEX idx_diary_entries_student_id_submitted_at ON diary_entries (student_id, submitted_at DESC);
 CREATE INDEX idx_diary_entries_submitted_at ON diary_entries (submitted_at DESC);
+CREATE INDEX idx_diary_entries_shared_at ON diary_entries (shared_at DESC) WHERE shared_at IS NOT NULL;
+CREATE INDEX idx_diary_entries_share_status ON diary_entries (share_status);
 CREATE INDEX idx_diary_entries_turning_point ON diary_entries (turning_point) WHERE turning_point = true;
 
 -- 先生のコメントテーブル（将来フェーズ用、MVP対象外）
@@ -70,6 +74,7 @@ SELECT
     de.student_id,
     de.date,
     de.published_body,
+    de.shared_summary,
     de.published_quote,
     de.published_tags,
     de.emotion,
@@ -87,6 +92,8 @@ SELECT
 FROM diary_entries de
 LEFT JOIN users u ON de.student_id = u.id
 WHERE de.submitted_at IS NOT NULL
+  AND de.share_status = 'shared'
+  AND de.shared_at IS NOT NULL
 ORDER BY de.submitted_at DESC;
 
 -- ビュー：生徒の日誌履歴
@@ -95,6 +102,9 @@ SELECT
     de.id,
     de.date,
     de.published_body,
+    de.shared_summary,
+    de.share_status,
+    de.shared_at,
     de.published_quote,
     de.published_tags,
     de.emotion,
