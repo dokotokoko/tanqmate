@@ -7,6 +7,7 @@ import uvicorn
 import logging
 import os
 from dotenv import load_dotenv
+from utils.supabase_config import create_supabase_admin_client
 
 # 環境設定読み込み
 load_dotenv()
@@ -17,7 +18,6 @@ from routers.chat_router import router as chat_router
 from routers.quest_router import router as quest_router, user_quest_router
 from routers.admin_router import router as admin_router
 from routers.theme_router import router as theme_router
-from routers.conversation_agent_router import router as conversation_agent_router
 from routers.conversations_router import router as conversations_router
 from routers.metrics_router import router as metrics_router, debug_router
 from routers.vibes_tanq_router import router as vibes_tanq_router
@@ -58,12 +58,7 @@ app = FastAPI(
 
 # Supabaseクライアント初期化とサービスマネージャー
 def get_supabase_client():
-    from supabase import create_client
-    supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_secret_key = os.environ.get("SUPABASE_SECRET_KEY")
-    if supabase_url and supabase_secret_key:
-        return create_client(supabase_url, supabase_secret_key)
-    return None
+    return create_supabase_admin_client()
 
 # サービスマネージャーの初期化
 try:
@@ -133,7 +128,6 @@ app.include_router(quest_router)          # クエストシステム関連
 app.include_router(user_quest_router)     # ユーザークエスト関連
 app.include_router(admin_router)          # 管理機能関連
 app.include_router(theme_router)          # テーマ探究ツール関連
-app.include_router(conversation_agent_router)  # 会話エージェント関連
 app.include_router(conversations_router)  # 会話管理関連
 app.include_router(metrics_router)        # メトリクス関連
 app.include_router(debug_router)          # デバッグ関連
@@ -151,13 +145,13 @@ async def root():
         "version": "2.0.0",
         "architecture": "クラスベース設計",
         "services": [
-            "AuthService - 認証・ユーザー管理",
+            "SupabaseAuthService - Supabase認証管理",
             "ChatService - チャット・対話管理",
             "ConversationService - 会話管理",
             "QuestService - クエストシステム",
             "AdminService - 管理機能・メトリクス",
             "ThemeService - テーマ探究ツール",
-            "SupabaseAuthService - Supabase認証管理"
+            "LegacyAuthService - 旧アカウント移行時の資格情報照合のみ"
         ],
         "migration_status": "Phase 2 Complete - Full Service Architecture + Supabase Integration"
     }

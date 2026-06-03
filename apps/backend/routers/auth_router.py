@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from supabase import Client
 
 from services.base import ServiceManager
+from utils.supabase_config import create_supabase_admin_client
 from utils.supabase_auth import get_current_user as get_supabase_user
 from utils.user_identity import resolve_legacy_user_id as lookup_legacy_user_id
 
@@ -26,15 +27,7 @@ security = HTTPBearer()
 
 
 def get_supabase_client() -> Optional[Client]:
-    from supabase import create_client
-
-    supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_key = os.environ.get("SUPABASE_SECRET_KEY")
-
-    if not supabase_url or not supabase_key:
-        return None
-
-    return create_client(supabase_url, supabase_key)
+    return create_supabase_admin_client()
 
 
 _service_manager = None
@@ -155,6 +148,11 @@ class VerifySchoolCodeRequest(BaseModel):
     school_code: str
 
 
+class TeacherLoginResolveRequest(BaseModel):
+    school_code: str
+    login_id: str
+
+
 class UpdateProfileRequest(BaseModel):
     name: Optional[str] = None
     grade: Optional[str] = None
@@ -213,6 +211,84 @@ async def verify_school_code(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to verify school code",
+        ) from exc
+
+
+@router.post("/teacher-login/resolve")
+async def resolve_teacher_login(
+    request: TeacherLoginResolveRequest,
+):
+    try:
+        supabase_client = get_service_manager().supabase_client
+        normalized_school_code = request.school_code.strip().upper()
+        normalized_login_id = request.login_id.strip()
+
+        if not normalized_school_code or not normalized_login_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="school_code and login_id are required",
+            )
+
+        school_result = (
+            supabase_client.table("schools")
+            .select("id, name, school_code")
+            .eq("school_code", normalized_school_code)
+            .execute()
+        )
+
+        if not school_result.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Teacher account not found",
+            )
+
+        school = school_result.data[0]
+        login_queries = [
+            ("username", normalized_login_id),
+            ("email", normalized_login_id.lower()),
+        ]
+
+        teacher_profile = None
+        for field, value in login_queries:
+            profile_result = (
+                supabase_client.table("profiles")
+                .select("id, email, username, role, school_id, name")
+                .eq("role", "teacher")
+                .eq("school_id", school["id"])
+                .eq(field, value)
+                .execute()
+            )
+            if profile_result.data:
+                teacher_profile = profile_result.data[0]
+                break
+
+        if not teacher_profile or not teacher_profile.get("email"):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Teacher account not found",
+            )
+
+        return {
+            "success": True,
+            "email": teacher_profile["email"],
+            "teacher": {
+                "id": teacher_profile["id"],
+                "name": teacher_profile.get("name"),
+                "username": teacher_profile.get("username"),
+            },
+            "school": {
+                "id": school["id"],
+                "name": school["name"],
+                "school_code": school["school_code"],
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Teacher login resolve error: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to resolve teacher account",
         ) from exc
 
 

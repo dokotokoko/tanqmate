@@ -97,7 +97,6 @@ class ApiClient {
   }> = [];
 
   constructor() {
-    // tokenManagerから現在のアクセストークンを取得
     const tokens = tokenManager.getTokens();
     this.token = tokens?.access_token || null;
     this.setupTokenManager();
@@ -217,15 +216,15 @@ class ApiClient {
     isRetry = false
   ): Promise<ApiResponse<T>> {
     try {
-      const headers: HeadersInit = {
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        ...options.headers,
+        ...this.normalizeHeaders(options.headers),
       };
 
-      // 認証が必要なエンドポイントの場合はトークンを追加
-      if (this.token && endpoint !== '/auth/login' && endpoint !== '/auth/refresh') {
-        console.log('Sending token:', this.token.substring(0, 20) + '...'); // デバッグログ
-        headers['Authorization'] = `Bearer ${this.token}`;
+      const accessToken = await tokenManager.getAccessTokenAsync();
+      if (accessToken) {
+        this.token = accessToken;
+        headers['Authorization'] = `Bearer ${accessToken}`;
       }
 
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -234,7 +233,7 @@ class ApiClient {
       });
 
       // 401エラーの処理
-      if (response.status === 401 && !isRetry && endpoint !== '/auth/login' && endpoint !== '/auth/refresh') {
+      if (response.status === 401 && !isRetry) {
         try {
           // トークンリフレッシュを試行
           const refreshSuccess = await this.refreshAccessToken();
@@ -310,10 +309,10 @@ class ApiClient {
       headers['Content-Type'] = 'application/json';
     }
 
-    const accessToken = tokenManager.getAccessToken() || this.token;
-    const isAuthEndpoint = endpoint === '/auth/login' || endpoint === '/auth/refresh';
+    const accessToken = await tokenManager.getAccessTokenAsync();
 
-    if (accessToken && !isAuthEndpoint) {
+    if (accessToken) {
+      this.token = accessToken;
       headers['Authorization'] = `Bearer ${accessToken}`;
     }
 
@@ -322,7 +321,7 @@ class ApiClient {
       headers,
     });
 
-    if (response.status === 401 && !isRetry && !isAuthEndpoint) {
+    if (response.status === 401 && !isRetry) {
       const refreshed = await this.refreshAccessToken().catch((error) => {
         console.error('Token refresh failed during requestJson:', error);
         return false;
@@ -370,43 +369,6 @@ class ApiClient {
     }
 
     return this.request<T>(endpoint, options);
-  }
-
-  // 認証関連
-  async login(username: string, access_code: string): Promise<ApiResponse<any>> {
-    const result = await this.request<any>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password: access_code }), // passwordフィールドに変更
-    });
-
-    if (result.data) {
-      console.log('Login response:', result.data); // デバッグログ
-      
-      // ログイン成功時にトークン情報を保存
-      if (result.data.access_token && result.data.refresh_token) {
-        // expires_inからexpires_atを計算（サーバーは秒単位で返す）
-        const expiresAt = Date.now() + (result.data.expires_in || 900) * 1000; // デフォルト15分
-        
-        console.log('Saving tokens:', { // デバッグログ
-          access_token: result.data.access_token.substring(0, 20) + '...',
-          refresh_token: result.data.refresh_token.substring(0, 20) + '...',
-          expires_at: new Date(expiresAt).toISOString()
-        });
-        
-        tokenManager.saveTokens({
-          access_token: result.data.access_token,
-          refresh_token: result.data.refresh_token,
-          expires_at: expiresAt,
-          token_type: result.data.token_type || 'Bearer',
-        });
-        this.token = result.data.access_token;
-        
-      } else {
-        console.warn('No tokens in login response, using legacy format'); // デバッグログ
-      }
-    }
-
-    return result;
   }
 
   logout() {

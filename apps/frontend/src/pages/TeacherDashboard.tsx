@@ -1,20 +1,38 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Chip,
+  CircularProgress,
   Container,
-  Divider,
+  FormControl,
+  InputAdornment,
+  InputLabel,
+  LinearProgress,
+  MenuItem,
   Paper,
+  Select,
+  SelectChangeEvent,
+  Stack,
+  Switch,
+  TextField,
   Typography,
 } from '@mui/material';
-import { Logout, School, AdminPanelSettings, TrendingUp } from '@mui/icons-material';
+import {
+  AdminPanelSettings,
+  LockOutlined,
+  Logout,
+  Refresh,
+  School,
+  Search,
+  WarningAmber,
+} from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { API_BASE_URL } from '../config/api';
 import { useAuthStore } from '../stores/authStore';
-import { MotivationFlameRive } from '../components/Diary/MotivationFlameRive';
 
-type EmotionKey =
+type DashboardEmotion =
   | 'wakuwaku'
   | 'tanoshii'
   | 'omoshiroi'
@@ -24,196 +42,228 @@ type EmotionKey =
   | 'muzukashii'
   | 'ikizumari';
 
-type StudentCard = {
-  name: string;
-  num: string;
-  emotion: EmotionKey;
-  preview: string;
-  updated: boolean;
+type DashboardFilterWindow = 'today' | '7days' | '30days' | 'all';
+
+type FollowUpFlag = 'turning_point' | 'low_effort' | 'anxious' | 'frustrated';
+
+type TeacherDashboardRow = {
+  id: string;
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  grade?: string | null;
+  class_name?: string | null;
+  attendance_number?: number | null;
+  date?: string | null;
+  published_body?: string | null;
+  shared_summary?: string | null;
+  published_quote?: string | null;
+  published_tags: string[];
+  emotion?: {
+    effort_score?: number;
+    mood_tags?: DashboardEmotion[];
+    free_text?: string | null;
+  } | null;
+  turning_point: boolean;
+  submitted_at?: string | null;
+  follow_up_flag?: FollowUpFlag | null;
+  entry_count: number;
+  has_submission: boolean;
 };
 
-type EmotionGlyph = {
-  fill: string;
-  stroke: string;
-  text: string;
-  dur: number;
-  s0: number;
-  s1: number;
-  p0: string;
-  p1: string;
+const emotionMeta: Record<DashboardEmotion, { label: string; tone: string; text: string; border: string }> = {
+  wakuwaku: { label: 'ワクワク', tone: '#faeeda', text: '#854f0b', border: '#ef9f27' },
+  tanoshii: { label: 'たのしい', tone: '#faece7', text: '#993c1d', border: '#d85a30' },
+  omoshiroi: { label: 'おもしろい', tone: '#eaf3de', text: '#3b6d11', border: '#639922' },
+  sukkiri: { label: 'すっきり', tone: '#e1f5ee', text: '#0f6e56', border: '#1d9e75' },
+  moyamoya: { label: 'モヤモヤ', tone: '#eeedfe', text: '#534ab7', border: '#7f77dd' },
+  fuan: { label: '不安', tone: '#e6f1fb', text: '#185fa5', border: '#378add' },
+  muzukashii: { label: 'むずかしい', tone: '#fbeaf0', text: '#993556', border: '#d4537e' },
+  ikizumari: { label: '行き詰まり', tone: '#fcebeb', text: '#a32d2d', border: '#e24b4a' },
 };
 
-const className = '3年2組 総合探究';
-
-const emotionGlyphs: Record<EmotionKey, EmotionGlyph> = {
-  wakuwaku: {
-    fill: '#FAEEDA',
-    stroke: '#EF9F27',
-    text: '#854F0B',
-    dur: 1.8,
-    s0: 0.93,
-    s1: 1.07,
-    p0: 'M50,12 C68,10 88,22 90,40 C93,58 82,75 68,82 C54,90 32,90 20,78 C8,66 7,46 16,30 C24,15 32,14 50,12 Z',
-    p1: 'M50,10 C70,8 92,20 93,42 C94,62 80,78 62,85 C44,92 24,88 14,72 C4,56 6,34 18,20 C28,8 32,12 50,10 Z',
-  },
-  tanoshii: {
-    fill: '#FAECE7',
-    stroke: '#D85A30',
-    text: '#993C1D',
-    dur: 1.6,
-    s0: 0.92,
-    s1: 1.08,
-    p0: 'M50,8 C68,4 90,18 92,38 C94,56 80,76 62,84 C44,92 22,90 10,76 C-2,62 2,38 14,22 C24,8 34,12 50,8 Z',
-    p1: 'M50,6 C70,2 92,16 94,38 C96,58 80,78 60,86 C40,94 20,92 8,78 C-4,64 0,38 12,22 C22,8 32,10 50,6 Z',
-  },
-  omoshiroi: {
-    fill: '#EAF3DE',
-    stroke: '#639922',
-    text: '#3B6D11',
-    dur: 2.0,
-    s0: 0.92,
-    s1: 1.08,
-    p0: 'M50,10 C66,6 86,16 90,34 C94,52 82,72 64,82 C46,92 24,90 12,76 C0,62 4,38 16,24 C26,10 34,14 50,10 Z',
-    p1: 'M50,8 C68,4 90,16 94,36 C98,56 82,76 62,86 C42,96 22,92 10,78 C-2,64 2,38 14,24 C24,10 34,12 50,8 Z',
-  },
-  sukkiri: {
-    fill: '#E1F5EE',
-    stroke: '#1D9E75',
-    text: '#0F6E56',
-    dur: 3.2,
-    s0: 0.97,
-    s1: 1.03,
-    p0: 'M50,10 C65,8 82,20 86,38 C90,55 80,74 64,82 C48,90 28,86 16,72 C4,58 6,36 18,22 C28,10 36,12 50,10 Z',
-    p1: 'M50,12 C63,10 80,22 84,40 C88,57 78,76 62,84 C46,92 26,88 14,74 C2,60 4,38 16,24 C26,12 36,14 50,12 Z',
-  },
-  moyamoya: {
-    fill: '#EEEDFE',
-    stroke: '#7F77DD',
-    text: '#534AB7',
-    dur: 4.5,
-    s0: 0.94,
-    s1: 1.06,
-    p0: 'M48,14 C62,8 84,18 88,36 C92,52 80,72 64,82 C48,90 26,88 14,74 C2,60 6,38 18,24 C28,12 36,18 48,14 Z',
-    p1: 'M52,10 C68,6 88,20 90,40 C92,56 78,76 60,86 C42,94 22,86 12,70 C2,54 8,32 22,20 C34,8 38,14 52,10 Z',
-  },
-  fuan: {
-    fill: '#E6F1FB',
-    stroke: '#378ADD',
-    text: '#185FA5',
-    dur: 2.4,
-    s0: 0.94,
-    s1: 1.04,
-    p0: 'M50,16 C66,10 86,24 88,42 C90,58 78,76 62,84 C46,92 24,88 14,74 C4,60 8,38 20,26 C30,14 36,20 50,16 Z',
-    p1: 'M50,14 C68,8 90,22 90,44 C90,62 76,78 58,86 C40,94 20,88 12,72 C4,56 8,34 20,22 C30,10 34,18 50,14 Z',
-  },
-  muzukashii: {
-    fill: '#FBEAF0',
-    stroke: '#D4537E',
-    text: '#993556',
-    dur: 3.8,
-    s0: 0.95,
-    s1: 1.05,
-    p0: 'M50,14 C64,10 82,22 86,40 C90,56 80,74 64,84 C48,92 28,88 16,74 C4,60 6,40 16,26 C26,12 36,18 50,14 Z',
-    p1: 'M50,12 C66,8 84,24 86,42 C88,58 76,76 60,86 C44,94 26,90 14,76 C2,62 4,42 14,28 C24,14 36,16 50,12 Z',
-  },
-  ikizumari: {
-    fill: '#FCEBEB',
-    stroke: '#E24B4A',
-    text: '#A32D2D',
-    dur: 6.0,
-    s0: 0.98,
-    s1: 1.02,
-    p0: 'M50,18 C64,14 80,26 84,44 C88,60 76,76 60,84 C44,92 24,86 14,70 C4,54 10,34 24,22 C34,12 38,22 50,18 Z',
-    p1: 'M50,20 C62,16 78,28 82,46 C86,62 74,78 58,86 C42,94 22,88 12,72 C2,56 8,36 22,24 C32,14 38,24 50,20 Z',
-  },
+const followUpLabels: Record<FollowUpFlag, string> = {
+  turning_point: '転機あり',
+  low_effort: '熱量低下',
+  anxious: '不安傾向',
+  frustrated: '行き詰まり',
 };
 
-const students: StudentCard[] = [
-  { name: '佐藤 葵', num: '1番', emotion: 'wakuwaku', preview: '「使う動機の構造が問題だ」という気づきを語っていました。探究が深まっています。', updated: true },
-  { name: '鈴木 蓮', num: '2番', emotion: 'tanoshii', preview: 'フィールド調査のアポ取りに成功。「本物の声が聞けた」と喜んでいました。', updated: true },
-  { name: '高橋 陽菜', num: '3番', emotion: 'muzukashii', preview: '問いの言語化で詰まっています。「言いたいことはあるのに言葉にならない」と。', updated: true },
-  { name: '田中 健司', num: '4番', emotion: 'moyamoya', preview: 'テーマを食品ロスに絞ったが、問いの型がまだ告発型にとどまっています。', updated: true },
-  { name: '伊藤 翔', num: '5番', emotion: 'fuan', preview: 'eスポーツの定義調査を進めています。自分の問いとの接続がまだ弱い様子。', updated: true },
-  { name: '渡辺 さくら', num: '6番', emotion: 'sukkiri', preview: '今日ようやく「問い」の形が定まった様子。次のステップが見えてきています。', updated: true },
-  { name: '山本 大地', num: '7番', emotion: 'omoshiroi', preview: '図書館調査で意外な資料を発見。「こんなデータあったんだ」と興奮気味。', updated: true },
-  { name: '中村 結衣', num: '8番', emotion: 'ikizumari', preview: '5日間ログが途絶えています。「何を調べればいいかわからない」状態が続いています。', updated: true },
-  { name: '小林 澪', num: '9番', emotion: 'fuan', preview: 'テーマに精神医療を選んだ。個人的な動機がある様子で慎重に関わりたい。', updated: true },
-  { name: '加藤 悠', num: '10番', emotion: 'moyamoya', preview: '方向は定まっているが「何から手をつければいいか」で止まっています。', updated: true },
-  { name: '吉田 花音', num: '11番', emotion: 'tanoshii', preview: 'インタビュー準備を開始。「聞きたいこと多すぎてどうしよう」と楽しそう。', updated: true },
-  { name: '山田 涼', num: '12番', emotion: 'moyamoya', preview: '商店街の取材イメージが出てきました。問いが自分ごとになってきた手応えあり。', updated: true },
-  { name: '松本 陸', num: '13番', emotion: 'muzukashii', preview: '統計データを読んでいるが、解釈の方法がわからず詰まっています。', updated: true },
-  { name: '井上 美咲', num: '14番', emotion: 'wakuwaku', preview: '比較対象の国が決まり、調査の方向性が一気に明確になってきた様子。', updated: true },
-  { name: '木村 花', num: '15番', emotion: 'omoshiroi', preview: 'インフルエンサーの変遷を時系列で整理中。「時代ごとに全然違う」と発見を楽しんでいます。', updated: true },
-  { name: '林 颯太', num: '16番', emotion: 'sukkiri', preview: '先週のフィードバックを受けて問いを整理し直した。スッキリした様子。', updated: true },
-  { name: '清水 莉奈', num: '17番', emotion: 'fuan', preview: '発表が近いことを意識して焦りがある様子。内容はしっかり進んでいます。', updated: true },
-  { name: '山崎 拓海', num: '18番', emotion: 'tanoshii', preview: '地域の人へのアンケートを自分で設計。「こんなに楽しいとは」と話していました。', updated: true },
-  { name: '池田 ひなた', num: '19番', emotion: 'wakuwaku', preview: '新しい文献を見つけ、問いがさらに深まりそうな予感がしている段階。', updated: true },
-  { name: '橋本 颯', num: '20番', emotion: 'muzukashii', preview: '問いは立てたが、どんな方法で検証すればよいかわからず止まっています。', updated: true },
-  { name: '石川 つばさ', num: '21番', emotion: 'omoshiroi', preview: '仮説と実態が食い違っていることに気づき「これが面白い」と前向きに捉えています。', updated: true },
-  { name: '前田 心', num: '22番', emotion: 'moyamoya', preview: 'テーマへの関心は本物だが、問いの射程が広すぎて絞り込みに苦労しています。', updated: true },
-  { name: '藤田 葉月', num: '23番', emotion: 'sukkiri', preview: '今日は落ち着いて作業に集中できた様子。進捗もしっかり出ています。', updated: true },
-  { name: '後藤 蒼', num: '24番', emotion: 'ikizumari', preview: '前回から進展なし。テーマ自体を変えたいという気持ちが出てきている様子。', updated: true },
-  { name: '岡田 凜', num: '25番', emotion: 'fuan', preview: 'グループ発表のフィードバックが気になっている様子。自信が揺らいでいます。', updated: true },
-  { name: '長谷川 悠斗', num: '26番', emotion: 'wakuwaku', preview: '新しい切り口を思いついたと興奮気味。問いが「問いらしくなってきた」段階。', updated: true },
-  { name: '村上 柚希', num: '27番', emotion: 'tanoshii', preview: '取材先から快諾の返事。「本当に会えるんだ」と実感が湧いてきた様子。', updated: true },
-  { name: '鈴木 大輝', num: '28番', emotion: 'omoshiroi', preview: 'AIに詩を書かせて比較実験中。「これ哲学じゃん」と自分で気づいていました。', updated: true },
-  { name: '中島 彩', num: '29番', emotion: 'muzukashii', preview: 'データ収集は進んでいるが、そこから何が言えるのかがまだわかっていない状態。', updated: true },
-  { name: '小川 歩夢', num: '30番', emotion: 'sukkiri', preview: '長かったモヤモヤ期を抜けて、今日ようやく問いの形が決まりました。', updated: false },
-  { name: '西村 朱音', num: '31番', emotion: 'fuan', preview: '問いは立てたが「これでいいのか」という不安が続いています。背中を押したい。', updated: false },
-  { name: '中田 倫太郎', num: '32番', emotion: 'moyamoya', preview: '何に興味があるかはわかっているが、それをどう問いにするかで迷走中。', updated: false },
-];
+const windowLabels: Record<DashboardFilterWindow, string> = {
+  today: '今日',
+  '7days': '7日',
+  '30days': '30日',
+  all: '全期間',
+};
 
-const updatedCount = students.filter((student) => student.updated).length;
+const isWithinWindow = (submittedAt: string | null | undefined, windowFilter: DashboardFilterWindow) => {
+  if (windowFilter === 'all') {
+    return true;
+  }
+  if (!submittedAt) {
+    return false;
+  }
+
+  const submittedDate = new Date(submittedAt);
+  const now = new Date();
+  const diff = now.getTime() - submittedDate.getTime();
+  const oneDay = 24 * 60 * 60 * 1000;
+
+  if (windowFilter === 'today') {
+    return submittedDate.toDateString() === now.toDateString();
+  }
+  if (windowFilter === '7days') {
+    return diff <= oneDay * 7;
+  }
+  return diff <= oneDay * 30;
+};
+
+const formatSubmissionLabel = (submittedAt?: string | null) => {
+  if (!submittedAt) {
+    return '未提出';
+  }
+
+  const date = new Date(submittedAt);
+  return `${date.getMonth() + 1}/${date.getDate()} ${date.toLocaleTimeString('ja-JP', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+};
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
-  const { user, userRole, signOut, getAccessToken } = useAuthStore();
-  const [profile, setProfile] = useState<any>(null);
-  const [schoolInfo, setSchoolInfo] = useState<any>(null);
-  const [motivation, setMotivation] = useState(29);
+  const { getAccessToken, profile, signOut } = useAuthStore();
+  const [rows, setRows] = useState<TeacherDashboardRow[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [searchText, setSearchText] = useState('');
+  const [selectedClass, setSelectedClass] = useState('all');
+  const [selectedEmotion, setSelectedEmotion] = useState<'all' | DashboardEmotion>('all');
+  const [selectedWindow, setSelectedWindow] = useState<DashboardFilterWindow>('7days');
+  const [followUpOnly, setFollowUpOnly] = useState(false);
+
+  const fetchDashboard = async () => {
+    setIsLoading(true);
+    setError('');
+
+    try {
+      const token = getAccessToken();
+      const response = await fetch(`${API_BASE_URL}/diary/teacher/dashboard?include_inactive=true&limit=200`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 403) {
+          throw new Error('先生アカウントのみがこの画面を利用できます。');
+        }
+        throw new Error('先生用ダッシュボードの取得に失敗しました。');
+      }
+
+      const payload = (await response.json()) as TeacherDashboardRow[];
+      setRows(payload);
+    } catch (fetchError) {
+      console.error('Teacher dashboard fetch error:', fetchError);
+      setError(fetchError instanceof Error ? fetchError.message : 'ダッシュボードの読み込みに失敗しました。');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchProfileAndSchool = async () => {
-      if (!user) return;
-
-      try {
-        const token = getAccessToken();
-        const response = await fetch(`${API_BASE_URL}/auth/profile`, {
-          headers: {
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error('Failed to fetch profile');
-        }
-
-        const payload = await response.json();
-        const profileData = payload.profile;
-
-        setProfile(profileData);
-        if (profileData?.schools) {
-          setSchoolInfo(profileData.schools);
-        }
-      } catch (error) {
-        console.error('Failed to fetch profile:', error);
-      }
-    };
-
-    fetchProfileAndSchool();
-  }, [user, getAccessToken]);
+    void fetchDashboard();
+  }, []);
 
   const handleLogout = async () => {
     await signOut();
-    navigate('/signin');
+    navigate('/teacher/signin', { replace: true });
   };
+
+  const handleClassChange = (event: SelectChangeEvent<string>) => {
+    setSelectedClass(event.target.value);
+  };
+
+  const handleEmotionChange = (event: SelectChangeEvent<'all' | DashboardEmotion>) => {
+    setSelectedEmotion(event.target.value as 'all' | DashboardEmotion);
+  };
+
+  const handleWindowChange = (event: SelectChangeEvent<DashboardFilterWindow>) => {
+    setSelectedWindow(event.target.value as DashboardFilterWindow);
+  };
+
+  const handleFollowUpToggle = (_event: React.ChangeEvent<HTMLInputElement>, checked: boolean) => {
+    setFollowUpOnly(checked);
+  };
+
+  const resetFilters = () => {
+    setSearchText('');
+    setSelectedClass('all');
+    setSelectedEmotion('all');
+    setSelectedWindow('7days');
+    setFollowUpOnly(false);
+  };
+
+  const classOptions = Array.from(
+    new Set(rows.map((row) => row.class_name).filter((className): className is string => Boolean(className)))
+  );
+
+  const filteredRows = rows.filter((row) => {
+    if (selectedClass !== 'all' && row.class_name !== selectedClass) {
+      return false;
+    }
+    if (selectedEmotion !== 'all' && !(row.emotion?.mood_tags || []).includes(selectedEmotion)) {
+      return false;
+    }
+    if (followUpOnly && !row.follow_up_flag) {
+      return false;
+    }
+    if (!isWithinWindow(row.submitted_at, selectedWindow)) {
+      return false;
+    }
+
+    const haystack = [
+      row.student_name,
+      row.student_email,
+      row.class_name || '',
+      row.shared_summary || '',
+      ...(row.published_tags || []),
+    ]
+      .join(' ')
+      .toLowerCase();
+
+    return haystack.includes(searchText.trim().toLowerCase());
+  });
+
+  const submittedRows = filteredRows.filter((row) => row.has_submission);
+  const activeToday = filteredRows.filter((row) => isWithinWindow(row.submitted_at, 'today')).length;
+  const noSubmissionCount = filteredRows.filter((row) => !row.has_submission).length;
+  const followUpCount = filteredRows.filter((row) => Boolean(row.follow_up_flag)).length;
+  const avgEffort = submittedRows.length
+    ? Math.round(
+        (submittedRows.reduce((sum, row) => sum + (row.emotion?.effort_score || 0), 0) / submittedRows.length) * 20
+      )
+    : 0;
+
+  const distributionMap = submittedRows.reduce<Partial<Record<DashboardEmotion, number>>>((acc, row) => {
+    for (const tag of row.emotion?.mood_tags || []) {
+      acc[tag] = (acc[tag] || 0) + 1;
+    }
+    return acc;
+  }, {});
+
+  const emotionDistribution = (Object.entries(distributionMap) as [DashboardEmotion, number][])
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6);
+
+  const schoolName = profile?.schools?.name || '学校未設定';
 
   return (
     <Container
       maxWidth="xl"
       sx={{
-        py: 3,
         minHeight: '100vh',
+        py: 3,
         background:
           'radial-gradient(circle at top left, rgba(242, 224, 192, 0.55), transparent 34%), radial-gradient(circle at 85% 10%, rgba(209, 191, 167, 0.28), transparent 28%), linear-gradient(180deg, #f6f0e7 0%, #fbf8f2 38%, #f4efe7 100%)',
       }}
@@ -225,21 +275,12 @@ const TeacherDashboard = () => {
           p: { xs: 2, md: 2.5 },
           border: '1px solid #d8d2c8',
           borderRadius: 3,
-          background:
-            'linear-gradient(135deg, rgba(255,255,255,0.98), rgba(255,251,245,0.92))',
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.98), rgba(255,251,245,0.92))',
           boxShadow: '0 18px 48px rgba(56, 44, 27, 0.08)',
         }}
       >
-        <Box
-          sx={{
-            display: 'flex',
-            flexDirection: { xs: 'column', md: 'row' },
-            gap: 2,
-            alignItems: { xs: 'flex-start', md: 'center' },
-            justifyContent: 'space-between',
-          }}
-        >
-          <Box sx={{ minWidth: 0 }}>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} justifyContent="space-between">
+          <Box>
             <Typography
               sx={{
                 fontFamily: "'Noto Serif JP', serif",
@@ -250,9 +291,13 @@ const TeacherDashboard = () => {
                 lineHeight: 1.1,
               }}
             >
-              {className}
+              先生用ダッシュボード
             </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1.25 }}>
+            <Typography sx={{ mt: 1, color: '#5e5447', lineHeight: 1.8 }}>
+              生徒が確認して共有した記録文と選んだ気持ちから、声かけの手がかりを確認できます。
+              raw対話ログやAIの見立て全文は表示しません。
+            </Typography>
+            <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 1.5 }}>
               <Chip
                 icon={<AdminPanelSettings />}
                 label="Teacher"
@@ -264,7 +309,7 @@ const TeacherDashboard = () => {
               />
               <Chip
                 icon={<School />}
-                label={schoolInfo?.name || '学校情報を取得中'}
+                label={schoolName}
                 variant="outlined"
                 sx={{
                   borderColor: '#d8d2c8',
@@ -272,337 +317,473 @@ const TeacherDashboard = () => {
                   bgcolor: 'rgba(255,255,255,0.75)',
                 }}
               />
-              <Chip
-                icon={<TrendingUp />}
-                label={`${students.length}名 · 本日更新 ${updatedCount}件`}
-                variant="outlined"
-                sx={{
-                  borderColor: '#efd3a3',
-                  color: '#8b5a1f',
-                  bgcolor: '#fff8eb',
-                }}
-              />
-            </Box>
+              {profile?.school_id && (
+                <Chip
+                  label={`学校ID ${profile.school_id.slice(0, 8)}`}
+                  variant="outlined"
+                  sx={{
+                    borderColor: '#e5dccf',
+                    color: '#7a7267',
+                    bgcolor: 'rgba(255,255,255,0.75)',
+                  }}
+                />
+              )}
+            </Stack>
           </Box>
-          <Button
-            variant="contained"
-            color="inherit"
-            startIcon={<Logout />}
-            onClick={handleLogout}
-            sx={{
-              alignSelf: { xs: 'stretch', md: 'center' },
-              bgcolor: '#1c1a16',
-              color: 'white',
-              px: 2.5,
-              py: 1.25,
-              borderRadius: 999,
-              boxShadow: 'none',
-              '&:hover': {
-                bgcolor: '#2b2620',
+
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.2} alignItems={{ sm: 'center' }}>
+            <Button
+              variant="outlined"
+              startIcon={<LockOutlined />}
+              onClick={() => navigate('/profile?tab=security')}
+              sx={{
+                borderColor: '#d5ccbf',
+                color: '#40382e',
+                bgcolor: 'rgba(255,255,255,0.8)',
+              }}
+            >
+              アカウント設定
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<Refresh />}
+              onClick={() => void fetchDashboard()}
+              sx={{
+                borderColor: '#d5ccbf',
+                color: '#40382e',
+                bgcolor: 'rgba(255,255,255,0.8)',
+              }}
+            >
+              更新
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Logout />}
+              onClick={handleLogout}
+              sx={{
+                bgcolor: '#1c1a16',
+                color: '#fff',
+                px: 2.5,
+                borderRadius: 999,
                 boxShadow: 'none',
-              },
-            }}
-          >
-            ログアウト
-          </Button>
-        </Box>
+                '&:hover': {
+                  bgcolor: '#2b2620',
+                  boxShadow: 'none',
+                },
+              }}
+            >
+              ログアウト
+            </Button>
+          </Stack>
+        </Stack>
       </Paper>
 
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 390px' },
+          gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) 320px' },
           gap: 2.5,
-          mb: 3,
+          alignItems: 'start',
         }}
       >
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 2, md: 2.5 },
-            border: '1px solid #ddd5c9',
-            borderRadius: 3,
-            background:
-              'linear-gradient(180deg, rgba(255,255,255,0.96), rgba(251,247,240,0.95))',
-            boxShadow: '0 12px 36px rgba(56, 44, 27, 0.06)',
-          }}
-        >
-          <Box
+        <Box>
+          <Paper
+            elevation={0}
             sx={{
-              display: 'flex',
-              alignItems: { xs: 'flex-start', md: 'center' },
-              justifyContent: 'space-between',
-              gap: 2,
-              mb: 1.5,
-              flexDirection: { xs: 'column', md: 'row' },
+              p: { xs: 2, md: 2.5 },
+              borderRadius: 3,
+              border: '1px solid #ddd5c9',
+              bgcolor: 'rgba(255,255,255,0.94)',
+              boxShadow: '0 12px 36px rgba(56, 44, 27, 0.06)',
             }}
           >
-            <Box>
-              <Typography
-                sx={{
-                  fontFamily: "'Noto Serif JP', serif",
-                  fontSize: { xs: 22, md: 26 },
-                  fontWeight: 600,
-                  color: '#1c1a16',
-                  lineHeight: 1.2,
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 1.5 }}>
+              <TextField
+                value={searchText}
+                onChange={(event) => setSearchText(event.target.value)}
+                label="生徒名・本文で検索"
+                fullWidth
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Search sx={{ color: '#8b8071' }} />
+                    </InputAdornment>
+                  ),
                 }}
-              >
-                今日の探究ログ
-              </Typography>
-              <Typography
-                sx={{
-                  mt: 0.75,
-                  color: '#6b6558',
-                  fontSize: 13,
-                  lineHeight: 1.7,
-                }}
-              >
-                {profile?.name ? `${profile.name} 先生の視点で、クラス全体の探究の熱量と停滞を同時に見渡せます。` : 'クラス全体の探究の熱量と停滞を同時に見渡せます。'}
-              </Typography>
-            </Box>
+              />
+
+              <FormControl sx={{ minWidth: 170 }}>
+                <InputLabel id="class-filter-label">クラス</InputLabel>
+                <Select
+                  labelId="class-filter-label"
+                  value={selectedClass}
+                  label="クラス"
+                  onChange={handleClassChange}
+                >
+                  <MenuItem value="all">全クラス</MenuItem>
+                  {classOptions.map((classOption) => (
+                    <MenuItem key={classOption} value={classOption}>
+                      {classOption}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl sx={{ minWidth: 160 }}>
+                <InputLabel id="emotion-filter-label">感情</InputLabel>
+                <Select
+                  labelId="emotion-filter-label"
+                  value={selectedEmotion}
+                  label="感情"
+                  onChange={handleEmotionChange}
+                >
+                  <MenuItem value="all">すべて</MenuItem>
+                  {Object.entries(emotionMeta).map(([key, meta]) => (
+                    <MenuItem key={key} value={key}>
+                      {meta.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+
+              <FormControl sx={{ minWidth: 150 }}>
+                <InputLabel id="window-filter-label">更新範囲</InputLabel>
+                <Select
+                  labelId="window-filter-label"
+                  value={selectedWindow}
+                  label="更新範囲"
+                  onChange={handleWindowChange}
+                >
+                  {Object.entries(windowLabels).map(([key, label]) => (
+                    <MenuItem key={key} value={key}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Stack>
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Switch checked={followUpOnly} onChange={handleFollowUpToggle} />
+                <Typography sx={{ color: '#5e5447' }}>要フォローのみ表示</Typography>
+              </Stack>
+
+              <Button variant="text" onClick={resetFilters} sx={{ color: '#7d705f' }}>
+                フィルタをリセット
+              </Button>
+            </Stack>
+          </Paper>
+
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          {isLoading ? (
+            <Paper
+              elevation={0}
+              sx={{
+                mt: 2,
+                p: 4,
+                borderRadius: 3,
+                border: '1px solid #ddd5c9',
+                bgcolor: 'rgba(255,255,255,0.94)',
+                display: 'grid',
+                placeItems: 'center',
+                gap: 1.5,
+              }}
+            >
+              <CircularProgress />
+              <Typography sx={{ color: '#6b6558' }}>学校の探究ログを読み込んでいます...</Typography>
+            </Paper>
+          ) : (
             <Box
               sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                px: 1.5,
-                py: 1,
-                borderRadius: 999,
-                bgcolor: '#fff7ea',
-                border: '1px solid #f1d4a8',
-                color: '#8b5a1f',
-                flexShrink: 0,
+                mt: 2,
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', xl: 'repeat(2, minmax(0, 1fr))' },
+                gap: 1.5,
               }}
             >
-              <Typography sx={{ fontSize: 12, letterSpacing: '0.08em' }}>更新</Typography>
-              <Typography sx={{ fontFamily: "'Noto Serif JP', serif", fontSize: 20, fontWeight: 600, lineHeight: 1 }}>
-                {updatedCount}
-              </Typography>
-              <Typography sx={{ fontSize: 12, letterSpacing: '0.08em' }}>件</Typography>
+              {filteredRows.map((row) => {
+                const moodTags = row.emotion?.mood_tags || [];
+                const effort = (row.emotion?.effort_score || 0) * 20;
+                const followUpFlag = row.follow_up_flag;
+
+                return (
+                  <Paper
+                    key={row.student_id}
+                    elevation={0}
+                    sx={{
+                      p: 2,
+                      borderRadius: 3,
+                      border: '1px solid #e0d8ca',
+                      bgcolor: 'rgba(255,255,255,0.95)',
+                      boxShadow: '0 10px 24px rgba(56, 44, 27, 0.04)',
+                    }}
+                  >
+                    <Stack direction="row" justifyContent="space-between" spacing={2} alignItems="flex-start">
+                      <Box sx={{ minWidth: 0 }}>
+                        <Stack direction="row" spacing={1} flexWrap="wrap">
+                          <Typography
+                            sx={{
+                              fontFamily: "'Noto Serif JP', serif",
+                              fontSize: 22,
+                              color: '#1c1a16',
+                              lineHeight: 1.2,
+                            }}
+                          >
+                            {row.student_name}
+                          </Typography>
+                          {followUpFlag && (
+                            <Chip
+                              icon={<WarningAmber />}
+                              label={followUpLabels[followUpFlag]}
+                              sx={{
+                                bgcolor: '#fff3e7',
+                                color: '#8b4f10',
+                                border: '1px solid #f0d1a5',
+                              }}
+                            />
+                          )}
+                        </Stack>
+                        <Typography sx={{ mt: 0.5, color: '#6d6458', fontSize: 13 }}>
+                          {[row.grade, row.class_name, row.attendance_number ? `${row.attendance_number}番` : null]
+                            .filter(Boolean)
+                            .join(' / ') || row.student_email}
+                        </Typography>
+                      </Box>
+
+                      <Chip
+                        label={row.has_submission ? formatSubmissionLabel(row.submitted_at) : '未提出'}
+                        sx={{
+                          bgcolor: row.has_submission ? '#f6f1e8' : '#f9ecec',
+                          color: row.has_submission ? '#5f584c' : '#a33f3f',
+                          border: `1px solid ${row.has_submission ? '#e6ded1' : '#f0c9c9'}`,
+                          flexShrink: 0,
+                        }}
+                      />
+                    </Stack>
+
+                    <Box
+                      sx={{
+                        mt: 1.75,
+                        p: 1.5,
+                        borderRadius: 2.5,
+                        bgcolor: '#faf6f0',
+                        border: '1px solid #ece3d7',
+                        minHeight: 110,
+                      }}
+                    >
+                      <Typography sx={{ color: '#3f382f', lineHeight: 1.8, fontSize: 14 }}>
+                        {row.shared_summary || 'この期間の共有summaryはまだありません。生徒が確認して共有すると、ここに先生向けの要約が表示されます。'}
+                      </Typography>
+                    </Box>
+
+                    <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mt: 1.5 }}>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography sx={{ fontSize: 12, letterSpacing: '0.08em', color: '#7b6f60', mb: 0.75 }}>
+                          手ごたえ
+                        </Typography>
+                        <LinearProgress
+                          variant="determinate"
+                          value={effort}
+                          sx={{
+                            height: 8,
+                            borderRadius: 999,
+                            bgcolor: '#ece4d8',
+                            '& .MuiLinearProgress-bar': {
+                              borderRadius: 999,
+                              bgcolor: effort >= 60 ? '#1d9e75' : effort >= 40 ? '#ef9f27' : '#d4537e',
+                            },
+                          }}
+                        />
+                        <Typography sx={{ mt: 0.6, fontSize: 12, color: '#6d6458' }}>
+                          {row.emotion?.effort_score ? `${effort} / 100` : '未入力'}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ minWidth: { md: 160 } }}>
+                        <Typography sx={{ fontSize: 12, letterSpacing: '0.08em', color: '#7b6f60', mb: 0.75 }}>
+                          提出数
+                        </Typography>
+                        <Typography
+                          sx={{
+                            fontFamily: "'Noto Serif JP', serif",
+                            fontSize: 24,
+                            lineHeight: 1,
+                            color: '#1c1a16',
+                          }}
+                        >
+                          {row.entry_count}
+                        </Typography>
+                      </Box>
+                    </Stack>
+
+                    <Stack direction="row" spacing={0.8} flexWrap="wrap" sx={{ mt: 1.5 }}>
+                      {moodTags.map((tag) => {
+                        const meta = emotionMeta[tag];
+                        return (
+                          <Chip
+                            key={`${row.student_id}-${tag}`}
+                            label={meta.label}
+                            sx={{
+                              bgcolor: meta.tone,
+                              color: meta.text,
+                              border: `1px solid ${meta.border}`,
+                            }}
+                          />
+                        );
+                      })}
+                      {(row.published_tags || []).slice(0, 3).map((tag) => (
+                        <Chip
+                          key={`${row.student_id}-${tag}`}
+                          label={`#${tag}`}
+                          variant="outlined"
+                          sx={{
+                            borderColor: '#ddd2c2',
+                            color: '#6f6558',
+                          }}
+                        />
+                      ))}
+                    </Stack>
+                  </Paper>
+                );
+              })}
+
+              {!filteredRows.length && !isLoading && (
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 4,
+                    borderRadius: 3,
+                    border: '1px solid #ddd5c9',
+                    bgcolor: 'rgba(255,255,255,0.94)',
+                  }}
+                >
+                  <Typography sx={{ fontFamily: "'Noto Serif JP', serif", fontSize: 24, color: '#1c1a16' }}>
+                    条件に一致する生徒がいません
+                  </Typography>
+                  <Typography sx={{ mt: 1, color: '#6d6458', lineHeight: 1.8 }}>
+                    フィルタ条件を緩めるか、更新範囲を広げて再確認してください。
+                  </Typography>
+                </Paper>
+              )}
             </Box>
-          </Box>
+          )}
+        </Box>
 
-          <Divider sx={{ my: 2, borderColor: '#e4ddd2' }} />
-
-          <Box
+        <Stack spacing={2}>
+          <Paper
+            elevation={0}
             sx={{
-              display: 'grid',
-              gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
-              gap: 1.5,
+              p: 2,
+              borderRadius: 3,
+              border: '1px solid #ddd5c9',
+              bgcolor: 'rgba(255,255,255,0.94)',
+              boxShadow: '0 12px 36px rgba(56, 44, 27, 0.06)',
             }}
           >
-            <Paper
-              elevation={0}
-              sx={{
-                p: 1.75,
-                borderRadius: 2.5,
-                border: '1px solid #e7dfd4',
-                bgcolor: 'rgba(255,255,255,0.86)',
-              }}
-            >
-              <Typography sx={{ fontSize: 12, color: '#7b6f60', letterSpacing: '0.08em' }}>生徒数</Typography>
-              <Typography sx={{ mt: 0.5, fontFamily: "'Noto Serif JP', serif", fontSize: 28, fontWeight: 600, color: '#1c1a16' }}>
-                32
-              </Typography>
-            </Paper>
-            <Paper
-              elevation={0}
-              sx={{
-                p: 1.75,
-                borderRadius: 2.5,
-                border: '1px solid #e7dfd4',
-                bgcolor: 'rgba(255,255,255,0.86)',
-              }}
-            >
-              <Typography sx={{ fontSize: 12, color: '#7b6f60', letterSpacing: '0.08em' }}>今日の気配</Typography>
-              <Typography sx={{ mt: 0.5, fontFamily: "'Noto Serif JP', serif", fontSize: 28, fontWeight: 600, color: '#7a4b1a' }}>
-                {motivation}
-              </Typography>
-            </Paper>
-            <Paper
-              elevation={0}
-              sx={{
-                p: 1.75,
-                borderRadius: 2.5,
-                border: '1px solid #e7dfd4',
-                bgcolor: 'rgba(255,255,255,0.86)',
-              }}
-            >
-              <Typography sx={{ fontSize: 12, color: '#7b6f60', letterSpacing: '0.08em' }}>観察メモ</Typography>
-              <Typography sx={{ mt: 0.75, fontSize: 13, color: '#4d463a', lineHeight: 1.75 }}>
-                {motivation < 25 ? 'まだ火が小さい。立ち止まりの支援が必要。' : motivation < 50 ? '温度が上がりつつあります。問いの焦点を整える段階。' : motivation < 75 ? '探究が前進中。本人主導のリズムが出ています。' : '強い熱量。次の公開や深掘りに移せる状態です。'}
-              </Typography>
-            </Paper>
-          </Box>
-        </Paper>
-
-        <Paper
-          elevation={0}
-          sx={{
-            p: 1.5,
-            borderRadius: 3,
-            border: '1px solid #ddd5c9',
-            bgcolor: 'rgba(255,255,255,0.94)',
-            boxShadow: '0 12px 36px rgba(56, 44, 27, 0.06)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1,
-            alignItems: 'center',
-          }}
-        >
-          <Box sx={{ width: '100%', px: 0.5, pt: 0.5 }}>
-            <Typography
-              sx={{
-                fontSize: 11,
-                letterSpacing: '0.14em',
-                color: '#6b6558',
-                textTransform: 'uppercase',
-                mb: 0.5,
-              }}
-            >
-              diary input
-            </Typography>
             <Typography
               sx={{
                 fontFamily: "'Noto Serif JP', serif",
-                fontSize: 18,
+                fontSize: 22,
                 color: '#1c1a16',
-                lineHeight: 1.35,
+                lineHeight: 1.25,
               }}
             >
-              探究の温度を入力
+              学校サマリー
             </Typography>
-            <Typography sx={{ mt: 0.75, fontSize: 12, color: '#6b6558', lineHeight: 1.7 }}>
-              Riveの焔をドラッグして、日誌生成時のモチベーションを直観的に指定します。
-            </Typography>
-          </Box>
-          <Box sx={{ transform: 'scale(0.92)', transformOrigin: 'top center' }}>
-            <MotivationFlameRive value={motivation} onChange={setMotivation} />
-          </Box>
-        </Paper>
-      </Box>
 
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))',
-          gap: 1,
-        }}
-      >
-        {students.map((student, index) => {
-          const glyph = emotionGlyphs[student.emotion];
-          const firstChar = student.name[0];
-
-          return (
-            <Paper
-              key={`${student.num}-${student.name}`}
-              elevation={0}
-              sx={{
-                p: 1.5,
-                borderRadius: 2.5,
-                border: '1px solid #e0d8ca',
-                bgcolor: 'rgba(255,255,255,0.94)',
-                cursor: 'default',
-                transition: 'transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease',
-                boxShadow: '0 8px 22px rgba(56, 44, 27, 0.04)',
-                '&:hover': {
-                  transform: 'translateY(-2px)',
-                  borderColor: '#cfc3b2',
-                  boxShadow: '0 14px 30px rgba(56, 44, 27, 0.08)',
-                },
-              }}
-            >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <Stack spacing={1.2} sx={{ mt: 1.75 }}>
+              {[
+                { label: '対象生徒', value: `${filteredRows.length}名` },
+                { label: '本日更新', value: `${activeToday}名` },
+                { label: '要フォロー', value: `${followUpCount}名` },
+                { label: '未提出', value: `${noSubmissionCount}名` },
+                { label: '平均熱量', value: `${avgEffort} / 100` },
+              ].map((item) => (
                 <Box
-                  component="svg"
-                  viewBox="0 0 100 100"
+                  key={item.label}
                   sx={{
-                    width: 38,
-                    height: 38,
-                    flexShrink: 0,
-                    filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.08))',
-                    animation: 'cardFloat 3.4s ease-in-out infinite',
-                    animationDelay: `${(index % 8) * 0.12}s`,
-                    '@keyframes cardFloat': {
-                      '0%, 100%': { transform: 'translateY(0px) scale(1)' },
-                      '50%': { transform: 'translateY(-2px) scale(1.02)' },
-                    },
+                    p: 1.5,
+                    borderRadius: 2.5,
+                    border: '1px solid #e7dfd4',
+                    bgcolor: '#faf7f2',
                   }}
                 >
-                  <path
-                    d={glyph.p0}
-                    fill={glyph.fill}
-                    stroke={glyph.stroke}
-                    strokeWidth={2}
-                    strokeLinejoin="round"
-                  >
-                    <animate attributeName="d" values={`${glyph.p0};${glyph.p1};${glyph.p0}`} dur={`${glyph.dur}s`} repeatCount="indefinite" />
-                  </path>
-                  <text
-                    x="50"
-                    y="56"
-                    textAnchor="middle"
-                    fontSize="38"
-                    fontFamily="sans-serif"
-                    fill={glyph.text}
-                    fontWeight="500"
-                  >
-                    {firstChar}
-                  </text>
-                </Box>
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography sx={{ fontSize: 12, fontWeight: 600, color: '#1c1a16', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {student.name}
+                  <Typography sx={{ fontSize: 12, color: '#7b6f60', letterSpacing: '0.08em' }}>
+                    {item.label}
                   </Typography>
-                  <Typography sx={{ fontSize: 10, color: '#7b6f60', mt: 0.25 }}>
-                    {student.num}
+                  <Typography sx={{ mt: 0.5, fontSize: 24, color: '#1c1a16', lineHeight: 1.1 }}>
+                    {item.value}
                   </Typography>
                 </Box>
-              </Box>
-              <Typography
-                sx={{
-                  fontSize: 11,
-                  color: '#5f584c',
-                  lineHeight: 1.7,
-                  display: '-webkit-box',
-                  WebkitBoxOrient: 'vertical',
-                  WebkitLineClamp: 3,
-                  overflow: 'hidden',
-                }}
-              >
-                {student.preview}
-              </Typography>
-              <Box sx={{ mt: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography sx={{ fontSize: 10, color: student.updated ? '#9a4c1b' : '#a9a095', letterSpacing: '0.08em' }}>
-                  {student.updated ? '本日更新' : '前回確認'}
-                </Typography>
-                <Box
-                  sx={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: '50%',
-                    bgcolor: student.updated ? '#cc3300' : '#d7cfc1',
-                    boxShadow: student.updated ? '0 0 0 3px rgba(204,51,0,0.12)' : 'none',
-                  }}
-                />
-              </Box>
-            </Paper>
-          );
-        })}
-      </Box>
+              ))}
+            </Stack>
+          </Paper>
 
-      <Box
-        sx={{
-          mt: 3,
-          p: 1.75,
-          borderRadius: 2.5,
-          border: '1px solid #e1d8cb',
-          bgcolor: 'rgba(255,255,255,0.78)',
-        }}
-      >
-        <Typography variant="caption" sx={{ color: '#8b8071', letterSpacing: '0.04em' }}>
-          Debug Info: User ID: {user?.id}, Role: {userRole}, School ID: {profile?.school_id}
-        </Typography>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              borderRadius: 3,
+              border: '1px solid #ddd5c9',
+              bgcolor: 'rgba(255,255,255,0.94)',
+              boxShadow: '0 12px 36px rgba(56, 44, 27, 0.06)',
+            }}
+          >
+            <Typography
+              sx={{
+                fontFamily: "'Noto Serif JP', serif",
+                fontSize: 20,
+                color: '#1c1a16',
+                lineHeight: 1.25,
+              }}
+            >
+              感情の分布
+            </Typography>
+
+            <Stack spacing={1.2} sx={{ mt: 1.75 }}>
+              {emotionDistribution.map(([emotionId, count]) => {
+                const meta = emotionMeta[emotionId];
+                const width = submittedRows.length ? (count / submittedRows.length) * 100 : 0;
+
+                return (
+                  <Box key={emotionId}>
+                    <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.6 }}>
+                      <Typography sx={{ fontSize: 13, color: meta.text }}>{meta.label}</Typography>
+                      <Typography sx={{ fontSize: 12, color: '#6d6458' }}>{count}件</Typography>
+                    </Stack>
+                    <Box
+                      sx={{
+                        height: 8,
+                        borderRadius: 999,
+                        bgcolor: '#ece4d8',
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          width: `${width}%`,
+                          height: '100%',
+                          bgcolor: meta.border,
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                );
+              })}
+
+              {!emotionDistribution.length && (
+                <Typography sx={{ color: '#6d6458', lineHeight: 1.8 }}>
+                  提出が入ると、ここに学校全体の感情傾向が表示されます。
+                </Typography>
+              )}
+            </Stack>
+          </Paper>
+        </Stack>
       </Box>
     </Container>
   );

@@ -5,12 +5,9 @@ import {
   Button,
   Stack,
   CircularProgress,
-  IconButton,
-  Tooltip,
 } from '@mui/material';
 import { 
   Send as SendIcon,
-  AutoAwesome as DiaryIcon,
 } from '@mui/icons-material';
 
 // Lazy load ResponseStyleSelector for better performance with error handling
@@ -49,7 +46,6 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   onSendMessage,
   onKeyPress,
   onStyleChange,
-  onDiaryClick,
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -131,38 +127,6 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
               },
             }}
           />
-          
-          {/* 日誌ボタン */}
-          {onDiaryClick && (
-            <Tooltip title="今日の探究を日誌にする">
-              <IconButton
-                onClick={onDiaryClick}
-                disabled={isLoading}
-                sx={{
-                  width: 44,
-                  height: 44,
-                  backgroundColor: '#FFF6E0',
-                  color: '#FF8C5A',
-                  borderRadius: '12px',
-                  '&:hover': {
-                    backgroundColor: '#FFE4CC',
-                    transform: 'translateY(-2px) scale(1.05)',
-                    boxShadow: '0 4px 12px rgba(255, 140, 90, 0.3)',
-                  },
-                  '&:active': {
-                    transform: 'translateY(0) scale(0.98)',
-                  },
-                  '&:disabled': {
-                    backgroundColor: '#F5F5F5',
-                    color: '#CCCCCC',
-                  },
-                  transition: 'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
-                }}
-              >
-                <DiaryIcon sx={{ fontSize: 20 }} />
-              </IconButton>
-            </Tooltip>
-          )}
           
           <Button
             variant="contained"

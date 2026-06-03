@@ -67,6 +67,9 @@ class ChatResponse(BaseModel):
 
     # 応答スタイル表示用フィールド
     response_style_used: Optional[str] = None  # 使用された応答スタイル
+    support_intent: Optional[str] = None  # 支援意図
+    next_action_suggestions: Optional[List[str]] = None  # 次の一歩の候補
+    telemetry_event_id: Optional[str] = None  # 観測イベントID
     
     # WebSearch結果
     sources: Optional[List[WebSource]] = None  # WebSearchで参照したソース
@@ -156,6 +159,9 @@ async def chat_with_ai(
             clarification_questions=result.get("clarification_questions"),
             suggestion_options=result.get("suggestion_options"),
             response_style_used=result.get("response_style_used"),
+            support_intent=result.get("support_intent"),
+            next_action_suggestions=result.get("next_action_suggestions"),
+            telemetry_event_id=result.get("telemetry_event_id"),
             sources=result.get("sources"),  # WebSearch結果を返す
             quest_cards=result.get("quest_cards")  # クエストカードを返す
         )
@@ -177,7 +183,7 @@ async def get_chat_history(
     チャット履歴取得
     
     認証が必要です。リクエストヘッダーにAuthorizationを含めてください:
-    Authorization: Bearer <your_jwt_token>
+    Authorization: Bearer <your_supabase_access_token>
     
     Args:
         conversation_id: 会話ID（オプション）。指定しない場合は最新のアクティブな会話を取得

@@ -103,7 +103,6 @@ export interface ChatInputAreaProps {
   onSendMessage: () => void;
   onKeyPress: (event: React.KeyboardEvent) => void;
   onStyleChange: (style: ResponseStyle) => void;
-  onDiaryClick?: () => void;
 }
 
 export interface QuestCardsProps {

@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import type { AuthError, Session, User } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured, supabaseConfigError } from '../lib/supabase';
 import { API_BASE_URL } from '../config/api';
-import { tokenManager, type TokenData } from '../utils/tokenManager';
+import { tokenManager } from '../utils/tokenManager';
 
 export interface ProfileData {
   id: string;
@@ -15,7 +15,7 @@ export interface ProfileData {
   theme?: string;
   question?: string;
   hypothesis?: string;
-  role: 'student' | 'teacher';
+  role: 'student' | 'teacher' | 'admin';
   school_id: string | null;
   school_code_locked?: boolean;
   email?: string;
@@ -41,7 +41,7 @@ interface AuthState {
   user: AuthenticatedUser | null;
   session: Session | null;
   profile: ProfileData | null;
-  userRole: 'student' | 'teacher' | null;
+  userRole: 'student' | 'teacher' | 'admin' | null;
   isLoading: boolean;
   isInitialized: boolean;
   error: AuthError | null;
@@ -84,13 +84,6 @@ const buildRedirectUrl = (path: string) => {
   return `${window.location.origin}${normalizedPath}`;
 };
 
-const getTokenDataFromSession = (session: Session): TokenData => ({
-  access_token: session.access_token,
-  refresh_token: session.refresh_token,
-  expires_at: session.expires_at ? session.expires_at * 1000 : Date.now() + (session.expires_in || 3600) * 1000,
-  token_type: session.token_type,
-});
-
 const logAuthEvent = (event: string, payload?: Record<string, unknown>) => {
   console.info(`[AuthStore] ${event}`, payload || {});
 };
@@ -106,11 +99,7 @@ export const useAuthStore = create<AuthState>()(
       let authSubscription: { unsubscribe: () => void } | null = null;
 
       const syncTokenState = (session: Session | null) => {
-        if (session) {
-          tokenManager.saveTokens(getTokenDataFromSession(session));
-        } else {
-          tokenManager.clearTokens();
-        }
+        tokenManager.setSession(session);
       };
 
       const resetAuthState = (error: AuthError | null = null) => {

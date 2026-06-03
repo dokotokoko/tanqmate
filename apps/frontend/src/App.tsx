@@ -27,6 +27,8 @@ const PasswordResetCompletePage = lazy(() => import('./pages/PasswordResetComple
 
 // role別ダッシュボード
 const TeacherDashboard = lazy(() => import('./pages/TeacherDashboard'));
+const TeacherSignInPage = lazy(() => import('./pages/TeacherSignInPage'));
+const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
 
 // その他のページは遅延ローディング
 const GuidePage = lazy(() => import('./pages/GuidePage'));
@@ -136,6 +138,14 @@ function App() {
                 element={
                   user ? <Navigate to={getAuthenticatedRedirectPath(profile)} replace /> :
                   <LazyWrapper><SignInPage /></LazyWrapper>
+                }
+              />
+
+              <Route
+                path="/teacher/signin"
+                element={
+                  user ? <Navigate to={getAuthenticatedRedirectPath(profile)} replace /> :
+                  <LazyWrapper><TeacherSignInPage /></LazyWrapper>
                 }
               />
               
@@ -272,10 +282,19 @@ function App() {
               <Route 
                 path="/teacher" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="teacher">
                     <LazyWrapper><TeacherDashboard /></LazyWrapper>
                   </ProtectedRoute>
                 } 
+              />
+
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <LazyWrapper><AdminDashboardPage /></LazyWrapper>
+                  </ProtectedRoute>
+                }
               />
               
               {/* ダッシュボード旧導線 */}

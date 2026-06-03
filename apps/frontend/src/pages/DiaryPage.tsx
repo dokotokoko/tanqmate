@@ -1,16 +1,11 @@
 import React from 'react';
 import { Box } from '@mui/material';
 import { DiaryFlowNew } from '../components/Diary/DiaryFlowNew';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { colors, diary } from '../styles/design-system';
 
 const DiaryPage: React.FC = () => {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-
-  const handleComplete = () => {
-    navigate('/profile?tab=diaries');
-  };
 
   return (
     <Box
@@ -38,7 +33,7 @@ const DiaryPage: React.FC = () => {
           backdropFilter: 'blur(12px)',
         }}
       >
-        <DiaryFlowNew onComplete={handleComplete} autoStart={searchParams.get('autostart') === '1'} />
+        <DiaryFlowNew autoStart={searchParams.get('autostart') === '1'} />
       </Box>
     </Box>
   );

@@ -14,6 +14,7 @@ import {
   Divider,
 } from '@mui/material';
 import {
+  AdminPanelSettings,
   Visibility,
   VisibilityOff,
   Email,
@@ -217,6 +218,27 @@ const SignInPage = () => {
                 disabled={isLoading}
               >
                 {isLoading ? <CircularProgress size={24} /> : 'ログイン'}
+              </Button>
+
+              <Button
+                fullWidth
+                variant="outlined"
+                component="a"
+                href="/teacher/signin"
+                target="_blank"
+                rel="noopener noreferrer"
+                startIcon={<AdminPanelSettings />}
+                sx={{
+                  mb: 2,
+                  borderColor: colors.border.soft,
+                  color: colors.text.secondary,
+                  '&:hover': {
+                    borderColor: colors.secondary[300],
+                    backgroundColor: colors.background.subtle,
+                  },
+                }}
+              >
+                管理者ログイン
               </Button>
 
               <Divider sx={{ my: 2 }}>または</Divider>

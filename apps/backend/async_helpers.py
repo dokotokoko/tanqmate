@@ -222,7 +222,7 @@ class AsyncDatabaseHelper:
         message: str,
         conversation_id: str,
         context_data: Dict[str, Any]
-    ) -> bool:
+    ) -> Optional[str]:
         """
         チャットログを非同期で保存
         
@@ -235,7 +235,7 @@ class AsyncDatabaseHelper:
             context_data: コンテキスト情報
             
         Returns:
-            保存に成功したかどうか
+            保存されたチャットログID。IDを取得できないが保存できた場合は "saved"。
         """
         start_time = time.time()
         try:
@@ -247,18 +247,20 @@ class AsyncDatabaseHelper:
                 "context_data": json.dumps(context_data, ensure_ascii=False)
             }, self.supabase, user_id)
             
-            await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 lambda: self.supabase.table("chat_logs").insert(message_data).execute()
             )
             
             response_time = time.time() - start_time
             logger.info(f"🔷 DB Insert [save_chat_log]: 応答秒={response_time:.3f}s, sender={sender}")
             
-            return True
+            if result.data and result.data[0].get("id"):
+                return str(result.data[0]["id"])
+            return "saved"
             
         except Exception as e:
             logger.error(f"チャットログ保存エラー (async): {e}")
-            return False
+            return None
 
 
 class AsyncProjectContextBuilder:
@@ -417,7 +419,7 @@ async def parallel_save_chat_logs(
     db_helper: AsyncDatabaseHelper,
     user_message_data: Dict[str, Any],
     ai_message_data: Dict[str, Any]
-) -> Tuple[bool, bool]:
+) -> Tuple[Optional[str], Optional[str]]:
     """
     ユーザーメッセージとAIメッセージを並列で保存
     
@@ -427,7 +429,7 @@ async def parallel_save_chat_logs(
         ai_message_data: AIメッセージのデータ
         
     Returns:
-        (user_save_success, ai_save_success) のタプル
+        (user_chat_log_id, ai_chat_log_id) のタプル。保存失敗時は None。
     """
     start_time = time.time()
     try:
@@ -437,8 +439,8 @@ async def parallel_save_chat_logs(
         # 両方のログを並列で保存
         results = await asyncio.gather(user_task, ai_task, return_exceptions=True)
         
-        user_success = results[0] if not isinstance(results[0], Exception) else False
-        ai_success = results[1] if not isinstance(results[1], Exception) else False
+        user_success = results[0] if not isinstance(results[0], Exception) else None
+        ai_success = results[1] if not isinstance(results[1], Exception) else None
         
         total_time = time.time() - start_time
         logger.info(f"🔷 DB Parallel Save [chat_logs]: 応答秒={total_time:.3f}s, user_saved={user_success}, ai_saved={ai_success}")

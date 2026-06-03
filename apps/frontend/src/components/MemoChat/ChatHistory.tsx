@@ -54,7 +54,7 @@ const ChatHistory: React.FC<ChatHistoryProps> = ({
   const fetchConversations = async () => {
     setLoading(true);
     try {
-      // JWTトークンを取得
+      // Supabase Auth の access token を取得
       const token = tokenManager.getAccessToken();
       
       if (!token) {

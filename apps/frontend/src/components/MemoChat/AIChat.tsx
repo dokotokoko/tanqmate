@@ -23,7 +23,6 @@ import ResponseStyleSelector, { ResponseStyle } from './ResponseStyleSelector';
 import { SuggestionChips } from './SuggestionChips';
 import { ResponseStyleBadge } from './ResponseStyleBadge';
 import { ProgressTracker } from './ProgressTracker';
-import { useNavigate } from 'react-router-dom';
 
 // Lazy load components for better performance with error boundaries
 const ChatHeader = lazy(() => import('./ChatHeader').catch(err => {
@@ -78,7 +77,6 @@ const AIChat: React.FC<AIChatProps> = ({
   const { setConversationId, setLoading, setProcessingStatus, setFallbackInfo } = selectConversationActions();
   const { setHistoryOpen } = selectUIActions();
   const isHistoryOpen = useChatStore((state) => state.isHistoryOpen);
-  const navigate = useNavigate();
   
   // Local UI state
   const [inputValue, setInputValue] = useState('');
@@ -964,10 +962,6 @@ const AIChat: React.FC<AIChatProps> = ({
             onSendMessage={handleSendMessage}
             onKeyPress={handleKeyPress}
             onStyleChange={setResponseStyle}
-            onDiaryClick={() => {
-              console.log('🔵 日誌ボタンクリック: 日誌ページへ遷移します');
-              navigate('/diary?autostart=1');
-            }}
           />
         </Suspense>
       </Box>

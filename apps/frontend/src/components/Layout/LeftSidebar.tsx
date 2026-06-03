@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Typography, IconButton, Tooltip, Menu, MenuItem } from '@mui/material';
 import {
+  AdminPanelSettings as AdminPanelSettingsIcon,
   Chat as ChatIcon,
   Settings as SettingsIcon,
   Add as AddIcon,
@@ -8,7 +9,6 @@ import {
   AccountCircle as AccountCircleIcon,
   Logout as LogoutIcon,
   Person as PersonIcon,
-  Book as BookIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
@@ -25,7 +25,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout } = useAuthStore();
+  const { user, profile, logout } = useAuthStore();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const isMenuOpen = Boolean(anchorEl);
 
@@ -43,60 +43,62 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
     navigate('/signin');
   };
 
-  const handleDiaryOpen = () => {
-    navigate('/diary?autostart=1');
-  };
-
   const handleProfileOpen = () => {
     handleAccountMenuClose();
-    navigate('/profile');
+    navigate('/profile?tab=security');
   };
 
+  const isTeacher = profile?.role === 'teacher';
+  const isAdmin = profile?.role === 'admin';
+
   const menuItems = [
-    {
-      icon: <ChatIcon />,
-      label: 'チャット',
-      path: '/chat',
-      action: () => navigate('/chat')
-    },
+    ...(!isAdmin
+      ? [{
+          icon: <ChatIcon />,
+          label: 'チャット',
+          path: '/chat',
+          action: () => navigate('/chat')
+        }]
+      : []),
     {
       icon: <SettingsIcon />,
-      label: 'プロフィール',
+      label: 'アカウント設定',
       path: '/profile',
-      action: () => navigate('/profile')
+      action: () => navigate('/profile?tab=security')
     },
-    {
-      icon: <SettingsIcon />,
-      label: '先生用ダッシュボード',
-      path: '/teacher',
-      action: () => navigate('/teacher')
-    },
-    {
-      icon: <SettingsIcon />,
-      label: '設定',
-      path: '/settings',
-      action: () => {} // 未実装
-    },
+    ...(isTeacher
+      ? [{
+          icon: <SettingsIcon />,
+          label: '先生用ダッシュボード',
+          path: '/teacher',
+          action: () => navigate('/teacher')
+        }]
+      : []),
+    ...(isAdmin
+      ? [{
+          icon: <AdminPanelSettingsIcon />,
+          label: '開発者ダッシュボード',
+          path: '/admin',
+          action: () => navigate('/admin')
+        }]
+      : []),
   ];
 
   // チャット関連のボタン（上部に配置）
-  const chatItems = [
-    {
-      icon: <AddIcon />,
-      label: '新規チャット',
-      action: onNewChat
-    },
-    {
-      icon: <HistoryIcon />,
-      label: '会話履歴',
-      action: onHistoryOpen
-    },
-    {
-      icon: <BookIcon />,
-      label: '日誌を書く',
-      action: handleDiaryOpen
-    }
-  ];
+  const chatItems = isAdmin
+    ? []
+    : [
+        {
+          icon: <AddIcon />,
+          label: '新規チャット',
+          action: onNewChat
+        },
+        {
+          icon: <HistoryIcon />,
+          label: '会話履歴',
+          action: onHistoryOpen
+        },
+      ];
 
   return (
     <Box
@@ -287,7 +289,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
               onClick={handleProfileOpen}
             >
               <SettingsIcon sx={{ mr: 1 }} />
-              プロフィール設定
+              アカウント設定
             </MenuItem>
 
             {/* Logout */}

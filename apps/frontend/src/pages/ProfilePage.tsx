@@ -20,11 +20,13 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { LockOutlined } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { API_BASE_URL } from '../config/api';
 import { tokenManager } from '../utils/tokenManager';
 import { useAuthStore } from '../stores/authStore';
 import { borderRadius, colors, shadows } from '../styles/design-system';
+import { getPostOnboardingRoute } from '../utils/onboardingGuards';
 
 interface DiaryRecord {
   id: string;
@@ -57,10 +59,12 @@ function TabPanel({ children, value, index }: TabPanelProps) {
 const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { profile, fetchProfile } = useAuthStore();
-  const [tabValue, setTabValue] = useState(searchParams.get('tab') === 'diaries' ? 1 : 0);
+  const { profile, fetchProfile, updateUser } = useAuthStore();
+  const initialTab = searchParams.get('tab');
+  const [tabValue, setTabValue] = useState(initialTab === 'diaries' ? 1 : initialTab === 'security' ? 2 : 0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [diaries, setDiaries] = useState<DiaryRecord[]>([]);
@@ -74,13 +78,22 @@ const ProfilePage: React.FC = () => {
     question: '',
     hypothesis: '',
   });
+  const [passwordData, setPasswordData] = useState({
+    password: '',
+    confirmPassword: '',
+  });
+  const [passwordErrors, setPasswordErrors] = useState({
+    password: '',
+    confirmPassword: '',
+  });
 
   useEffect(() => {
     void loadPage();
   }, []);
 
   useEffect(() => {
-    setTabValue(searchParams.get('tab') === 'diaries' ? 1 : 0);
+    const nextTab = searchParams.get('tab');
+    setTabValue(nextTab === 'diaries' ? 1 : nextTab === 'security' ? 2 : 0);
   }, [searchParams]);
 
   const selectedDiary = useMemo(
@@ -179,9 +192,63 @@ const ProfilePage: React.FC = () => {
     }
   };
 
+  const validatePasswordForm = () => {
+    const nextErrors = {
+      password: '',
+      confirmPassword: '',
+    };
+
+    if (!passwordData.password) {
+      nextErrors.password = '新しいパスワードを入力してください';
+    } else if (passwordData.password.length < 8) {
+      nextErrors.password = 'パスワードは8文字以上で設定してください';
+    }
+
+    if (!passwordData.confirmPassword) {
+      nextErrors.confirmPassword = '確認用パスワードを入力してください';
+    } else if (passwordData.password !== passwordData.confirmPassword) {
+      nextErrors.confirmPassword = 'パスワードが一致しません';
+    }
+
+    setPasswordErrors(nextErrors);
+    return !nextErrors.password && !nextErrors.confirmPassword;
+  };
+
+  const handlePasswordSave = async () => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    if (!validatePasswordForm()) {
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const result = await updateUser({ password: passwordData.password });
+      if (!result.success) {
+        throw new Error(result.error?.message || 'パスワードの更新に失敗しました');
+      }
+
+      setPasswordData({
+        password: '',
+        confirmPassword: '',
+      });
+      setPasswordErrors({
+        password: '',
+        confirmPassword: '',
+      });
+      setSuccessMessage('パスワードを更新しました');
+    } catch (error) {
+      console.error('Failed to update password:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'パスワードの更新に失敗しました');
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
   const handleTabChange = (_event: React.SyntheticEvent, nextValue: number) => {
     setTabValue(nextValue);
-    setSearchParams(nextValue === 1 ? { tab: 'diaries' } : {});
+    setSearchParams(nextValue === 1 ? { tab: 'diaries' } : nextValue === 2 ? { tab: 'security' } : {});
   };
 
   return (
@@ -208,7 +275,10 @@ const ProfilePage: React.FC = () => {
           </Typography>
           <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap', useFlexGap: true }}>
             <Chip label={profile?.schools?.name || '学校未設定'} sx={{ backgroundColor: colors.accentWarm.soft, color: colors.accentWarm.active, border: `1px solid ${colors.border.warm}` }} />
-            <Chip label={profile?.role === 'teacher' ? 'Teacher' : 'Student'} sx={{ backgroundColor: colors.background.elevated, color: colors.text.secondary, border: `1px solid ${colors.border.soft}` }} />
+            <Chip
+              label={profile?.role === 'teacher' ? 'Teacher' : profile?.role === 'admin' ? 'Admin' : 'Student'}
+              sx={{ backgroundColor: colors.background.elevated, color: colors.text.secondary, border: `1px solid ${colors.border.soft}` }}
+            />
           </Stack>
         </Box>
 
@@ -219,6 +289,7 @@ const ProfilePage: React.FC = () => {
           <Tabs value={tabValue} onChange={handleTabChange} sx={{ px: 2, pt: 1, '& .MuiTabs-indicator': { backgroundColor: colors.accentWarm.main }, '& .MuiTab-root.Mui-selected': { color: colors.accentWarm.active } }}>
             <Tab label="プロフィール編集" />
             <Tab label="日誌アーカイブ" />
+            <Tab label="アカウント設定" />
           </Tabs>
 
           <TabPanel value={tabValue} index={0}>
@@ -474,6 +545,142 @@ const ProfilePage: React.FC = () => {
                           表示する日誌がありません。
                         </Typography>
                       )}
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+            )}
+          </TabPanel>
+
+          <TabPanel value={tabValue} index={2}>
+            {loading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={7}>
+                  <Card sx={{ borderRadius: '24px', boxShadow: 'none', border: `1px solid ${colors.border.soft}`, backgroundColor: colors.background.paper }}>
+                    <CardContent sx={{ p: 3.5 }}>
+                      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1 }}>
+                        <Box
+                          sx={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: '14px',
+                            display: 'grid',
+                            placeItems: 'center',
+                            backgroundColor: colors.accentWarm.soft,
+                            color: colors.accentWarm.active,
+                          }}
+                        >
+                          <LockOutlined />
+                        </Box>
+                        <Box>
+                          <Typography variant="h5" sx={{ fontWeight: 700, color: colors.text.primary }}>
+                            パスワード変更
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: colors.text.secondary }}>
+                            先生・生徒どちらもここからパスワードを更新できます。
+                          </Typography>
+                        </Box>
+                      </Stack>
+
+                      <Box
+                        sx={{
+                          p: 2.5,
+                          borderRadius: '20px',
+                          backgroundColor: colors.background.subtle,
+                          border: `1px solid ${colors.border.soft}`,
+                          mb: 3,
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ color: colors.text.secondary, lineHeight: 1.8 }}>
+                          初回ログイン後は、運営者から発行された初期パスワードのまま使い続けず、すぐに変更する運用を推奨します。
+                        </Typography>
+                      </Box>
+
+                      <Grid container spacing={2}>
+                        <Grid item xs={12}>
+                          <TextField
+                            fullWidth
+                            type="password"
+                            label="新しいパスワード"
+                            value={passwordData.password}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setPasswordData((prev) => ({ ...prev, password: value }));
+                              if (passwordErrors.password) {
+                                setPasswordErrors((prev) => ({ ...prev, password: '' }));
+                              }
+                            }}
+                            helperText={passwordErrors.password || '8文字以上で設定してください'}
+                            error={!!passwordErrors.password}
+                          />
+                        </Grid>
+                        <Grid item xs={12}>
+                          <TextField
+                            fullWidth
+                            type="password"
+                            label="新しいパスワード（確認）"
+                            value={passwordData.confirmPassword}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setPasswordData((prev) => ({ ...prev, confirmPassword: value }));
+                              if (passwordErrors.confirmPassword) {
+                                setPasswordErrors((prev) => ({ ...prev, confirmPassword: '' }));
+                              }
+                            }}
+                            helperText={passwordErrors.confirmPassword}
+                            error={!!passwordErrors.confirmPassword}
+                          />
+                        </Grid>
+                      </Grid>
+
+                      <Stack direction="row" spacing={1.5} sx={{ mt: 3 }}>
+                        <Button variant="contained" onClick={handlePasswordSave} disabled={passwordSaving}>
+                          {passwordSaving ? '更新中...' : 'パスワードを更新'}
+                        </Button>
+                        <Button variant="outlined" onClick={() => navigate(getPostOnboardingRoute(profile))}>
+                          戻る
+                        </Button>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                </Grid>
+
+                <Grid item xs={12} md={5}>
+                  <Card sx={{ borderRadius: '24px', boxShadow: 'none', border: `1px solid ${colors.border.soft}`, height: '100%', backgroundColor: colors.background.subtle }}>
+                    <CardContent sx={{ p: 3.5 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 700, color: colors.text.primary }}>
+                        セキュリティメモ
+                      </Typography>
+                      <Stack spacing={2} sx={{ mt: 2.5 }}>
+                        <Box>
+                          <Typography variant="caption" sx={{ color: colors.text.secondary, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                            ログインID
+                          </Typography>
+                          <Typography variant="body1" sx={{ color: colors.text.primary, fontWeight: 600 }}>
+                            {profile?.email || '未設定'}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" sx={{ color: colors.text.secondary, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                            アカウント種別
+                          </Typography>
+                          <Typography variant="body1" sx={{ color: colors.text.primary, fontWeight: 600 }}>
+                            {profile?.role === 'teacher' ? '先生アカウント' : profile?.role === 'admin' ? '開発者アカウント' : '生徒アカウント'}
+                          </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" sx={{ color: colors.text.secondary, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                            推奨運用
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: colors.text.secondary, lineHeight: 1.9 }}>
+                            学校配布の初期パスワードは使い回さず、各利用者が固有の長いパスワードへ変更してください。
+                          </Typography>
+                        </Box>
+                      </Stack>
                     </CardContent>
                   </Card>
                 </Grid>

@@ -4,6 +4,8 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import { Box, useTheme, useMediaQuery } from '@mui/material';
 import { motion } from 'framer-motion';
 import LeftSidebar from './LeftSidebar';
+import { GlobalDiaryButton } from '../Diary/GlobalDiaryButton';
+import { useAuthStore } from '../../stores/authStore';
 
 const leftSidebarWidth = 64; // Fixed width for new simple sidebar
 
@@ -21,6 +23,8 @@ const Layout: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const profile = useAuthStore((state) => state.profile);
+  const showDiaryButton = profile?.role !== 'teacher' && profile?.role !== 'admin';
 
   return (
     <LayoutContext.Provider value={{ sidebarOpen: false, onSidebarToggle: () => {} }}>
@@ -64,6 +68,7 @@ const Layout: React.FC = () => {
             overflow: 'hidden', // 子要素でスクロールを管理
           }}
         >
+          <GlobalDiaryButton hidden={!showDiaryButton} />
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

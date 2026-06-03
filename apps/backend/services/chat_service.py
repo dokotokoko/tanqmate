@@ -10,6 +10,9 @@ import uuid
 import logging
 from .base import BaseService, UserID
 from .conversation_manager import ConversationManager
+from .its_models import ITSContext, build_its_context
+from .its_observation_service import ITSObservationService
+from .tutor_orchestrator import TutorDecision, TutorOrchestrator
 from async_helpers import (
     parallel_fetch_context_and_history,
     parallel_save_chat_logs,
@@ -18,6 +21,19 @@ from async_helpers import (
 
 from prompt.prompt import RESPONSE_STYLE_PROMPTS
 from .websearch_extractor import WebSearchExtractor
+
+TANQMATE_COMPANION_PRINCIPLES = """
+【探Qメイトのふるまい】
+あなたは、探究という冒険の隣を走るAI相棒です。
+答えを先に渡す教師ではなく、生徒の興味が少し先へ伸びるように伴走してください。
+
+・生徒の興味や違和感を起点にする
+・立ち止まっているときは、問いかけ、必要な情報提供、AIなりの見立てを出す
+・見立ては断定せず、一緒に考える材料として提示する
+・正解が1つに決まる基礎知識は簡潔に教えてよい
+・探究の問いそのものの答えは渡し切らず、生徒が次の一歩を踏み出せる形にする
+・最後は、今日できる小さな行動か考える問いで終える
+"""
 
 # turn_indexバグ修正を一時的に無効化のためコメントアウト
 # from async_helpers_turn_index import (
@@ -56,9 +72,47 @@ class ChatService(BaseService):
         self.history_limit_default = int(os.environ.get("CHAT_HISTORY_LIMIT_DEFAULT", "50"))
         self.history_limit_max = int(os.environ.get("CHAT_HISTORY_LIMIT_MAX", "100"))
         self.conversation_manager = ConversationManager(supabase_client)
+        self.its_observation_service = ITSObservationService(supabase_client, user_id)
+        self.tutor_orchestrator = TutorOrchestrator(
+            llm_decision_func=self._generate_tutor_llm_decision,
+            enable_llm=os.environ.get("ENABLE_ITS_LLM_JUDGEMENT", "true").lower() == "true",
+        )
     
     def get_service_name(self) -> str:
         return "ChatService"
+
+    def _get_support_intent(self, response_style: Optional[str]) -> str:
+        style = response_style or "auto"
+        support_intents = {
+            "auto": "整理して次の一歩を見つける",
+            "organize": "考えを整理して次の一歩を見つける",
+            "research": "必要な情報を集めて判断材料を増やす",
+            "ideas": "興味が広がる選択肢を増やす",
+            "deepen": "興味の理由を掘り下げる",
+            "expand": "別の見方から可能性を広げる",
+            "select": "今すぐできる小さな行動を選ぶ",
+            "custom": "指定された観点で探究を支える",
+            "clarification": "知りたいことの輪郭をはっきりさせる",
+        }
+        return support_intents.get(style, support_intents["auto"])
+
+    def _extract_next_action_suggestions(self, ai_response: Dict[str, Any]) -> List[str]:
+        suggestions: List[str] = []
+        for option in ai_response.get("suggestion_options") or []:
+            if isinstance(option, str) and option.strip():
+                suggestions.append(option.strip())
+
+        for card in ai_response.get("quest_cards") or []:
+            if isinstance(card, dict):
+                label = str(card.get("label", "")).strip()
+                if label:
+                    suggestions.append(label)
+
+        deduped: List[str] = []
+        for suggestion in suggestions:
+            if suggestion not in deduped:
+                deduped.append(suggestion)
+        return deduped[:5]
 
     def dump_response_events(self, resp):
         logger = logging.getLogger(__name__)
@@ -76,6 +130,51 @@ class ChatService(BaseService):
                     logger.info(f"[{i}] {repr(ev)}")
         except Exception as e:
             logger.exception(f"Failed to dump response events: {e}")
+
+    async def _generate_tutor_llm_decision(self, prompt: str) -> Dict[str, Any]:
+        """Run the optional slow-path LLM judgement for ambiguous ITS strategy cases."""
+        from module.llm_api import get_async_llm_client
+
+        llm_client = get_async_llm_client(pool_size=1)
+        if not llm_client:
+            raise Exception("Async LLM client not available")
+
+        input_items = [
+            llm_client.text("system", "JSONのみを返す内部判定器です。本文応答は書かないでください。"),
+            llm_client.text("user", prompt),
+        ]
+        response_obj = await llm_client.generate_response_async(input_items, max_tokens=360, status_callback=None)
+        response_text = llm_client.extract_output_text(response_obj)
+        parsed = self._parse_json_object_from_text(response_text)
+        if not parsed:
+            raise ValueError("Tutor LLM judgement returned non-JSON response")
+        return parsed
+
+    def _append_aggregate_profile_context(
+        self,
+        context_data: str,
+        aggregate_profile: Optional[Dict[str, Any]],
+        its_context: Optional[ITSContext] = None,
+    ) -> str:
+        """Add a compact AI-observation profile as weak context for the response."""
+        parts = [context_data] if context_data else []
+
+        if its_context:
+            parts.append(its_context.to_prompt_context())
+
+        if not aggregate_profile:
+            return "\n\n".join(parts)
+
+        summary = (aggregate_profile.get("aggregate_summary") or "").strip()
+        if not summary:
+            return "\n\n".join(parts)
+
+        profile_context = (
+            "AI観測プロファイル（AIの過去の見立て。現在の生徒発話を優先し、断定に使わない）:\n"
+            f"{summary[:900]}"
+        )
+        parts.append(profile_context)
+        return "\n\n".join(parts)
     
     async def process_chat_message(
         self,
@@ -124,12 +223,68 @@ class ChatService(BaseService):
                     self.history_limit_default
                 )
             metrics["db_fetch_time"] = time.time() - fetch_start
+            aggregate_profile = self.its_observation_service.get_aggregate_profile(user_id)
+            its_context = build_its_context(
+                message=message,
+                student_context=student_context or "",
+                context_payload=context_payload,
+                conversation_history=conversation_history,
+                aggregate_profile=aggregate_profile,
+                response_style=response_style,
+            )
+            self.logger.info(
+                "ITS context built: user_id=%s conversation_id=%s learner_grade_band=%s "
+                "task_phase=%s has_observation_profile=%s history_count=%s",
+                user_id,
+                conversation_id,
+                its_context.learner_model.grade_band,
+                its_context.task_model.phase,
+                bool(aggregate_profile),
+                len(conversation_history),
+            )
+            tutor_decision = await self.tutor_orchestrator.select_strategy(
+                message=message,
+                conversation_history=conversation_history,
+                student_context=student_context or "",
+                aggregate_profile=aggregate_profile,
+                response_style=response_style,
+                its_context=its_context,
+            )
+            self.logger.info(
+                "ITS tutor decision: user_id=%s conversation_id=%s support_type=%s "
+                "speech_acts=%s disclosure_level=%s question_budget=%s action_pressure=%s "
+                "decision_source=%s llm_used=%s confidence=%.2f reasons=%s",
+                user_id,
+                conversation_id,
+                tutor_decision.support_type,
+                tutor_decision.speech_acts,
+                tutor_decision.disclosure_level,
+                tutor_decision.question_budget,
+                tutor_decision.action_pressure,
+                tutor_decision.decision_source,
+                tutor_decision.llm_used,
+                tutor_decision.confidence,
+                tutor_decision.intervention_reason_codes,
+            )
             
             # Phase 2: AI応答生成（フォールバック機構付き）
             llm_start = time.time()
             ai_response = await self._generate_ai_response(
-                message, user_id, student_context, conversation_history, session_type, response_style, custom_instruction
+                message,
+                user_id,
+                student_context,
+                conversation_history,
+                session_type,
+                response_style,
+                custom_instruction,
+                tutor_decision=tutor_decision,
+                aggregate_profile=aggregate_profile,
+                its_context=its_context,
             )
+            effective_style = ai_response.get("response_style_used") or response_style or "auto"
+            telemetry_event_id = str(uuid.uuid4())
+            support_intent = self._get_support_intent(effective_style)
+            next_action_suggestions = self._extract_next_action_suggestions(ai_response)
 
             metrics["llm_response_time"] = time.time() - llm_start
             
@@ -162,12 +317,38 @@ class ChatService(BaseService):
             }
             
             # 従来の保存処理を使用（turn_indexバグ修正を一時的に無効化）
-            user_saved, ai_saved = await parallel_save_chat_logs(
+            user_chat_log_id, ai_chat_log_id = await parallel_save_chat_logs(
                 db_helper,
                 user_message_data,
                 ai_message_data
             )
             metrics["db_save_time"] = time.time() - save_start
+
+            validation = self.tutor_orchestrator.validate_response(ai_response["response"], tutor_decision)
+            its_turn_log_id = self.its_observation_service.record_chat_turn(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                user_chat_log_id=user_chat_log_id,
+                ai_chat_log_id=ai_chat_log_id,
+                decision=tutor_decision,
+                validation=validation,
+                response_time_ms=int(metrics["llm_response_time"] * 1000),
+                model_info=ai_response.get("fallback_model") or ai_response.get("model_info"),
+                its_context=its_context,
+            )
+            self.logger.info(
+                "ITS educational validation: user_id=%s conversation_id=%s turn_log_id=%s "
+                "question_count=%s question_budget_ok=%s action_pressure_ok=%s "
+                "disclosure_level_ok=%s issues=%s",
+                user_id,
+                conversation_id,
+                its_turn_log_id,
+                validation.question_count,
+                validation.question_budget_ok,
+                validation.action_pressure_ok,
+                validation.disclosure_level_ok,
+                validation.issues,
+            )
             
             # Phase 4: 非同期タイムスタンプ更新（ノンブロッキング）
             if conversation_id:
@@ -182,6 +363,9 @@ class ChatService(BaseService):
                 "agent_used": ai_response.get("agent_used", False),
                 "fallback_used": ai_response.get("fallback_used", False),
                 "conversation_id": conversation_id,  # 使用した会話IDを返す
+                "support_intent": support_intent,
+                "next_action_suggestions": next_action_suggestions,
+                "telemetry_event_id": telemetry_event_id,
                 # 質問明確化機能用フィールド
                 "is_clarification": ai_response.get("is_clarification", False),
                 "clarification_questions": ai_response.get("clarification_questions"),
@@ -205,7 +389,10 @@ class ChatService(BaseService):
         conversation_history: List[Dict],
         session_type: str,
         response_style: Optional[str] = "auto",
-        custom_instruction: Optional[str] = None
+        custom_instruction: Optional[str] = None,
+        tutor_decision: Optional[TutorDecision] = None,
+        aggregate_profile: Optional[Dict[str, Any]] = None,
+        its_context: Optional[ITSContext] = None,
     ) -> Dict[str, Any]:
         """AI応答生成（質問明確化機能付き）"""
 
@@ -223,7 +410,10 @@ class ChatService(BaseService):
             # 抽象的な質問の場合は明確化質問を生成
             if intent == "abstract":
                 try:
-                    return await self._generate_clarification_questions(message)
+                    return await self._generate_clarification_questions(
+                        message,
+                        question_budget=tutor_decision.question_budget if tutor_decision else 1,
+                    )
                 except Exception as e:
                     self.logger.warning(f"Clarification failed, falling back to normal response: {e}")
                     # 明確化失敗時は通常の応答にフォールバック
@@ -232,13 +422,27 @@ class ChatService(BaseService):
         # 非同期LLMクライアントを優先的に使用
         try:
             return await self._process_with_async_llm(
-                message, student_context, conversation_history, response_style, custom_instruction
+                message,
+                student_context,
+                conversation_history,
+                response_style,
+                custom_instruction,
+                tutor_decision=tutor_decision,
+                aggregate_profile=aggregate_profile,
+                its_context=its_context,
             )
         except Exception as e:
             self.logger.warning(f"Async LLM failed, falling back to sync: {e}")
             # 同期LLMクライアント（フォールバック）
             return await self._process_with_sync_llm(
-                message, student_context, conversation_history, response_style, custom_instruction
+                message,
+                student_context,
+                conversation_history,
+                response_style,
+                custom_instruction,
+                tutor_decision=tutor_decision,
+                aggregate_profile=aggregate_profile,
+                its_context=its_context,
             )
     
     
@@ -248,7 +452,10 @@ class ChatService(BaseService):
         student_context: str,
         conversation_history: List[Dict],
         response_style: Optional[str] = "auto",
-        custom_instruction: Optional[str] = None
+        custom_instruction: Optional[str] = None,
+        tutor_decision: Optional[TutorDecision] = None,
+        aggregate_profile: Optional[Dict[str, Any]] = None,
+        its_context: Optional[ITSContext] = None,
     ) -> Dict[str, Any]:
         """非同期LLMクライアントによる処理"""
         try:
@@ -272,6 +479,9 @@ class ChatService(BaseService):
                 system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
             else:
                 system_prompt = ResponseStyleManager.get_system_prompt(response_style)
+            system_prompt = f"{TANQMATE_COMPANION_PRINCIPLES}\n\n{system_prompt}"
+            if tutor_decision:
+                system_prompt = f"{system_prompt}\n\n{self.tutor_orchestrator.build_strategy_prompt(tutor_decision)}"
             system_prompt = self._remove_quest_card_instructions(system_prompt)
 
             # 応答スタイルに応じたトークン数制限を設定
@@ -279,6 +489,8 @@ class ChatService(BaseService):
             # 通常モード: organize, expand, ideas → 300トークン（約400文字）
             is_deep_thinking = response_style in ["research", "deepen"]
             max_tokens = None if is_deep_thinking else int(os.environ.get("DEFAULT_MAX_TOKENS", "600"))
+
+            context_data = self._append_aggregate_profile_context(context_data, aggregate_profile, its_context)
 
             # llm_clientのgenerate_response_asyncメソッドを呼び出す
             input_items = [
@@ -371,7 +583,10 @@ class ChatService(BaseService):
         student_context: str,
         conversation_history: List[Dict],
         response_style: Optional[str] = "auto",
-        custom_instruction: Optional[str] = None
+        custom_instruction: Optional[str] = None,
+        tutor_decision: Optional[TutorDecision] = None,
+        aggregate_profile: Optional[Dict[str, Any]] = None,
+        its_context: Optional[ITSContext] = None,
     ) -> Dict[str, Any]:
         """同期LLMクライアントによるフォールバック処理"""
         try:
@@ -387,11 +602,15 @@ class ChatService(BaseService):
                 system_prompt = RESPONSE_STYLE_PROMPTS["custom"].replace("{custom_instruction}", custom_instruction)
             else:
                 system_prompt = ResponseStyleManager.get_system_prompt(response_style)
+            system_prompt = f"{TANQMATE_COMPANION_PRINCIPLES}\n\n{system_prompt}"
+            if tutor_decision:
+                system_prompt = f"{system_prompt}\n\n{self.tutor_orchestrator.build_strategy_prompt(tutor_decision)}"
             system_prompt = self._remove_quest_card_instructions(system_prompt)
 
             is_deep_thinking = response_style in ["research", "deepen"]
             max_tokens = None if is_deep_thinking else int(os.environ.get("DEFAULT_MAX_TOKENS", "600"))
 
+            context_data = self._append_aggregate_profile_context(context_data, aggregate_profile, its_context)
             input_items = [
                 llm_client.text("system", system_prompt),
                 llm_client.text("user", f"{context_data}\n\n{message}")
@@ -771,7 +990,7 @@ class ChatService(BaseService):
 
         return "specific"
 
-    async def _generate_clarification_questions(self, message: str) -> Dict[str, Any]:
+    async def _generate_clarification_questions(self, message: str, question_budget: int = 1) -> Dict[str, Any]:
         """
         抽象的な質問に対する3つの明確化質問と選択肢を生成
 
@@ -810,14 +1029,16 @@ class ChatService(BaseService):
 
             # フォーマット済みの応答テキストを作成
             formatted_response = f"{parsed['summary']}\n\n"
-            formatted_response += "以下の点について、詳しく教えてもらえますか？\n\n"
 
             # 質問リストをテキスト化
             questions_list = []
             all_options = []
 
-            # 質問数を3つに制限
-            clarification_questions = parsed['clarification_questions'][:3]
+            # ITS方針に合わせ、実質的な質問数は原則1つまでに制限する
+            max_questions = max(0, min(1, question_budget))
+            clarification_questions = parsed['clarification_questions'][:max_questions]
+            if clarification_questions:
+                formatted_response += "以下の点について、詳しく教えてもらえますか？\n\n"
 
             for i, q_data in enumerate(clarification_questions, 1):
                 question_text = q_data['question']
@@ -834,7 +1055,10 @@ class ChatService(BaseService):
             quick_opts = parsed.get('quick_options', [])[:3]
             all_options.extend(quick_opts)
 
-            formatted_response += "\n💡 細かく希望がなければ、上記の選択肢から選んでください。"
+            if clarification_questions:
+                formatted_response += "\n💡 細かく希望がなければ、上記の選択肢から選んでください。"
+            else:
+                formatted_response += "\n今は質問を増やさず、考えやすそうな方向をいくつか置いておきます。"
 
             return {
                 "response": formatted_response,

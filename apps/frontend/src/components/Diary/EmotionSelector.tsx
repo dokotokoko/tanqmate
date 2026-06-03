@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useState } from 'react';
-import { Box, Typography, Chip } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { alpha, styled } from '@mui/material/styles';
 import { EmotionType } from './EmotionIcon';
 
@@ -266,24 +266,6 @@ export const EmotionSelector: React.FC<EmotionSelectorProps> = ({
       >
         {limitNotice ?? ' '}
       </Typography>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-        {value.map((emotionId) => {
-          const emotion = emotionOptions.find((option) => option.id === emotionId);
-          if (!emotion) return null;
-          return (
-            <Chip
-              key={emotion.id}
-              label={emotion.label}
-              onDelete={() => toggleEmotion(emotion.id)}
-              sx={{
-                backgroundColor: emotion.fill,
-                color: emotion.text,
-                border: `1px solid ${emotion.stroke}`,
-              }}
-            />
-          );
-        })}
-      </Box>
     </Box>
   );
 };

@@ -4,12 +4,9 @@ import os
 from typing import Optional, Dict, Any
 from fastapi import HTTPException, Security, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from supabase import create_client, Client
+from supabase import Client
 from functools import lru_cache
-
-# 環境変数から設定を取得
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
-SUPABASE_SECRET_KEY = os.environ.get("SUPABASE_SECRET_KEY", "")
+from utils.supabase_config import create_supabase_admin_client, get_supabase_service_key, get_supabase_url
 
 # HTTPBearer認証スキーム
 security = HTTPBearer(auto_error=False)
@@ -17,10 +14,14 @@ security = HTTPBearer(auto_error=False)
 @lru_cache()
 def get_supabase_client() -> Client:
     """Supabaseクライアントのシングルトンを取得"""
-    if not SUPABASE_URL or not SUPABASE_SECRET_KEY:
+    if not get_supabase_url() or not get_supabase_service_key():
         raise ValueError("Supabase environment variables not configured")
-    
-    return create_client(SUPABASE_URL, SUPABASE_SECRET_KEY)
+
+    client = create_supabase_admin_client()
+    if client is None:
+        raise ValueError("Supabase environment variables not configured")
+
+    return client
 
 class SupabaseAuth:
     """Supabase Auth API 経由でユーザー情報を取得するラッパー。"""
@@ -137,7 +138,7 @@ def verify_token(token: str) -> Dict[str, Any]:
     レガシー互換性のためのトークン検証関数
     
     Args:
-        token: Bearer tokenまたはJWTトークン
+        token: Bearer tokenまたはSupabase access token
         
     Returns:
         ユーザー情報

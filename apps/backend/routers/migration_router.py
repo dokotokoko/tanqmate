@@ -14,8 +14,9 @@ from pathlib import Path
 # プロジェクト内のインポート
 from middleware.supabase_auth import require_supabase_auth, get_auth_info
 from services.supabase_auth_service import SupabaseAuthService
-from services.auth_service import AuthService
+from services.legacy_auth_service import LegacyAuthService
 from services.base import ServiceManager
+from utils.supabase_config import create_supabase_admin_client
 from schemas.migration_schemas import (
     LinkAccountRequest, MigrateDataRequest, RollbackRequest,
     UserLinkResponse, MigrationResult, MigrationStatusResponse,
@@ -48,17 +49,9 @@ class MigrationService:
     ) -> Dict[str, Any]:
         """旧アカウントとSupabaseアカウントを紐付け"""
         try:
-            # 既存システムでユーザー認証
-            auth_service = self.service_manager.get_service(AuthService)
-            legacy_user = await auth_service.login_user(username, password)
-            
-            if not legacy_user or not legacy_user.get("user"):
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid legacy credentials"
-                )
-            
-            legacy_user_id = legacy_user["user"]["id"]
+            legacy_auth = self.service_manager.get_service(LegacyAuthService)
+            legacy_user = await legacy_auth.verify_legacy_credentials(username, password)
+            legacy_user_id = legacy_user["id"]
             
             # 既に紐付け済みかチェック
             supabase_auth = self.service_manager.get_service(SupabaseAuthService)
@@ -466,14 +459,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def get_supabase_client():
-    from supabase import create_client
-    supabase_url = os.environ.get("SUPABASE_URL")
-    supabase_key = os.environ.get("SUPABASE_SECRET_KEY")
-    
-    if not supabase_url or not supabase_key:
-        return None
-    
-    return create_client(supabase_url, supabase_key)
+    return create_supabase_admin_client()
 
 # サービスマネージャーの遅延初期化
 _service_manager = None

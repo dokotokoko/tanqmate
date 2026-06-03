@@ -1,11 +1,15 @@
 import type { ProfileData } from '../stores/authStore';
 
 export const isOnboardingComplete = (profile: ProfileData | null) =>
-  Boolean(profile?.name?.trim());
+  profile?.role === 'admin' ? true : Boolean(profile?.name?.trim());
 
 export const getPostOnboardingRoute = (profile: ProfileData | null) => {
-  if (!isOnboardingComplete(profile)) {
+  if (!profile || !isOnboardingComplete(profile)) {
     return '/onboarding';
+  }
+
+  if (profile.role === 'admin') {
+    return '/admin';
   }
 
   return profile.role === 'teacher' ? '/teacher' : '/chat';
