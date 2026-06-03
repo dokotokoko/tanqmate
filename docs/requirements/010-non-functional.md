@@ -10,6 +10,7 @@
 ## Security
 
 - 認証必須 API は Supabase Auth と既存の user scope を前提にする
+- 認証トークンの保存、更新、ローテーションは Supabase Auth に委譲し、独自ストレージへ access token / refresh token を複製保存しない
 - 権限チェックを弱めない
 - 公開 API を追加する場合は、公開してよい情報だけを返す
 - CORS、認証除外パス、管理者 API の変更は慎重に扱う

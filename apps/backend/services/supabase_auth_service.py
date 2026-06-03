@@ -7,8 +7,9 @@ import os
 import uuid
 import asyncio
 from datetime import datetime, timezone, timedelta
-from supabase import create_client, Client
+from supabase import Client
 from .base import CacheableService
+from utils.supabase_config import create_supabase_admin_client, get_supabase_service_key, get_supabase_url
 import json
 import hashlib
 
@@ -23,8 +24,8 @@ class SupabaseAuthService(CacheableService):
         super().__init__(supabase_client, user_id)
         
         # Supabase認証設定
-        self.supabase_url = os.environ.get("SUPABASE_URL")
-        self.secret_key = os.environ.get("SUPABASE_SECRET_KEY")
+        self.supabase_url = get_supabase_url()
+        self.secret_key = get_supabase_service_key()
         
         if not all([self.supabase_url, self.secret_key]):
             raise ValueError("SUPABASE_URL and SUPABASE_SECRET_KEY must be set")
@@ -32,10 +33,7 @@ class SupabaseAuthService(CacheableService):
         # Admin権限を持つSupabaseクライアントの初期化
         try:
             # Secret Keyを使用してAdmin権限のクライアントを作成
-            self.admin_client: Client = create_client(
-                self.supabase_url,
-                self.secret_key
-            )
+            self.admin_client = create_supabase_admin_client()
         except Exception as e:
             logger.error(f"Failed to initialize Supabase Admin Client: {e}")
             self.admin_client = None

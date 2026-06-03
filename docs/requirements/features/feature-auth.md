@@ -106,7 +106,7 @@ public.schools
 - 「パスワードをお忘れの方はこちら」リンク → `/password-reset`
 
 **処理**
-- ログイン成功後、JWTの`role`を参照してリダイレクト
+- ログイン成功後、Supabase Auth session を確立し、`profiles.role`を参照してリダイレクト
   - `student` → `/student`
   - `teacher` → `/teacher`
 - `school_id`が未設定かつ`school_code_locked = false` → `/onboarding`へリダイレクト
@@ -318,7 +318,12 @@ OFF の場合：新規スタート
 create policy "先生は同校の生徒プロフィールを更新可"
   on public.profiles for update
   using (
-    (auth.jwt()->>'role') = 'teacher'
+    exists (
+      select 1
+      from public.profiles teacher_profile
+      where teacher_profile.id = auth.uid()
+        and teacher_profile.role = 'teacher'
+    )
     and school_id = (
       select school_id from public.profiles
       where id = auth.uid()
@@ -337,7 +342,8 @@ create policy "先生は同校の生徒プロフィールを更新可"
 | Secure password change | ON |
 | 最小パスワード長 | 8文字 |
 | RLS | 全テーブルで有効 |
-| Custom Claims | `role` / `school_id` をJWTに埋め込む |
+| 認証トークン管理 | Supabase Auth session / token refresh に委譲する |
+| 認可属性の正本 | `profiles.role` / `profiles.school_id` をDB正本として扱う |
 | SMTPサーバー | Resend（月3,000通・無料） |
 | school_id | 一度設定したら変更不可（school_code_locked） |
 
