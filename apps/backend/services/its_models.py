@@ -192,7 +192,11 @@ def _school_constraints(profile: Dict[str, Any]) -> List[str]:
 
 
 def _interests(profile: Dict[str, Any], legacy_project: Dict[str, Any], message: str) -> List[str]:
+    profile_interests = profile.get("interests") or []
+    if not isinstance(profile_interests, list):
+        profile_interests = []
     values = [
+        *profile_interests,
         profile.get("theme"),
         legacy_project.get("theme"),
         _keyword_if_present(message, ["環境", "AI", "教育", "地域", "食品ロス", "プラスチック", "学校"]),

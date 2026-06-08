@@ -4,314 +4,434 @@ import {
   Button,
   Chip,
   Container,
-  Divider,
   Grid,
   Paper,
   Stack,
   Typography,
 } from '@mui/material';
 import {
-  AutoStories,
-  EditNote,
+  ChatBubbleOutline,
+  CheckCircleOutline,
+  EmojiObjectsOutlined,
   LockOutlined,
-  MapOutlined,
   Psychology,
-  School,
-  Timeline,
+  StyleOutlined,
+  TuneOutlined,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
+import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { colors, shadows } from '../styles/design-system';
 
-const CONTACT_FORM_URL = 'https://forms.gle/K9u31TJYHcFzY3Fn9';
+const BUG_REPORT_URL = 'https://forms.gle/K9u31TJYHcFzY3Fn9';
 
-const Section = ({ children, tone = 'light' }: { children: React.ReactNode; tone?: 'light' | 'paper' | 'ink' }) => (
-  <Box
-    component="section"
-    sx={{
-      py: { xs: 8, md: 11 },
-      bgcolor: tone === 'ink' ? '#1f2f33' : tone === 'paper' ? '#fffdf7' : '#fff8ea',
-      color: tone === 'ink' ? '#fffdf7' : colors.text.primary,
-    }}
-  >
-    {children}
-  </Box>
-);
-
-const SectionHeading = ({ eyebrow, title, body }: { eyebrow: string; title: string; body?: string }) => (
-  <Box sx={{ mb: { xs: 4, md: 6 }, maxWidth: 760 }}>
-    <Typography sx={{ color: colors.accentWarm.active, fontWeight: 700, fontSize: 13, letterSpacing: '0.08em', mb: 1 }}>
-      {eyebrow}
-    </Typography>
-    <Typography variant="h2" sx={{ fontSize: { xs: 30, md: 44 }, fontWeight: 800, lineHeight: 1.18, letterSpacing: 0 }}>
-      {title}
-    </Typography>
-    {body && (
-      <Typography sx={{ mt: 2, color: 'text.secondary', lineHeight: 1.9, fontSize: { xs: 15, md: 17 } }}>
-        {body}
-      </Typography>
-    )}
-  </Box>
-);
-
-const experienceCards = [
-  {
-    icon: <Psychology />,
-    title: 'AI対話',
-    body: '答えを渡し切るのではなく、問いかけ、必要な情報、AIなりの見立てを返しながら、次の一歩を一緒に探します。',
-    image: '/images/app-screenshot-chat.png',
-  },
-  {
-    icon: <EditNote />,
-    title: '日誌生成',
-    body: '今日残っている気持ちを選び、AIの見立てを材料にしながら、最後は自分の言葉で先生に共有する記録を残します。',
-    image: '/images/usecase3.png',
-  },
-  {
-    icon: <School />,
-    title: '学校共有',
-    body: '先生に見えるのは、生徒が最後に確認した記録文と選んだ気持ちです。raw対話ログやAIの見立て全文は見せません。',
-    image: '/images/usecase2.png',
-  },
-];
-
-const roadmapItems = [
-  { status: '今できる', title: 'AIとの探究対話', body: '興味の整理、問い返し、情報提供、次アクション提案' },
-  { status: '今できる', title: '感覚から始める日誌', body: '気持ちの複数選択、AI見立て、自分の記録、先生表示プレビュー' },
-  { status: '実証で検証', title: '先生向け日誌ビュー', body: '生徒が確認した記録文、感情傾向、要フォローの手がかり' },
-  { status: '開発予定', title: '研究用プロセス観測', body: '支援意図、対話継続、日誌完了、共有確認の評価' },
+const featureItems = [
+  { icon: <StyleOutlined />, title: 'AIの会話スタイルを選べる', body: '探究の状況に合わせて、AIのアプローチを切り替えられます。' },
+  { icon: <EmojiObjectsOutlined />, title: '興味・テーマをAIに共有できる', body: '自分の関心や背景をAIに渡して、対話の質を上げられます。' },
+  { icon: <ChatBubbleOutline />, title: 'カードUIで次の話題を選べる', body: '続きの話題をカードから選ぶだけで、対話が自然に進みます。' },
+  { icon: <TuneOutlined />, title: '感情ベースのリフレクション', body: '今の気持ちを選ぶだけで、AIが見立てを返してくれます。' },
+  { icon: <CheckCircleOutline />, title: '共有内容をプレビューできる', body: '先生に届く内容を送信前に確認できます。' },
+  { icon: <LockOutlined />, title: '対話ログは先生に見えない', body: 'raw対話ログとAIの見立て全文は、先生画面に表示しません。' },
 ];
 
 const faqs = [
   {
-    q: '探Qメイトは答えを教えるAIですか？',
-    a: 'いいえ。必要な基礎情報は出しますが、探究の問いそのものを代わりに解き切る存在ではありません。生徒が興味を広げ、自分で次の行動を選べるように伴走します。',
+    q: '探Qメイトは答えを教えてくれますか？',
+    a: '基礎情報は提供しますが、探究の問いを代わりに解くことはしません。次の一歩を一緒に探す伴走者として動きます。',
   },
   {
-    q: '日誌は先生にそのまま見えますか？',
-    a: '送信前のプレビューに表示された内容だけが先生に共有されます。AIの見立て全文、raw対話ログ、入力途中の下書きは先生画面に出しません。',
+    q: '先生に対話の内容が全部見えますか？',
+    a: '見えません。生徒が最後に確認した記録文と選んだ気持ちだけが共有されます。raw対話ログは先生画面に出しません。',
   },
   {
-    q: '個人でも学校でも使えますか？',
-    a: '今回のリリースでは、個人向けβと学校実証βの両方を想定しています。未成年利用や学校利用では、説明・同意・共有範囲を慎重に扱います。',
+    q: '無料で使えますか？',
+    a: '現在はβ版として無料で提供しています。将来の料金体系については改めてお知らせします。',
   },
   {
-    q: 'まだβ版ですか？',
-    a: 'はい。探究学習でAIがどのように伴走できるかを、利用者と学校現場の声をもとに検証しながら改善しています。',
+    q: 'スマホでも使えますか？',
+    a: 'はい。モバイルブラウザに対応しています。アプリのインストールは不要です。',
   },
 ];
 
 const GuidePage: React.FC = () => {
+  const navigate = useNavigate();
+
   return (
-    <Box sx={{ bgcolor: colors.background.default }}>
+    <Box sx={{ bgcolor: colors.background.default, fontFamily: '"Noto Sans JP", sans-serif' }}>
+
+      {/* Header */}
       <Box
-        component="section"
+        component="header"
         sx={{
-          minHeight: { xs: '92vh', md: '88vh' },
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+          bgcolor: colors.background.default,
+          borderBottom: `1px solid ${colors.border.soft}`,
+          py: { xs: 3, md: 4 },
+          px: { xs: 2.5, md: 5 },
           display: 'flex',
           alignItems: 'center',
-          position: 'relative',
-          overflow: 'hidden',
-          color: '#fff',
-          backgroundImage: 'linear-gradient(90deg, rgba(26,35,38,0.82), rgba(26,35,38,0.44)), url(/images/app-screenshot-main.png)',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
+          justifyContent: 'space-between',
         }}
       >
-        <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1, py: { xs: 8, md: 10 } }}>
-          <Stack spacing={3} sx={{ maxWidth: 760 }}>
+        <Typography sx={{ fontWeight: 800, fontSize: { xs: 22, md: 28 }, color: colors.text.primary }}>
+          探Qメイト
+        </Typography>
+        <Button
+          variant="contained"
+          onClick={() => navigate('/signin')}
+          sx={{
+            bgcolor: colors.accentWarm.main,
+            '&:hover': { bgcolor: colors.accentWarm.hover },
+            borderRadius: '36px',
+            px: { xs: 3.5, md: 5 },
+            py: { xs: 1.5, md: 2 },
+            fontWeight: 700,
+            fontSize: { xs: 16, md: 19 },
+          }}
+        >
+          AIとの探究を始める
+        </Button>
+      </Box>
+
+      {/* Hero */}
+      <Box
+        component="section"
+        sx={{ bgcolor: colors.background.default, pt: { xs: 10, md: 16 }, pb: { xs: 8, md: 12 }, textAlign: 'center' }}
+      >
+        <Container maxWidth="md">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <Chip
-              label="先行公開β / 学校実証受付中"
-              sx={{ width: 'fit-content', bgcolor: 'rgba(255,255,255,0.16)', color: '#fff', border: '1px solid rgba(255,255,255,0.28)' }}
+              label="β版 公開中"
+              sx={{ mb: 4, py: 2, px: 1, bgcolor: colors.accentWarm.soft, color: colors.accentWarm.active, fontWeight: 700, fontSize: 14 }}
             />
-            <Typography variant="h1" sx={{ fontSize: { xs: 42, md: 72 }, fontWeight: 900, lineHeight: 1.05, letterSpacing: 0 }}>
-              探究が止まる瞬間を、AIと一緒に越える。
+            <Typography
+              variant="h1"
+              sx={{
+                fontSize: { xs: 48, md: 80 },
+                fontWeight: 900,
+                lineHeight: 1.15,
+                letterSpacing: '-0.01em',
+                color: colors.text.primary,
+                mb: 3.5,
+              }}
+            >
+              探究を、AIと一緒に。
             </Typography>
-            <Typography sx={{ fontSize: { xs: 17, md: 21 }, lineHeight: 1.9, color: 'rgba(255,255,255,0.88)', maxWidth: 680 }}>
-              探Qメイトは、高校生の興味の発達を支えるAI相棒です。
-              答えを渡すのではなく、問いかけ、情報提供、AIなりの見立てで、次の一歩まで伴走します。
+            <Typography
+              sx={{
+                fontSize: { xs: 18, md: 24 },
+                color: colors.text.secondary,
+                lineHeight: 1.9,
+                maxWidth: 680,
+                mx: 'auto',
+                mb: 5.5,
+              }}
+            >
+              高校生の探究をAIが伴走。問いかけ、リフレクション、先生への共有まで一本でつなぎます。
             </Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" sx={{ mb: 8 }}>
               <Button
-                component="a"
-                href={CONTACT_FORM_URL}
-                target="_blank"
-                rel="noreferrer"
                 variant="contained"
-                size="large"
-                sx={{ px: 3.5, py: 1.5, bgcolor: colors.accentWarm.main, '&:hover': { bgcolor: colors.accentWarm.hover } }}
-              >
-                個人向けβに応募する
-              </Button>
-              <Button
-                component="a"
-                href={CONTACT_FORM_URL}
-                target="_blank"
-                rel="noreferrer"
-                variant="outlined"
-                size="large"
+                onClick={() => navigate('/signin')}
                 sx={{
-                  px: 3.5,
-                  py: 1.5,
-                  color: '#fff',
-                  borderColor: 'rgba(255,255,255,0.72)',
-                  '&:hover': { borderColor: '#fff', bgcolor: 'rgba(255,255,255,0.12)' },
+                  bgcolor: colors.accentWarm.main,
+                  '&:hover': { bgcolor: colors.accentWarm.hover },
+                  px: 5,
+                  py: 2,
+                  fontWeight: 700,
+                  fontSize: 19,
+                  borderRadius: '36px',
                 }}
               >
-                学校実証について相談する
+                AIとの探究を始める
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => navigate('/signup')}
+                sx={{
+                  borderColor: colors.accentWarm.main,
+                  color: colors.accentWarm.main,
+                  borderWidth: 2,
+                  '&:hover': { borderWidth: 2, borderColor: colors.accentWarm.hover, bgcolor: colors.accentWarm.soft },
+                  px: 5,
+                  py: 2,
+                  fontWeight: 700,
+                  fontSize: 19,
+                  borderRadius: '36px',
+                }}
+              >
+                新しく登録する
               </Button>
             </Stack>
+            <Box
+              component="img"
+              src="/images/app-screenshot-main.png"
+              alt="探Qメイト アプリ画面"
+              sx={{
+                width: '100%',
+                maxWidth: 760,
+                borderRadius: 3,
+                boxShadow: shadows.lg,
+                border: `1px solid ${colors.border.soft}`,
+                display: 'block',
+                mx: 'auto',
+              }}
+            />
+          </motion.div>
+        </Container>
+      </Box>
+
+      {/* Temporary Notice */}
+      <Box sx={{ bgcolor: colors.trustBlue.soft, py: 2.5, px: { xs: 2, md: 4 } }}>
+        <Container maxWidth="md">
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ xs: 'flex-start', sm: 'center' }}>
+            <Chip
+              label="期間限定のお知らせ"
+              size="small"
+              sx={{ bgcolor: colors.trustBlue.main, color: '#fff', fontWeight: 700, fontSize: 11, flexShrink: 0 }}
+            />
+            <Typography sx={{ fontSize: 14, color: colors.trustBlue.strong, lineHeight: 1.7 }}>
+              認証方法の変更とプライバシーポリシーの整備にともない、既存ユーザーの方は再登録が必要です。ご不便をおかけします。
+            </Typography>
           </Stack>
         </Container>
       </Box>
 
-      <Section tone="paper">
+      {/* Experience — 縦2つ */}
+      <Box component="section" sx={{ bgcolor: colors.background.default, py: { xs: 8, md: 12 } }}>
         <Container maxWidth="lg">
-          <SectionHeading
-            eyebrow="EXPERIENCE"
-            title="探究の相棒、リフレクション、先生への共有を一本につなぐ。"
-            body="対話で興味を前に進め、日誌で感覚とAIの見立てを比べ、学校では生徒が確認した記録だけを共有します。"
-          />
+          <Stack spacing={{ xs: 10, md: 14 }}>
+
+            {/* ①AIが探究を伴走 */}
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}>
+              <Grid container spacing={5} alignItems="center">
+                <Grid item xs={12} md={5}>
+                  <Chip label="AI対話" sx={{ mb: 2.5, py: 1.75, px: 0.5, fontSize: 14, bgcolor: colors.accentWarm.soft, color: colors.accentWarm.active, fontWeight: 700 }} />
+                  <Typography variant="h2" sx={{ fontSize: { xs: 30, md: 44 }, fontWeight: 800, lineHeight: 1.3, mb: 2.5, color: colors.text.primary }}>
+                    AIが探究を一緒に前に進める
+                  </Typography>
+                  <Typography sx={{ color: colors.text.secondary, lineHeight: 1.9, fontSize: { xs: 16, md: 19 } }}>
+                    答えを渡すのではなく、問いかけ・情報提供・AIなりの見立てで次の一歩を探します。探究が止まる瞬間を、AIと一緒に越えられます。
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} md={7}>
+                  <Box
+                    component="img"
+                    src="/images/app-screenshot-chat.png"
+                    alt="AI対話 画面"
+                    sx={{ width: '100%', borderRadius: 2.5, boxShadow: shadows.md, border: `1px solid ${colors.border.soft}` }}
+                  />
+                </Grid>
+              </Grid>
+            </motion.div>
+
+            {/* ②AIと一緒にリフレクション */}
+            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.5 }}>
+              <Grid container spacing={5} alignItems="center" direction={{ xs: 'column', md: 'row-reverse' }}>
+                <Grid item xs={12} md={5}>
+                  <Chip label="リフレクション" sx={{ mb: 2.5, py: 1.75, px: 0.5, fontSize: 14, bgcolor: colors.trustBlue.soft, color: colors.trustBlue.strong, fontWeight: 700 }} />
+                  <Typography variant="h2" sx={{ fontSize: { xs: 30, md: 44 }, fontWeight: 800, lineHeight: 1.3, mb: 2.5, color: colors.text.primary }}>
+                    感覚からリフレクションする
+                  </Typography>
+                  <Typography sx={{ color: colors.text.secondary, lineHeight: 1.9, fontSize: { xs: 16, md: 19 } }}>
+                    今日残っている気持ちを選ぶだけで、AIが見立てを返してくれます。その見立てを読みながら、自分の言葉で探究の記録を書きます。
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} md={7}>
+                  <Box
+                    component="img"
+                    src="/images/usecase3.png"
+                    alt="リフレクション 画面"
+                    sx={{ width: '100%', borderRadius: 2.5, boxShadow: shadows.md, border: `1px solid ${colors.border.soft}` }}
+                  />
+                </Grid>
+              </Grid>
+            </motion.div>
+
+          </Stack>
+        </Container>
+      </Box>
+
+      {/* Features */}
+      <Box component="section" sx={{ bgcolor: colors.background.paper, py: { xs: 8, md: 12 } }}>
+        <Container maxWidth="lg">
+          <Box sx={{ textAlign: 'center', mb: { xs: 6, md: 9 } }}>
+            <Typography sx={{ color: colors.accentWarm.active, fontWeight: 700, fontSize: 14, letterSpacing: '0.1em', mb: 1.5 }}>FEATURES</Typography>
+            <Typography variant="h2" sx={{ fontSize: { xs: 32, md: 46 }, fontWeight: 800, color: colors.text.primary }}>
+              できること、特徴
+            </Typography>
+          </Box>
           <Grid container spacing={3}>
-            {experienceCards.map((item, index) => (
-              <Grid item xs={12} md={4} key={item.title}>
-                <motion.div initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: index * 0.08 }}>
+            {featureItems.map((item, i) => (
+              <Grid item xs={12} sm={6} md={4} key={item.title}>
+                <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.06 }}>
                   <Paper
                     elevation={0}
                     sx={{
+                      p: 3.5,
                       height: '100%',
-                      overflow: 'hidden',
-                      borderRadius: 2,
+                      borderRadius: 2.5,
                       border: `1px solid ${colors.border.soft}`,
-                      boxShadow: shadows.sm,
-                      bgcolor: colors.background.paper,
+                      bgcolor: colors.background.default,
+                      '& svg': { fontSize: 36 },
                     }}
                   >
-                    <Box component="img" src={item.image} alt={item.title} sx={{ width: '100%', aspectRatio: '16 / 10', objectFit: 'cover', display: 'block' }} />
-                    <Box sx={{ p: 2.5 }}>
-                      <Stack direction="row" spacing={1} alignItems="center" sx={{ color: colors.accentWarm.active, mb: 1.5 }}>
-                        {item.icon}
-                        <Typography sx={{ fontWeight: 800 }}>{item.title}</Typography>
-                      </Stack>
-                      <Typography sx={{ color: colors.text.secondary, lineHeight: 1.8 }}>{item.body}</Typography>
-                    </Box>
+                    <Box sx={{ color: colors.accentWarm.main, mb: 2 }}>{item.icon}</Box>
+                    <Typography sx={{ fontWeight: 700, mb: 1, fontSize: 19, color: colors.text.primary }}>{item.title}</Typography>
+                    <Typography sx={{ fontSize: 16, color: colors.text.secondary, lineHeight: 1.8 }}>{item.body}</Typography>
                   </Paper>
                 </motion.div>
               </Grid>
             ))}
           </Grid>
         </Container>
-      </Section>
+      </Box>
 
-      <Section>
+      {/* FAQ */}
+      <Box component="section" sx={{ bgcolor: colors.background.default, py: { xs: 8, md: 12 } }}>
+        <Container maxWidth="md">
+          <Box sx={{ textAlign: 'center', mb: { xs: 6, md: 9 } }}>
+            <Typography sx={{ color: colors.accentWarm.active, fontWeight: 700, fontSize: 14, letterSpacing: '0.1em', mb: 1.5 }}>FAQ</Typography>
+            <Typography variant="h2" sx={{ fontSize: { xs: 32, md: 46 }, fontWeight: 800, color: colors.text.primary }}>
+              よくある質問
+            </Typography>
+          </Box>
+          <Stack spacing={2.5}>
+            {faqs.map((faq) => (
+              <Paper
+                key={faq.q}
+                elevation={0}
+                sx={{ p: 4, borderRadius: 2.5, border: `1px solid ${colors.border.soft}`, bgcolor: colors.background.paper }}
+              >
+                <Stack direction="row" spacing={2} alignItems="flex-start">
+                  <Typography sx={{ fontWeight: 800, color: colors.accentWarm.main, flexShrink: 0, fontSize: 24, lineHeight: 1.3 }}>Q</Typography>
+                  <Box>
+                    <Typography sx={{ fontWeight: 700, mb: 1.5, fontSize: 19, color: colors.text.primary }}>{faq.q}</Typography>
+                    <Typography sx={{ color: colors.text.secondary, lineHeight: 1.85, fontSize: 16 }}>{faq.a}</Typography>
+                  </Box>
+                </Stack>
+              </Paper>
+            ))}
+          </Stack>
+        </Container>
+      </Box>
+
+      {/* Final CTA */}
+      <Box
+        component="section"
+        sx={{ bgcolor: colors.accentWarm.soft, py: { xs: 8, md: 12 }, textAlign: 'center' }}
+      >
+        <Container maxWidth="sm">
+          <Typography variant="h2" sx={{ fontSize: { xs: 34, md: 50 }, fontWeight: 900, color: colors.text.primary, mb: 3 }}>
+            探究を、AIと始めよう。
+          </Typography>
+          <Typography sx={{ color: colors.text.secondary, lineHeight: 1.9, mb: 5.5, fontSize: { xs: 17, md: 20 } }}>
+            今すぐ無料で試せます。インストール不要。
+          </Typography>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
+            <Button
+              variant="contained"
+              onClick={() => navigate('/signin')}
+              sx={{
+                bgcolor: colors.accentWarm.main,
+                '&:hover': { bgcolor: colors.accentWarm.hover },
+                px: 5,
+                py: 2,
+                fontWeight: 700,
+                fontSize: 19,
+                borderRadius: '36px',
+              }}
+            >
+              AIとの探究を始める
+            </Button>
+            <Button
+              variant="outlined"
+              onClick={() => navigate('/signup')}
+              sx={{
+                borderColor: colors.accentWarm.main,
+                color: colors.accentWarm.main,
+                borderWidth: 2,
+                '&:hover': { borderWidth: 2, borderColor: colors.accentWarm.hover, bgcolor: 'rgba(255,140,90,0.08)' },
+                px: 5,
+                py: 2,
+                fontWeight: 700,
+                fontSize: 19,
+                borderRadius: '36px',
+              }}
+            >
+              新しく登録する
+            </Button>
+          </Stack>
+        </Container>
+      </Box>
+
+      {/* Footer */}
+      <Box component="footer" sx={{ bgcolor: colors.background.paper, borderTop: `1px solid ${colors.border.soft}`, py: 6 }}>
         <Container maxWidth="lg">
-          <Grid container spacing={5} alignItems="center">
-            <Grid item xs={12} md={6}>
-              <SectionHeading
-                eyebrow="REFLECTION"
-                title="AIの見立てと、自分の感覚のズレから気づきを生む。"
-                body="日誌生成は、行動の記録だけではありません。生徒は今日残っている気持ちを選び、AIの見立てを読んだあと、自分の言葉で探究の記録を書きます。"
-              />
-              <Stack spacing={1.5}>
-                {['今日残っている気持ちを複数選ぶ', '探Qメイトの見立てを材料として読む', '自分の言葉で探究の記録を書く', '先生に表示される内容を最後に確認する'].map((text) => (
-                  <Stack direction="row" spacing={1.2} alignItems="center" key={text}>
-                    <Timeline sx={{ color: colors.trustBlue.strong }} />
-                    <Typography sx={{ color: colors.text.secondary }}>{text}</Typography>
-                  </Stack>
+          <Grid container spacing={4}>
+            <Grid item xs={12} md={4}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
+                <Psychology sx={{ color: colors.accentWarm.main }} />
+                <Typography sx={{ fontWeight: 800, color: colors.text.primary }}>探Qメイト</Typography>
+              </Stack>
+              <Typography sx={{ fontSize: 13, color: colors.text.secondary, lineHeight: 1.8 }}>
+                高校生の探究学習をAIが伴走するサービスです。
+              </Typography>
+            </Grid>
+            <Grid item xs={6} md={2}>
+              <Typography sx={{ fontWeight: 700, fontSize: 13, color: colors.text.primary, mb: 1.5 }}>メニュー</Typography>
+              <Stack spacing={1}>
+                {[
+                  { label: 'トップ', href: '/' },
+                  { label: 'ログイン', href: '/signin' },
+                  { label: '新規登録', href: '/signup' },
+                ].map((l) => (
+                  <Typography key={l.label} component={RouterLink} to={l.href} sx={{ fontSize: 13, color: colors.text.secondary, textDecoration: 'none', '&:hover': { color: colors.text.primary } }}>
+                    {l.label}
+                  </Typography>
                 ))}
               </Stack>
             </Grid>
-            <Grid item xs={12} md={6}>
-              <Paper elevation={0} sx={{ p: { xs: 2.5, md: 3 }, borderRadius: 2, border: `1px solid ${colors.border.soft}`, bgcolor: '#fffdf7', boxShadow: shadows.md }}>
-                <Stack spacing={2}>
-                  <Chip label="先生に共有される内容" sx={{ width: 'fit-content', bgcolor: colors.trustBlue.soft, color: colors.trustBlue.strong }} />
-                  <Typography variant="h5" sx={{ fontWeight: 800 }}>本人確認済みの記録</Typography>
-                  <Typography sx={{ color: colors.text.secondary, lineHeight: 1.9 }}>
-                    今日の探究では、調べた事実よりも途中で出てきた違和感に関心が移っています。
-                    不安もありますが、次に確かめたい対象は少し具体化しています。
-                  </Typography>
-                  <Divider />
-                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                    <Chip label="モヤモヤ" />
-                    <Chip label="おもしろい" />
-                  </Stack>
-                </Stack>
-              </Paper>
-            </Grid>
-          </Grid>
-        </Container>
-      </Section>
-
-      <Section tone="ink">
-        <Container maxWidth="lg">
-          <Grid container spacing={4}>
-            <Grid item xs={12} md={5}>
-              <Typography sx={{ color: '#ffcf9f', fontWeight: 800, letterSpacing: '0.08em', mb: 1 }}>SAFETY</Typography>
-              <Typography variant="h2" sx={{ fontSize: { xs: 30, md: 42 }, fontWeight: 900, lineHeight: 1.2, letterSpacing: 0 }}>
-                本音を書ける余白を守るために、共有範囲を絞る。
-              </Typography>
-            </Grid>
-            <Grid item xs={12} md={7}>
-              <Grid container spacing={2}>
+            <Grid item xs={6} md={3}>
+              <Typography sx={{ fontWeight: 700, fontSize: 13, color: colors.text.primary, mb: 1.5 }}>サポート</Typography>
+              <Stack spacing={1}>
                 {[
-                  { icon: <LockOutlined />, title: 'raw対話ログは見せない', body: '先生画面には会話全文を表示しません。' },
-                  { icon: <EditNote />, title: 'AIの見立て全文は見せない', body: 'AI出力は生徒の記録材料として扱い、先生画面には表示しません。' },
-                  { icon: <AutoStories />, title: '記録は本人確認後', body: '共有前に生徒が先生表示プレビューを確認します。' },
-                  { icon: <MapOutlined />, title: '先生は声かけに使う', body: '評価ではなく、次の伴走の手がかりとして使います。' },
-                ].map((item) => (
-                  <Grid item xs={12} sm={6} key={item.title}>
-                    <Paper elevation={0} sx={{ height: '100%', p: 2.5, borderRadius: 2, bgcolor: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.16)' }}>
-                      <Stack spacing={1}>
-                        <Box sx={{ color: '#ffcf9f' }}>{item.icon}</Box>
-                        <Typography sx={{ fontWeight: 800 }}>{item.title}</Typography>
-                        <Typography sx={{ color: 'rgba(255,255,255,0.76)', lineHeight: 1.75 }}>{item.body}</Typography>
-                      </Stack>
-                    </Paper>
-                  </Grid>
-                ))}
-              </Grid>
+                  { label: 'プライバシーポリシー', href: '/privacy' },
+                  { label: '利用規約', href: '/terms' },
+                  { label: 'バグ・フィードバック報告', href: BUG_REPORT_URL, external: true },
+                ].map((l) =>
+                  l.external ? (
+                    <Typography
+                      key={l.label}
+                      component="a"
+                      href={l.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      sx={{ fontSize: 13, color: colors.text.secondary, textDecoration: 'none', '&:hover': { color: colors.text.primary } }}
+                    >
+                      {l.label}
+                    </Typography>
+                  ) : (
+                    <Typography
+                      key={l.label}
+                      component={RouterLink}
+                      to={l.href}
+                      sx={{ fontSize: 13, color: colors.text.secondary, textDecoration: 'none', '&:hover': { color: colors.text.primary } }}
+                    >
+                      {l.label}
+                    </Typography>
+                  )
+                )}
+              </Stack>
             </Grid>
           </Grid>
+          <Box sx={{ mt: 5, pt: 3, borderTop: `1px solid ${colors.border.soft}` }}>
+            <Typography sx={{ fontSize: 12, color: colors.text.muted }}>© 2025 探Qメイト. All rights reserved.</Typography>
+          </Box>
         </Container>
-      </Section>
+      </Box>
 
-      <Section tone="paper">
-        <Container maxWidth="lg">
-          <SectionHeading eyebrow="ROADMAP" title="今できることと、実証で育てること。" />
-          <Grid container spacing={2}>
-            {roadmapItems.map((item) => (
-              <Grid item xs={12} md={6} key={item.title}>
-                <Paper elevation={0} sx={{ p: 2.5, height: '100%', borderRadius: 2, border: `1px solid ${colors.border.soft}`, bgcolor: colors.background.paper }}>
-                  <Chip label={item.status} size="small" sx={{ mb: 1.5, bgcolor: colors.accentWarm.soft, color: colors.accentWarm.active }} />
-                  <Typography variant="h6" sx={{ fontWeight: 800, mb: 1 }}>{item.title}</Typography>
-                  <Typography sx={{ color: colors.text.secondary, lineHeight: 1.75 }}>{item.body}</Typography>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Section>
-
-      <Section>
-        <Container maxWidth="md">
-          <SectionHeading eyebrow="FAQ" title="よくある質問" />
-          <Stack spacing={2}>
-            {faqs.map((faq) => (
-              <Paper key={faq.q} elevation={0} sx={{ p: 2.5, borderRadius: 2, border: `1px solid ${colors.border.soft}`, bgcolor: colors.background.paper }}>
-                <Typography sx={{ fontWeight: 800, mb: 1 }}>{faq.q}</Typography>
-                <Typography sx={{ color: colors.text.secondary, lineHeight: 1.8 }}>{faq.a}</Typography>
-              </Paper>
-            ))}
-          </Stack>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 5 }}>
-            <Button component="a" href={CONTACT_FORM_URL} target="_blank" rel="noreferrer" variant="contained" size="large">
-              個人向けβに応募する
-            </Button>
-            <Button component="a" href={CONTACT_FORM_URL} target="_blank" rel="noreferrer" variant="outlined" size="large">
-              学校実証について相談する
-            </Button>
-          </Stack>
-        </Container>
-      </Section>
     </Box>
   );
 };

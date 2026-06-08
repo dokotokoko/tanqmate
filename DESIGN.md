@@ -227,6 +227,7 @@ Use icon buttons for familiar tool actions when an icon exists. Provide accessib
 - Use chips for filters, selectable tags, emotion labels, and compact states
 - Avoid high-saturation fills
 - Keep selected states clear without becoming visually loud
+- For selectable chips, show selection directly on the chip itself. Do not add a separate box, panel, or mirrored list only to confirm selected results.
 
 ### AI Suggestion Block
 

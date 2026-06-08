@@ -33,6 +33,7 @@ const SchoolRegistrationPage = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [schoolInfo, setSchoolInfo] = useState<{ id: string; name: string } | null>(null);
+  const [existingInterests, setExistingInterests] = useState<string[]>([]);
   useEffect(() => {
     // プロフィール情報を確認
     void checkProfile();
@@ -56,6 +57,7 @@ const SchoolRegistrationPage = () => {
       const payload = await response.json();
       const data = payload.profile;
       if (data) {
+        setExistingInterests(Array.isArray(data.interests) ? data.interests : []);
         // 既に学校が設定されている場合はダッシュボードへ
         if (data.school_id) {
           navigate('/dashboard');
@@ -114,6 +116,7 @@ const SchoolRegistrationPage = () => {
         },
         body: JSON.stringify({
           name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+          interests: existingInterests,
           school_code: schoolCode,
         }),
       });

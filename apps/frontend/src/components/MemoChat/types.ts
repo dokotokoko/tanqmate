@@ -47,6 +47,7 @@ export interface AIChatProps {
   isDashboard?: boolean;
   title?: string;
   initialMessage?: string;
+  initialInputValue?: string;
   initialAIResponse?: string;
   memoContent?: string;
   currentMemoContent?: string;
@@ -61,6 +62,19 @@ export interface AIChatProps {
   loadHistoryFromDB?: boolean;
   isInitializing?: boolean;
   persistentMode?: boolean;
+  isTutorialLocked?: boolean;
+  isMessageInputDisabled?: boolean;
+  inputAreaDataTutorialId?: string;
+  inputDataTutorialId?: string;
+  sendButtonDataTutorialId?: string;
+  tutorialGuide?: React.ReactNode;
+  responseStyleSelectorDataTutorialId?: string;
+  forceResponseStyleSelectorOpen?: boolean;
+  highlightResponseStyleSelector?: boolean;
+  onMessageSendStart?: (result: { message: string; responseStyleId?: string | null }) => void;
+  onResponseStyleChange?: (style: ResponseStyle) => void;
+  onMessageResult?: (result: { status: 'success' | 'error'; conversationId?: string | null }) => void;
+  onActivityRecord?: (content: string, sender: 'user' | 'ai' | 'assistant') => void;
 }
 
 export interface ChatHeaderProps {
@@ -95,6 +109,7 @@ export interface ChatMessageListProps {
 export interface ChatInputAreaProps {
   inputValue: string;
   isLoading: boolean;
+  isMessageInputDisabled?: boolean;
   responseStyle: ResponseStyle | null;
   processingStatus?: string | null;
   fallbackUsed?: boolean;
@@ -103,6 +118,13 @@ export interface ChatInputAreaProps {
   onSendMessage: () => void;
   onKeyPress: (event: React.KeyboardEvent) => void;
   onStyleChange: (style: ResponseStyle) => void;
+  dataTutorialId?: string;
+  inputDataTutorialId?: string;
+  sendButtonDataTutorialId?: string;
+  tutorialGuide?: React.ReactNode;
+  responseStyleSelectorDataTutorialId?: string;
+  forceResponseStyleSelectorOpen?: boolean;
+  highlightResponseStyleSelector?: boolean;
 }
 
 export interface QuestCardsProps {
@@ -113,6 +135,9 @@ export interface QuestCardsProps {
 export interface ResponseStyleSelectorProps {
   selectedStyle: ResponseStyle | null;
   onStyleChange: (style: ResponseStyle) => void;
+  dataTutorialId?: string;
+  forceOpen?: boolean;
+  highlighted?: boolean;
 }
 
 // Chat History related types

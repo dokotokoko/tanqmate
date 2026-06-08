@@ -6,9 +6,10 @@ import { colors, shadows, zIndex } from '../../styles/design-system';
 
 interface GlobalDiaryButtonProps {
   hidden?: boolean;
+  disabled?: boolean;
 }
 
-export const GlobalDiaryButton: React.FC<GlobalDiaryButtonProps> = ({ hidden = false }) => {
+export const GlobalDiaryButton: React.FC<GlobalDiaryButtonProps> = ({ hidden = false, disabled = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -17,6 +18,7 @@ export const GlobalDiaryButton: React.FC<GlobalDiaryButtonProps> = ({ hidden = f
   const label = '今日の探究を記録する';
 
   const handleClick = () => {
+    if (disabled) return;
     navigate('/diary?autostart=1');
   };
 
@@ -26,6 +28,7 @@ export const GlobalDiaryButton: React.FC<GlobalDiaryButtonProps> = ({ hidden = f
       startIcon={<BookIcon />}
       onClick={handleClick}
       aria-label={label}
+      disabled={disabled}
       sx={{
         position: 'fixed',
         top: { xs: 12, sm: 18 },
@@ -41,6 +44,11 @@ export const GlobalDiaryButton: React.FC<GlobalDiaryButtonProps> = ({ hidden = f
         '&:hover': {
           backgroundColor: colors.accentWarm.hover,
           boxShadow: shadows.accent,
+        },
+        '&.Mui-disabled': {
+          backgroundColor: colors.background.subtle,
+          color: colors.text.muted,
+          boxShadow: 'none',
         },
       }}
     >

@@ -11,6 +11,9 @@ This document records the current data model concepts for 探Qメイト. SQL fil
 - School membership
 - Class / class membership
 - Inquiry theme
+- Profile interest tags
+- First AI tutorial state
+- Migration request
 - Conversation / message
 - ITS chat turn log
 - ITS observation profile
@@ -44,6 +47,41 @@ The ITS runtime keeps four internal model snapshots for each chat turn:
 - Teaching model: response style, question budget, disclosure/action-pressure limits, and preferred support types.
 - Inquiry task/domain model: inquiry phase, theme, question, hypothesis, artifacts, and quality signals.
 - Observation/evaluation model: aggregate AI observation summary, recent observation records, reaction signals, evidence sources, and caveats.
+
+## Profile Interest Tags
+
+`profiles.interests` stores self-declared student interest tags as `text[]`.
+
+Rules:
+
+- Interest tags are short words or phrases selected during onboarding or edited from the profile page.
+- They are used as AI support context for theme exploration and learner model interests.
+- They are not teacher-confirmed facts, evaluations, or raw private reflections.
+- Do not expose them as teacher-facing raw data unless a future requirement explicitly changes that boundary.
+
+## First AI Tutorial State
+
+`profiles.first_ai_tutorial_completed` and `profiles.first_ai_tutorial_completed_at` store whether a student has completed the required first AI chat tutorial.
+
+Rules:
+
+- The state applies to student profiles only. Teacher and admin profiles are not forced through this tutorial.
+- The database profile row is the source of truth. Do not use localStorage, sessionStorage, or a client-only tutorial store as the authoritative completion state.
+- Completion is recorded after the student confirms either the first successful AI response or the first AI response error.
+- The timestamp records the first successful completion API update and should not be reset by normal profile editing.
+- This is an app progress flag, not an assessment or teacher-facing learner signal.
+
+## Migration Requests
+
+`migration_requests` stores lightweight, manual handover requests submitted during onboarding by users who previously used the older authentication flow.
+
+Rules:
+
+- A request belongs to the new Supabase user via `new_user_id`.
+- The user provides `legacy_username` and optional `note` as lookup hints only.
+- The request does not trigger automatic data migration.
+- The default status is `pending`; later operational handling can mark it `completed` or `rejected`.
+- The table is operational support data and should not expose legacy lookup hints to other students or teachers.
 
 ## Schema Changes
 

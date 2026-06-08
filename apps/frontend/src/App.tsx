@@ -32,6 +32,9 @@ const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
 
 // その他のページは遅延ローディング
 const GuidePage = lazy(() => import('./pages/GuidePage'));
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
+const TermsOfServicePage = lazy(() => import('./pages/TermsOfServicePage'));
+const ExternalServicesPage = lazy(() => import('./pages/ExternalServicesPage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
 const SchoolRegistrationPage = lazy(() => import('./pages/SchoolRegistrationPage'));
 const GeneralInquiryPage = lazy(() => import('./pages/GeneralInquiryPage'));
@@ -132,6 +135,20 @@ function App() {
                 } 
               />
               
+              {/* 法的文書ページ（認証不要） */}
+              <Route
+                path="/privacy"
+                element={<LazyWrapper><PrivacyPolicyPage /></LazyWrapper>}
+              />
+              <Route
+                path="/terms"
+                element={<LazyWrapper><TermsOfServicePage /></LazyWrapper>}
+              />
+              <Route
+                path="/external-services"
+                element={<LazyWrapper><ExternalServicesPage /></LazyWrapper>}
+              />
+
               {/* 新ログインページ */}
               <Route
                 path="/signin"

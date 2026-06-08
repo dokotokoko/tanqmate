@@ -12,9 +12,12 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   grade TEXT,
   class_name TEXT,
   attendance_number INTEGER,
+  interests TEXT[] NOT NULL DEFAULT '{}',
   theme TEXT,
   question TEXT,
   hypothesis TEXT,
+  first_ai_tutorial_completed BOOLEAN NOT NULL DEFAULT FALSE,
+  first_ai_tutorial_completed_at TIMESTAMPTZ,
   legacy_user_id INTEGER, -- For migration from old system
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -24,9 +27,12 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS school_code_locked BOOLEAN 
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS grade TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS class_name TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS attendance_number INTEGER;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS interests TEXT[] NOT NULL DEFAULT '{}';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS theme TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS question TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS hypothesis TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS first_ai_tutorial_completed BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS first_ai_tutorial_completed_at TIMESTAMPTZ;
 
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles(email);
@@ -125,6 +131,9 @@ COMMENT ON COLUMN public.profiles.school_code_locked IS 'Whether school assignme
 COMMENT ON COLUMN public.profiles.grade IS 'Student grade';
 COMMENT ON COLUMN public.profiles.class_name IS 'Student class name';
 COMMENT ON COLUMN public.profiles.attendance_number IS 'Student attendance number';
+COMMENT ON COLUMN public.profiles.interests IS 'Student self-declared interest tags used as AI support context';
 COMMENT ON COLUMN public.profiles.theme IS 'Inquiry theme used as AI student context';
 COMMENT ON COLUMN public.profiles.question IS 'Inquiry question used as AI student context';
 COMMENT ON COLUMN public.profiles.hypothesis IS 'Inquiry hypothesis used as AI student context';
+COMMENT ON COLUMN public.profiles.first_ai_tutorial_completed IS 'Whether the student completed the required first AI chat tutorial';
+COMMENT ON COLUMN public.profiles.first_ai_tutorial_completed_at IS 'Timestamp when the required first AI chat tutorial was completed';

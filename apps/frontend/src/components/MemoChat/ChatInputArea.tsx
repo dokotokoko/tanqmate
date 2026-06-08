@@ -38,6 +38,7 @@ export type { ResponseStyle };
 const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   inputValue,
   isLoading,
+  isMessageInputDisabled = false,
   responseStyle,
   processingStatus,
   fallbackUsed,
@@ -46,6 +47,13 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
   onSendMessage,
   onKeyPress,
   onStyleChange,
+  dataTutorialId,
+  inputDataTutorialId,
+  sendButtonDataTutorialId,
+  tutorialGuide,
+  responseStyleSelectorDataTutorialId,
+  forceResponseStyleSelectorOpen,
+  highlightResponseStyleSelector,
 }) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -58,7 +66,13 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
       width: 'calc(100% - 48px)',
       maxWidth: '652px', // アイコンの外側の線に合わせる
       zIndex: 100,
-    }}>
+    }}
+    data-tutorial={dataTutorialId}>
+      {tutorialGuide && (
+        <Box sx={{ mb: 1.25 }}>
+          {tutorialGuide}
+        </Box>
+      )}
       <Box sx={{
         background: '#FFFDF7',
         borderRadius: '20px',
@@ -89,6 +103,9 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
             <ResponseStyleSelector
               selectedStyle={responseStyle}
               onStyleChange={onStyleChange}
+              dataTutorialId={responseStyleSelectorDataTutorialId}
+              forceOpen={forceResponseStyleSelectorOpen}
+              highlighted={highlightResponseStyleSelector}
             />
           </Suspense>
         </Box>
@@ -104,7 +121,8 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
             onKeyPress={onKeyPress}
             placeholder="メッセージを入力してください..."
             variant="outlined"
-            disabled={isLoading}
+            disabled={isLoading || isMessageInputDisabled}
+            inputProps={{ 'data-tutorial': inputDataTutorialId }}
             sx={{
               '& .MuiOutlinedInput-root': {
                 borderRadius: '12px',
@@ -131,7 +149,8 @@ const ChatInputArea: React.FC<ChatInputAreaProps> = ({
           <Button
             variant="contained"
             onClick={onSendMessage}
-            disabled={!inputValue.trim() || isLoading}
+            disabled={!inputValue.trim() || isLoading || isMessageInputDisabled}
+            data-tutorial={sendButtonDataTutorialId}
             sx={{ 
               minWidth: 'auto',
               width: 44,

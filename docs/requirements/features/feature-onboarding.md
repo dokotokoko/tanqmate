@@ -1,6 +1,6 @@
 ````md
 # 探Qメイト 初回体験再設計 要件定義
-## 認証移行対応 + /signin 通知UI + オンボーディング + 初回利用ガイド
+## 認証移行対応 + /signin 通知UI + オンボーディング + 初回AIチュートリアル
 
 ---
 
@@ -18,7 +18,7 @@
 - `/signin` に掲載する「認証方法変更と再登録案内」の通知UI
 - 認証移行後の再登録導線
 - シンプルなオンボーディング
-- 探Qメイトの価値を短く伝える初回利用ガイド
+- 探Qメイトの価値を最初のAI対話で体験できる初回AIチュートリアル
 - 最初の AI 対話までの体験設計
 
 ---
@@ -40,16 +40,62 @@
 
 ## 3. 基本方針
 
+### 3.0 現行実装対象: 4ステップオンボーディングと興味タグ
+
+現行の `/onboarding` は、PCでも縦長のスマホ風操作面で進める以下の4ステップで実装する。太いプログレスバーは使わず、`次へ（あと2ステップ）` のようにボタン文言と小さなステップ表示で残り量を伝える。
+
+1. **再登録・引き継ぎ確認**
+   - 旧データ引き継ぎ希望の有無
+   - 希望する場合のみ旧ユーザー名（必須）と補足（任意）
+2. **基本情報**
+   - 表示名（必須）
+   - 学校コード（任意）
+   - 学校コード確認後の学年・クラス・出席番号
+3. **興味の選択**
+   - 興味タグ（1つ以上必須）
+4. **テーマ入力**
+   - 探究テーマ（任意）
+   - 問い（任意）
+   - 仮説（任意）
+   - `あとで決める` で空のまま完了できる
+
+興味タグは、候補ボタンの複数選択と自由入力で追加できる。入力値は空白を除去し、空文字・重複・長すぎるタグを保存しない。
+
+保存先は `profiles.interests text[] not null default '{}'` とする。`profiles.interests` は生徒本人の自己申告による好きなもの・気になるもののタグであり、AI支援の入口として使う。先生向けに raw data としてそのまま公開する情報ではない。
+
+既存ユーザーは `name` が設定済みであればオンボーディング完了扱いを維持し、興味未設定を理由に再オンボーディングへ強制遷移させない。
+
+### 3.0.1 現行優先: 学校利用向け初回AIチュートリアル
+
+当面は学校利用を中心に開始するため、登録前のゲストAI体験は実装しない。初回導線は次を標準とする。
+
+```text
+LP
+  ↓
+/signup または /signin
+  ↓
+/onboarding
+  ↓
+/chat?tutorial=first-ai
+  ↓
+通常利用
+```
+
+生徒は、オンボーディング完了後に初回AIチュートリアルへ進む。`profiles.first_ai_tutorial_completed = true` になるまでは、会話履歴、新規チャット、日誌、プロフィールなどの他操作へ移動できない。
+
+初回AIチュートリアルは、オンボーディングで入力した興味タグ、探究テーマ、問い、仮説から初回相談文を下書きし、生徒が送信する。初回AI応答後に会話スタイルを「考えを深めたい」へ切り替え、2回目の送信とAI応答またはエラー表示を確認したあと、授業の最後に使う「今日の探究を記録する」導線を案内して完了する。スキップや閉じる操作による完了はできない。
+
 ### 3.1 初回体験の構成
 初回体験は、以下の2段階で構成する。
 
 1. **オンボーディング**
    - 引き継ぎ有無の確認
    - 最低限のプロフィール設定
-2. **初回利用ガイド**
-   - 探Qメイトの価値提示
-   - 探究テーマまたは興味関心の入力
-   - AIチャットでの初回対話
+2. **学校利用向け初回AIチュートリアル**
+   - オンボーディング内容から初回相談文を下書きする
+   - 生徒がAIへ最初の相談文を送信する
+   - 初回AI応答後に「考えを深めたい」へ切り替える
+   - 2回目のAI応答またはエラー表示後に日誌導線を案内し、通常利用へ進む
 
 ### 3.2 設計方針
 - ユーザー種別の専用分岐画面は作らない
@@ -57,7 +103,7 @@
 - 過去データ引き継ぎは「はい / いいえ」で選ばせる
 - 「はい」を選んだユーザーのみ、旧ユーザー名を入力して申請する
 - データ引き継ぎそのものは自動化せず、開発者が手動で対応する
-- 初回利用ガイドは、説明を読むだけで終わらせず、実際の入力と AI 対話まで導く
+- 初回AIチュートリアルは、説明を読むだけで終わらせず、実際の AI 対話まで導く
 - `/signin` には、認証変更を確実に伝える通知UIを常設する
 
 ---
@@ -84,7 +130,7 @@
 - `/signin` からの再ログイン導線
 - `/signin` の通知UI
 - `/onboarding` の設計
-- `/getting-started` または同等画面の設計
+- `/chat?tutorial=first-ai` の初回AIチュートリアル設計
 - `profiles` / `migration_requests` のデータ設計
 - 状態遷移
 - 分析イベント
@@ -110,7 +156,7 @@
   ↓
 /onboarding
   ↓
-/getting-started
+/chat?tutorial=first-ai
   ↓
 通常利用（ダッシュボード / AIチャット）
 ````
@@ -136,9 +182,9 @@
 
 * `/onboarding` に遷移
 
-#### オンボーディング完了かつ初回利用ガイド未完了
+#### オンボーディング完了かつ初回AIチュートリアル未完了
 
-* `/getting-started` に遷移
+* `/chat?tutorial=first-ai` に遷移
 
 #### 両方完了
 
@@ -151,12 +197,12 @@
 #### ユーザー状態
 
 * `onboarding_completed: boolean`
-* `getting_started_completed: boolean`
+* `first_ai_tutorial_completed: boolean`
+* `first_ai_tutorial_completed_at: string | null`
 
 #### 任意で持つ補助状態
 
 * `onboarding_step: string | null`
-* `getting_started_step: string | null`
 
 ---
 
@@ -172,10 +218,10 @@ profiles 取得
 onboarding_completed = false
   → /onboarding
 
-onboarding_completed = true かつ getting_started_completed = false
-  → /getting-started
+onboarding_completed = true かつ first_ai_tutorial_completed = false
+  → /chat?tutorial=first-ai
 
-onboarding_completed = true かつ getting_started_completed = true
+onboarding_completed = true かつ first_ai_tutorial_completed = true
   → 通常利用
 ```
 
@@ -346,15 +392,18 @@ onboarding_completed = true かつ getting_started_completed = true
 
 * 過去データ引き継ぎの意思確認
 * 最低限のプロフィール設定
-* 初回利用ガイドへの接続
+* 初回AIチュートリアルへの接続
 
 ### 画面構成
 
-以下の3ステップを1本のフローとして実装する。
+以下の4ステップを1本のフローとして実装する。
 
 1. 引き継ぎ有無確認
 2. プロフィール設定
-3. 完了
+3. 興味の選択
+4. テーマ入力
+
+PC画面でも主操作は縦長のスマホ風パネル内に集約する。プログレスバーは表示せず、`1/4` の小さな位置表示と `次へ（あと1ステップ）` のようなボタン文言で終わりまでの距離を伝える。
 
 ---
 
@@ -438,155 +487,122 @@ onboarding_completed = true かつ getting_started_completed = true
 
 ---
 
-## 8.2.3 Step 3: 完了
+## 8.2.3 Step 3: 興味の選択
 
 ### 目的
 
-* オンボーディングの完了を伝える
-* 初回利用ガイドへ自然に遷移させる
+* 生徒の好きなもの・気になるものをAI支援の入口として受け取る
+* テーマ未確定でも次のステップへ進める
 
-### 表示要素
+### 入力項目
 
-* 完了メッセージ
-* 引き継ぎ申請済みの場合の受付メッセージ
-* 次へ進むボタン
+* 興味タグ（1つ以上必須）
+* 候補タグの複数選択
+* 自由入力によるタグ追加
 
-### 表示文例
+### UX要件
 
-* 設定が完了しました
-* 引き継ぎ申請を受け付けました。内容を確認後、必要に応じて対応します
+* 単語レベルでよいことを明示する
+* 後からプロフィールで更新できることを伝える
+* 興味未選択では次へ進めない
+
+---
+
+## 8.2.4 Step 4: テーマ入力
+
+### 目的
+
+* すでに探究テーマや問いがある生徒だけ入力できるようにする
+* テーマが決まっていない生徒を止めず、興味から初回AIチュートリアルへ進ませる
+
+### 入力項目
+
+* 探究テーマ（任意）
+* 問い（任意）
+* 仮説（任意）
+
+### UI仕様
+
+* `あとで決める` / `スキップして始める` 相当の導線を用意する
+* 空のままでもオンボーディングを完了できる
+* 入力した場合のみ `profiles.theme` / `profiles.question` / `profiles.hypothesis` に保存する
 
 ### 完了時処理
 
-* `profiles.onboarding_completed = true`
-* `profiles.onboarding_step = "complete"` など
-* `/getting-started` へ遷移
+* 現行実装では `profiles.name` が保存されるとオンボーディング完了扱いになる
+* 引き継ぎ希望時は `migration_requests` に申請を保存する
+* 生徒は `/chat?tutorial=first-ai` へ遷移
+* 先生・管理者はロール別の通常画面へ遷移
 
 ---
 
-# 8.3 `/getting-started`
+# 8.3 `/chat?tutorial=first-ai`
 
 ### 目的
 
-* 探Qメイトの価値を短く伝える
-* ユーザーを空画面に放置しない
-* 最初の1歩としてテーマ入力または相談入力をさせる
-* AIチャットでの最初の対話まで到達させる
+* 生徒が初回からAIとの対話体験に到達できるようにする
+* オンボーディングで入力した内容を、最初の相談文として自然に使う
+* 学校利用中に迷子にならないよう、完了まで他操作を制限する
 
-### 推奨構成
+### 表示対象
 
-以下の3ステップで構成する。
+* `role = "student"`
+* オンボーディング完了済み
+* `profiles.first_ai_tutorial_completed = false`
 
-1. 価値提示
-2. テーマまたは興味の入力
-3. AIチャット開始
+先生・管理者は対象外とし、ロール別の通常画面へ遷移する。
 
----
+### 初回相談文
 
-## 8.3.1 Step 1: 価値提示
+オンボーディング情報から、入力欄に初回相談文を下書きする。
+チャット本文には、通常の `/chat` と同じAI側の初期メッセージを必ず表示する。チュートリアル案内カードは画面上部ではなく、入力欄の直上に表示し、その時点で必要な1操作だけを短く案内する。
 
-### 目的
+テーマがある場合:
 
-* 探Qメイトが何をしてくれるかを短く理解させる
+```text
+「{theme}」について、今の問いや仮説をもとに次に何を調べるとよいか一緒に整理したいです。
+```
 
-### 表示内容
+テーマがない場合:
 
-長い説明ではなく、1〜2文で伝える。
+```text
+興味がある「{interests}」から探究テーマを考えたいです。最初の問いを一緒に整理したいです。
+```
 
-### 表示文の方向性
+### 操作制限
 
-* 探Qメイトは、探究で「次に何をすればいいか」を一緒に考える AI
-* テーマ整理、行動の整理、相談相手として使える
+完了状態がDBに保存されるまでは、以下を利用できない。
 
-### UX要件
-
-* 長いチュートリアル文は出さない
-* 1画面で理解できる量にする
-* すぐ次へ進めるようにする
-
----
-
-## 8.3.2 Step 2: テーマまたは興味の入力
-
-### 目的
-
-* ユーザーが自分の今の状態を入力できるようにする
-* テーマ未確定のユーザーも止まらないようにする
-
-### 質問
-
-* 今取り組みたい探究テーマはありますか？
-
-### 選択肢
-
-* ある
-* まだ決まっていない
-
-### 「ある」の場合
-
-* テーマ入力欄を表示
-* プレースホルダー例を表示
-
-### 「まだ決まっていない」の場合
-
-* 興味関心や気になることを一言入力する欄を表示
-
-### 保存
-
-* 初回テーマ情報を保存する
-* 保存先は既存のテーマテーブルまたは簡易初期状態テーブルでもよい
-* 初期実装ではチャット開始時のコンテキストとしてだけ保持してもよい
-
-### UX要件
-
-* 「テーマがないと進めない」設計にしない
-* 何を書けばよいか分かる例を入れる
-* 1〜2行程度で入力できる軽さにする
-
----
-
-## 8.3.3 Step 3: AIチャット開始
-
-### 目的
-
-* 初回利用のゴールとして、最初の AI 対話を成立させる
-
-### 要件
-
-* チャット画面を空にしない
-* 初回歓迎メッセージを最初から表示する
-* 最初の入力を助けるクイックアクションを置く
-* 操作方法は画面内ガイドで補助する
-
-### 初回歓迎メッセージ例
-
-* こんにちは。探究で「次に何をすればいいか」を一緒に考えていきましょう。まずは、今のテーマや気になっていることを教えてください。
-
-### クイックアクション例
-
-* テーマを整理したい
-* 次にやることを決めたい
-* 何から始めればいいか相談したい
-
-### 操作ガイド
-
-説明画面を別で出すのではなく、UI上に軽い補助を入れる。
-
-#### 例
-
-* 入力欄の近くに「ここに相談したいことを書きます」
-* 送信ボタンの近くに「送ると AI が一緒に整理します」
+* 別ルートへの直接移動
+* 新規チャット
+* 会話履歴
+* 日誌
+* プロフィール・アカウント設定
+* チュートリアルのスキップ、閉じる、任意終了
 
 ### 完了条件
 
-初回利用ガイドの完了は、以下を満たした時点とする。
+次の順序を満たした後、自動で完了する。
 
-* テーマまたは興味関心が入力済み
-* AIに最初の1メッセージを送信済み
+1. 初回相談文を送信する
+2. 初回AI応答またはエラー表示を確認する
+3. 会話スタイルを「考えを深めたい」に切り替える
+4. 2回目のメッセージを送信する
+5. 2回目のAI応答またはエラー表示を確認する
+6. 右上の「今日の探究を記録する」導線を案内する
+
+確認ボタンなどの手動完了操作は表示しない。AI失敗は完了可能とし、授業中に詰まらないようにする。
+
+日誌導線の案内では、画面右上の「今日の探究を記録する」ボタンに注意が向くよう、ボタン以外を薄くグレーアウトし、吹き出しUIで「授業の最後にやってみる」機能として紹介する。この場で日誌作成フローは開始しない。
 
 ### 完了時処理
 
-* `profiles.getting_started_completed = true`
+* `POST /auth/first-ai-tutorial/complete` を呼び出す
+* `profiles.first_ai_tutorial_completed = true`
+* `profiles.first_ai_tutorial_completed_at = now()`
+* プロフィールを再取得する
+* 現在表示中の会話を保持したまま、通常の `/chat` へ戻す
+* 完了時に会話履歴の再読み込みで画面上の会話を置き換えない
 
 ---
 
@@ -603,14 +619,19 @@ onboarding_completed = true かつ getting_started_completed = true
 
 ```sql
 id uuid primary key
-display_name text not null
-school_code text null
+name text null
+role text not null default 'student'
+school_id uuid null
+school_code_locked boolean not null default false
 grade text null
 class_name text null
-onboarding_completed boolean not null default false
-getting_started_completed boolean not null default false
-onboarding_step text null
-getting_started_step text null
+attendance_number integer null
+interests text[] not null default '{}'
+theme text null
+question text null
+hypothesis text null
+first_ai_tutorial_completed boolean not null default false
+first_ai_tutorial_completed_at timestamptz null
 created_at timestamptz not null default now()
 updated_at timestamptz not null default now()
 ```
@@ -618,8 +639,9 @@ updated_at timestamptz not null default now()
 ### 補足
 
 * `id` は `auth.users.id` を参照する
-* 将来的に `role` を追加可能
-* 将来的に `school_id` 参照へ拡張可能
+* 現行実装では `name` が設定済みであればオンボーディング完了扱いとする
+* 初回AIチュートリアルの完了状態は `profiles` を正とし、localStorage では管理しない
+* `first_ai_tutorial_completed_at` は初回完了時刻を保持する
 
 ---
 
@@ -682,11 +704,13 @@ updated_at timestamptz not null default now()
 
 ---
 
-# 10.4 初回利用ガイド状態保存
+# 10.4 初回AIチュートリアル状態保存
 
-* テーマ入力状態
-* 初回チャット開始状態
-* `getting_started_completed`
+* `POST /auth/first-ai-tutorial/complete` は認証済みユーザー本人のプロフィールだけを更新する
+* 生徒以外のロールでは完了状態更新を要求しない
+* 既に完了済みの場合も成功レスポンスを返す冪等APIとする
+* `first_ai_tutorial_completed`
+* `first_ai_tutorial_completed_at`
 
 を保存できること
 
@@ -716,16 +740,15 @@ updated_at timestamptz not null default now()
 * `onboarding_profile_saved`
 * `onboarding_completed`
 
-### 初回利用ガイド
+### 初回AIチュートリアル
 
-* `getting_started_started`
-* `getting_started_value_viewed`
-* `theme_input_selected_have_theme`
-* `theme_input_selected_no_theme_yet`
-* `theme_input_saved`
+* `first_ai_tutorial_started`
+* `first_ai_tutorial_draft_viewed`
 * `first_chat_started`
 * `first_message_sent`
-* `getting_started_completed`
+* `first_ai_tutorial_ai_response_succeeded`
+* `first_ai_tutorial_ai_response_failed`
+* `first_ai_tutorial_completed`
 
 ### 主要KPI
 
@@ -753,7 +776,7 @@ updated_at timestamptz not null default now()
 ### 12.2 再開性
 
 * 途中離脱しても再開できること
-* 少なくとも `onboarding_completed` と `getting_started_completed` により再遷移できること
+* 少なくとも `onboarding_completed` 相当の `name` と `first_ai_tutorial_completed` により再遷移できること
 
 ### 12.3 運用性
 
@@ -787,8 +810,14 @@ updated_at timestamptz not null default now()
 * 引き継ぎ「はい」の場合のみ旧ユーザー名入力欄が表示される
 * 表示名を保存できる
 * 学校コード入力時のみ学年・クラス欄が表示される
+* 興味選択とテーマ入力が別ステップで表示される
+* 興味タグは1つ以上選択しないと進めない
+* テーマ、問い、仮説は未入力でもスキップして完了できる
+* 太いプログレスバーではなく、残りステップがボタン文言や小さな表示で伝わる
+* PCでも縦長のスマホ風操作面として表示される
 * 完了後に `onboarding_completed = true` になる
-* 完了後に `/getting-started` へ遷移する
+* 生徒は完了後に `/chat?tutorial=first-ai` へ遷移する
+* 先生・管理者は強制チュートリアル対象外としてロール別通常画面へ遷移する
 
 # 13.3 移行申請
 
@@ -796,15 +825,18 @@ updated_at timestamptz not null default now()
 * 申請内容に新ユーザーID・旧ユーザー名・備考が保存される
 * 同一ユーザーが完了後も通常利用できる
 
-# 13.4 初回利用ガイド
+# 13.4 初回AIチュートリアル
 
-* 価値提示が表示される
-* テーマがある / まだ決まっていない の分岐がある
-* テーマまたは興味関心を入力できる
-* AIチャットに遷移できる
-* 初回歓迎メッセージが表示される
-* クイックアクションまたは入力ガイドがある
-* 最初の1メッセージ送信後に `getting_started_completed = true` になる
+* 新規生徒はオンボーディング後に `/chat?tutorial=first-ai` へ遷移する
+* 未完了生徒は `/diary` `/profile` などへ直接移動できない
+* 初回相談文がプロフィールの `theme` または `interests` から生成される
+* 通常の `/chat` と同じAI側の初期メッセージがチャット本文に表示される
+* チュートリアル案内カードは入力欄の直上に表示され、画面上部固定では表示されない
+* 初回AI応答後に「考えを深めたい」の選択案内が表示される
+* 2回目のAI応答またはエラー表示後に、右上の「今日の探究を記録する」導線が案内される
+* 確認ボタンなどの手動完了操作なしで完了APIが呼び出される
+* 完了API呼び出し後、プロフィール再取得を行い、現在の会話を保持したまま通常の `/chat` へ戻る
+* teacher/admin は強制チュートリアル対象外である
 
 ---
 
@@ -815,13 +847,13 @@ updated_at timestamptz not null default now()
 ## フロント
 
 * [ ] 認証ガードの整理
-* [ ] `onboarding_completed` / `getting_started_completed` によるルーティング分岐実装
+* [ ] `onboarding_completed` 相当 / `first_ai_tutorial_completed` によるルーティング分岐実装
 * [ ] `/signin` に認証変更通知UI追加
 * [ ] `/signin` 通知UIの CTA / 計測実装
 
 ## バックエンド / DB
 
-* [ ] `profiles` にオンボーディング関連カラム追加
+* [ ] `profiles` にオンボーディング関連カラムと初回AIチュートリアル完了カラムを追加
 * [ ] ログイン時に `profiles` を確実に取得 / 作成する処理追加
 
 ---
@@ -833,7 +865,9 @@ updated_at timestamptz not null default now()
 * [ ] `/onboarding` 画面作成
 * [ ] Step 1 引き継ぎ確認 UI 実装
 * [ ] Step 2 プロフィール設定 UI 実装
-* [ ] Step 3 完了 UI 実装
+* [ ] Step 3 興味選択 UI 実装
+* [ ] Step 4 テーマ入力 UI 実装
+* [ ] テーマ入力のスキップ導線実装
 * [ ] 条件表示ロジック実装
 * [ ] バリデーション実装
 
@@ -845,22 +879,24 @@ updated_at timestamptz not null default now()
 
 ---
 
-# Phase 3: 初回利用ガイド実装
+# Phase 3: 初回AIチュートリアル実装
 
 ## フロント
 
-* [ ] `/getting-started` 画面作成
-* [ ] 価値提示画面実装
-* [ ] テーマ / 興味入力 UI 実装
-* [ ] 初回チャット導線実装
-* [ ] 初回歓迎メッセージ実装
-* [ ] クイックアクション実装
-* [ ] 入力ガイド実装
+* [ ] `/chat?tutorial=first-ai` の強制チュートリアル制御実装
+* [ ] オンボーディング情報から初回相談文を下書きする
+* [ ] 入力欄直上のステップ案内実装
+* [ ] 初回AI応答後の「考えを深めたい」選択案内実装
+* [ ] 2回目AI応答後の日誌導線案内実装
+* [ ] AI応答失敗時も次ステップへ進める処理実装
+* [ ] 新規チャット、会話履歴、日誌、プロフィール導線を完了まで無効化
+* [ ] 完了後にプロフィール再取得して現在の会話を保持したまま通常 `/chat` へ戻す
 
 ## バックエンド / 状態管理
 
-* [ ] テーマまたは興味関心の保存処理実装
-* [ ] 初回メッセージ送信時に `getting_started_completed` 更新
+* [ ] `profiles.first_ai_tutorial_completed` / `first_ai_tutorial_completed_at` 追加
+* [ ] `POST /auth/first-ai-tutorial/complete` 実装
+* [ ] 完了APIを冪等にする
 
 ---
 
@@ -923,12 +959,15 @@ updated_at timestamptz not null default now()
    * 過去データ引き継ぎの有無
    * 表示名
    * 学校コードと任意の追加情報
+   * 興味タグ、探究テーマ、問い、仮説
      を設定する
-4. `/getting-started` で
+4. 生徒は `/chat?tutorial=first-ai` で
 
-   * 探Qメイトの価値を短く知る
-   * テーマまたは興味関心を入力する
+   * オンボーディング内容から作られた初回相談文を確認する
    * AIチャットで最初の対話を始める
-5. 最初の1メッセージ送信までを初回利用完了とする
+   * 初回AI応答またはエラー表示を確認する
+   * 会話スタイルを「考えを深めたい」に切り替える
+   * 2回目の対話後に「今日の探究を記録する」導線を確認する
+5. `POST /auth/first-ai-tutorial/complete` により `profiles.first_ai_tutorial_completed = true` になった時点で初回AIチュートリアル完了とする
 
 ```

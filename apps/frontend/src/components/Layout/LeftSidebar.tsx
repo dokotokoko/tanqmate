@@ -17,11 +17,13 @@ import { borderRadius, colors, shadows } from '../../styles/design-system';
 interface LeftSidebarProps {
   onNewChat?: () => void;
   onHistoryOpen?: () => void;
+  disabled?: boolean;
 }
 
 const LeftSidebar: React.FC<LeftSidebarProps> = ({
   onNewChat,
-  onHistoryOpen
+  onHistoryOpen,
+  disabled = false,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -30,6 +32,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
   const isMenuOpen = Boolean(anchorEl);
 
   const handleAccountMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    if (disabled) return;
     setAnchorEl(event.currentTarget);
   };
 
@@ -144,9 +147,14 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
         {/* Chat Items */}
         {chatItems.map((item) => (
-          <Tooltip key={item.label} title={item.label} placement="right">
+          <Tooltip
+            key={item.label}
+            title={disabled ? '初回チュートリアル完了後に使えます' : item.label}
+            placement="right"
+          >
             <IconButton
-              onClick={item.action}
+              onClick={disabled ? undefined : item.action}
+              disabled={disabled}
               sx={{
                 width: '40px',
                 height: '40px',
@@ -176,9 +184,14 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
 
         {/* Menu Items */}
         {menuItems.map((item) => (
-          <Tooltip key={item.label} title={item.label} placement="right">
+          <Tooltip
+            key={item.label}
+            title={disabled ? '初回チュートリアル完了後に使えます' : item.label}
+            placement="right"
+          >
             <IconButton
-              onClick={item.action}
+              onClick={disabled ? undefined : item.action}
+              disabled={disabled}
               sx={{
                 width: '40px',
                 height: '40px',
@@ -217,6 +230,7 @@ const LeftSidebar: React.FC<LeftSidebarProps> = ({
           <Tooltip title="アカウント" placement="right">
             <IconButton
               onClick={handleAccountMenuOpen}
+              disabled={disabled}
               sx={{
                 width: '40px',
                 height: '40px',

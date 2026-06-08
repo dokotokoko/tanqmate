@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import LeftSidebar from './LeftSidebar';
 import { GlobalDiaryButton } from '../Diary/GlobalDiaryButton';
 import { useAuthStore } from '../../stores/authStore';
+import { isFirstAiTutorialRequired } from '../../utils/onboardingGuards';
 
 const leftSidebarWidth = 64; // Fixed width for new simple sidebar
 
@@ -25,6 +26,7 @@ const Layout: React.FC = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const profile = useAuthStore((state) => state.profile);
   const showDiaryButton = profile?.role !== 'teacher' && profile?.role !== 'admin';
+  const isFirstAiTutorialLocked = isFirstAiTutorialRequired(profile);
 
   return (
     <LayoutContext.Provider value={{ sidebarOpen: false, onSidebarToggle: () => {} }}>
@@ -32,6 +34,7 @@ const Layout: React.FC = () => {
         {/* New Left Sidebar */}
         {!isMobile && (
             <LeftSidebar
+              disabled={isFirstAiTutorialLocked}
               onNewChat={() => {
                 navigate('/chat');
                 // URLパラメータでnewChatフラグを設定
@@ -68,7 +71,7 @@ const Layout: React.FC = () => {
             overflow: 'hidden', // 子要素でスクロールを管理
           }}
         >
-          <GlobalDiaryButton hidden={!showDiaryButton} />
+          <GlobalDiaryButton hidden={!showDiaryButton || isFirstAiTutorialLocked} disabled={isFirstAiTutorialLocked} />
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}

@@ -2,6 +2,7 @@
 import React, { memo } from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
 import { motion } from 'framer-motion';
+import { colors, gradients } from '../styles/design-system';
 
 const LoadingScreen: React.FC = () => {
   console.log('[LoadingScreen] Rendering loading screen');
@@ -17,7 +18,7 @@ const LoadingScreen: React.FC = () => {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #FF7A00 0%, #FF6B35 100%)',
+        background: gradients.warmSoft,
         zIndex: 9999,
       }}
     >
@@ -35,7 +36,7 @@ const LoadingScreen: React.FC = () => {
         <Typography
           variant="h3"
           sx={{
-            color: 'white',
+            color: colors.text.primary,
             fontWeight: 700,
             textAlign: 'center',
           }}
@@ -51,7 +52,7 @@ const LoadingScreen: React.FC = () => {
             size={60}
             thickness={4}
             sx={{
-              color: 'white',
+              color: colors.accentWarm.main,
             }}
           />
         </motion.div>
@@ -59,7 +60,7 @@ const LoadingScreen: React.FC = () => {
         <Typography
           variant="body1"
           sx={{
-            color: 'rgba(255, 255, 255, 0.8)',
+            color: colors.text.secondary,
             textAlign: 'center',
           }}
         >

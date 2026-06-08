@@ -20,6 +20,7 @@ import {
   VisibilityOutlined as VisibilityOutlinedIcon,
 } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
+import { useNavigate } from 'react-router-dom';
 import { EmotionSelector, emotionOptions } from './EmotionSelector';
 import { MotivationFlameRive } from './MotivationFlameRive';
 import { EmotionType } from './EmotionIcon';
@@ -243,6 +244,7 @@ const buildSubmissionDraft = (
 };
 
 export const DiaryFlowNew: React.FC<DiaryFlowNewProps> = ({ onComplete, autoStart = false }) => {
+  const navigate = useNavigate();
   const [flowState, setFlowState] = useState<DiaryFlowState>(autoStart ? 'emotion_selecting' : 'not_started');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLongWaitFallback, setShowLongWaitFallback] = useState(false);
@@ -434,6 +436,7 @@ export const DiaryFlowNew: React.FC<DiaryFlowNewProps> = ({ onComplete, autoStar
 
   const canProceed =
     (flowState === 'emotion_selecting' && selectedEmotionIds.length > 0) ||
+    flowState === 'ai_observation_ready' ||
     (flowState === 'student_reflection_editing' && studentReflectionText.trim().length > 0) ||
     flowState === 'teacher_preview';
 
@@ -449,6 +452,10 @@ export const DiaryFlowNew: React.FC<DiaryFlowNewProps> = ({ onComplete, autoStar
       void generateAiObservation();
       return;
     }
+    if (flowState === 'ai_observation_ready') {
+      setFlowState('student_reflection_editing');
+      return;
+    }
     if (flowState === 'student_reflection_editing') {
       setFlowState('teacher_preview');
       return;
@@ -457,6 +464,40 @@ export const DiaryFlowNew: React.FC<DiaryFlowNewProps> = ({ onComplete, autoStar
       void handleSubmit();
     }
   };
+
+  if (flowState === 'submitted') {
+    return (
+      <Container>
+        <Box
+          role="status"
+          aria-live="polite"
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            textAlign: 'center',
+            gap: 2,
+            minHeight: '60vh',
+            py: 8,
+          }}
+        >
+          <CheckCircleOutlineIcon color="success" sx={{ fontSize: 72 }} />
+          <Typography variant="h4" sx={{ fontWeight: 700, color: colors.text.primary }}>
+            今日の探究を記録しました
+          </Typography>
+          <Button
+            variant="contained"
+            size="large"
+            onClick={() => navigate('/chat')}
+            sx={{ mt: 2 }}
+          >
+            チャットに戻る
+          </Button>
+        </Box>
+      </Container>
+    );
+  }
 
   return (
     <Container>
@@ -662,22 +703,18 @@ export const DiaryFlowNew: React.FC<DiaryFlowNewProps> = ({ onComplete, autoStar
             </StepContainer>
           )}
 
-          {(flowState === 'teacher_preview' || flowState === 'submitting' || flowState === 'submitted') && (
+          {(flowState === 'teacher_preview' || flowState === 'submitting') && (
             <StepContainer>
-              <SectionTitle>
-                {flowState === 'submitted' ? '記録を保存しました' : '先生に表示される内容を確認する'}
-              </SectionTitle>
+              <SectionTitle>先生に表示される内容を確認する</SectionTitle>
               <StepIntro>
-                {flowState === 'submitted'
-                  ? '先生用ダッシュボードに表示される内容として保存しました。'
-                  : 'この内容が先生用ダッシュボードに表示されます。送信する前に、内容を確認してください。'}
+                この内容が先生用ダッシュボードに表示されます。送信する前に、内容を確認してください。
               </StepIntro>
 
               <Stack spacing={2.5}>
                 <SoftPanel elevation={0}>
                   <Stack spacing={2.5}>
                     <Box display="flex" alignItems="center" gap={1}>
-                      {flowState === 'submitted' ? <CheckCircleOutlineIcon color="success" /> : <EditNoteIcon color="primary" />}
+                      <EditNoteIcon color="primary" />
                       <Typography variant="h6" sx={{ color: colors.text.primary }}>
                         先生用ダッシュボードでの表示
                       </Typography>
@@ -756,7 +793,7 @@ export const DiaryFlowNew: React.FC<DiaryFlowNewProps> = ({ onComplete, autoStar
             </StepContainer>
           )}
 
-          {flowState !== 'ai_generating' && flowState !== 'submitted' && (
+          {flowState !== 'ai_generating' && (
             <ButtonContainer>
               <Typography role="status" aria-live="polite" variant="body2" color="text.secondary">
                 {flowState === 'emotion_selecting'
