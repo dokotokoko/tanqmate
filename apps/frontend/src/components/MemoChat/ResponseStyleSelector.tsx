@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Typography,
@@ -90,11 +90,20 @@ const responseStyles: ResponseStyle[] = [
 const ResponseStyleSelector: React.FC<ResponseStyleSelectorProps> = ({
   selectedStyle,
   onStyleChange,
+  dataTutorialId,
+  forceOpen = false,
+  highlighted = false,
 }) => {
   const theme = useTheme();
   const [isOpen, setIsOpen] = useState(false);
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customInstruction, setCustomInstruction] = useState('');
+
+  useEffect(() => {
+    if (forceOpen) {
+      setIsOpen(true);
+    }
+  }, [forceOpen]);
 
   const handleToggle = () => {
     const newIsOpen = !isOpen;
@@ -154,92 +163,88 @@ const ResponseStyleSelector: React.FC<ResponseStyleSelectorProps> = ({
   const smoothEase = [0.4, 0, 0.2, 1]
 
   return (
-    <Box sx={{ width: '100%' }}>
-      {/* トグルスイッチとスタイル表示 */}
+    <Box
+      data-tutorial={dataTutorialId}
+      sx={{
+        width: '100%',
+        borderRadius: '12px',
+        transition: 'box-shadow 0.2s ease, background-color 0.2s ease',
+        ...(highlighted && {
+          backgroundColor: 'rgba(255, 140, 90, 0.08)',
+          boxShadow: '0 0 0 2px rgba(255, 140, 90, 0.32)',
+        }),
+      }}
+    >
+      {/* トグルスイッチと選択中スタイル表示 */}
       <Box
+        onClick={handleToggle}
         sx={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
           mb: isOpen ? 1 : 0,
-          flexWrap: { xs: 'wrap', sm: 'nowrap' },
-          gap: { xs: 1, sm: 0 },
+          cursor: 'pointer',
+          userSelect: 'none',
+          gap: { xs: 0.75, sm: 1 },
+          minWidth: 0,
         }}
       >
+        {/* カスタムトグルスイッチ */}
         <Box
-          onClick={handleToggle}
           sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: { xs: 0.75, sm: 1 },
-            cursor: 'pointer',
-            userSelect: 'none',
-            minWidth: 0,
-            flex: { xs: '1 1 auto', sm: '0 0 auto' },
+            width: { xs: 40, sm: 44 },
+            height: { xs: 22, sm: 24 },
+            backgroundColor: isOpen ? theme.palette.primary.main : '#e5e7eb',
+            borderRadius: { xs: '11px', sm: '12px' },
+            position: 'relative',
+            transition: 'background-color 0.3s ease',
+            flexShrink: 0,
           }}
         >
-          {/* カスタムトグルスイッチ */}
           <Box
             sx={{
-              width: { xs: 40, sm: 44 },
-              height: { xs: 22, sm: 24 },
-              backgroundColor: isOpen ? theme.palette.primary.main : '#e5e7eb',
-              borderRadius: { xs: '11px', sm: '12px' },
-              position: 'relative',
-              transition: 'background-color 0.3s ease',
-              flexShrink: 0,
+              width: { xs: 18, sm: 20 },
+              height: { xs: 18, sm: 20 },
+              backgroundColor: 'white',
+              borderRadius: '50%',
+              position: 'absolute',
+              top: 2,
+              left: 2,
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+              transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              transform: isOpen
+                ? { xs: 'translateX(18px)', sm: 'translateX(20px)' }
+                : 'translateX(0px)',
             }}
-          >
-            <Box
-              sx={{
-                width: { xs: 18, sm: 20 },
-                height: { xs: 18, sm: 20 },
-                backgroundColor: 'white',
-                borderRadius: '50%',
-                position: 'absolute',
-                top: 2,
-                left: 2,
-                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
-                transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                transform: isOpen 
-                  ? { xs: 'translateX(18px)', sm: 'translateX(20px)' }
-                  : 'translateX(0px)',
-              }}
-            />
-          </Box>
-          
-          <Typography 
-            variant="body2" 
-            sx={{ 
-              fontWeight: 500, 
-              color: 'text.primary',
-              fontSize: { xs: '14px', sm: '15px' },
-              minWidth: 0,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            応答スタイルを選択する
-          </Typography>
+          />
         </Box>
 
+        {/* 「応答スタイルを変更」テキスト */}
         <Typography
-          variant="caption"
-          color="text.secondary"
+          variant="body2"
           sx={{
-            textAlign: { xs: 'left', sm: 'right' },
-            fontSize: { xs: '11px', sm: '12px' },
+            fontWeight: 500,
+            color: 'text.primary',
+            fontSize: { xs: '14px', sm: '15px' },
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
+          応答スタイルを変更
+        </Typography>
+
+        {/* 選択中スタイル */}
+        <Typography
+          variant="body2"
+          sx={{
+            color: 'text.secondary',
+            fontSize: { xs: '13px', sm: '14px' },
             minWidth: 0,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
-            maxWidth: { xs: '100%', sm: '200px' },
-            order: { xs: 2, sm: 0 },
-            width: { xs: '100%', sm: 'auto' },
           }}
         >
-          {currentStyle.label}: {currentStyle.description}
+          ：{currentStyle.label}
         </Typography>
       </Box>
 
@@ -313,6 +318,7 @@ const ResponseStyleSelector: React.FC<ResponseStyleSelectorProps> = ({
                   {responseStyles.map((style) => (
                     <Button
                       key={style.id}
+                      data-tutorial={`response-style-${style.id}`}
                       onClick={() => handleStyleSelect(style)}
                       sx={{
                         display: 'inline-flex',
@@ -320,10 +326,14 @@ const ResponseStyleSelector: React.FC<ResponseStyleSelectorProps> = ({
                         gap: { xs: 0.5, sm: 0.75 },
                         py: { xs: 0.75, sm: 1 },
                         px: { xs: 1.25, sm: 1.75 },
-                        backgroundColor: style.id === 'custom' 
+                        backgroundColor: highlighted && style.id === 'deepen'
+                          ? '#FFF1E8'
+                          : style.id === 'custom'
                           ? 'transparent' 
                           : (currentStyle.id === style.id ? '#eff6ff' : '#f9fafb'),
-                        border: style.id === 'custom' 
+                        border: highlighted && style.id === 'deepen'
+                          ? '1px solid #FF8C5A'
+                          : style.id === 'custom'
                           ? '1px dashed #9ca3af' 
                           : `1px solid ${currentStyle.id === style.id ? '#93c5fd' : '#e5e7eb'}`,
                         borderRadius: '14px',

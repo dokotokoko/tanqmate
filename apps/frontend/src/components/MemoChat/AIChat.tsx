@@ -54,6 +54,7 @@ const AIChat: React.FC<AIChatProps> = ({
   isDashboard = false,
   title,
   initialMessage,
+  initialInputValue,
   initialAIResponse,
   memoContent = '',
   currentMemoContent = '',
@@ -68,6 +69,18 @@ const AIChat: React.FC<AIChatProps> = ({
   loadHistoryFromDB = true,
   isInitializing = false,
   persistentMode = false,
+  isTutorialLocked = false,
+  isMessageInputDisabled = false,
+  inputAreaDataTutorialId,
+  inputDataTutorialId,
+  sendButtonDataTutorialId,
+  tutorialGuide,
+  responseStyleSelectorDataTutorialId,
+  forceResponseStyleSelectorOpen,
+  highlightResponseStyleSelector,
+  onMessageSendStart,
+  onResponseStyleChange,
+  onMessageResult,
   onActivityRecord,
 }) => {
   // Zustand store selectors and actions
@@ -105,11 +118,27 @@ const AIChat: React.FC<AIChatProps> = ({
     console.log('🎯 AIChat: responseStyle changed:', responseStyle?.id || 'null', responseStyle);
   }, [responseStyle]);
 
+  const handleResponseStyleChange = useCallback(
+    (style: ResponseStyle) => {
+      setResponseStyle(style);
+      onResponseStyleChange?.(style);
+    },
+    [onResponseStyleChange]
+  );
+
   // Refs
   const messageListRef = useRef<HTMLDivElement>(null);
   const isSendingRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const hasAppliedInitialInputRef = useRef(false);
   const [lastMessageIsFromUser, setLastMessageIsFromUser] = useState(false);
+
+  useEffect(() => {
+    if (!hasAppliedInitialInputRef.current && initialInputValue?.trim()) {
+      setInputValue(initialInputValue);
+      hasAppliedInitialInputRef.current = true;
+    }
+  }, [initialInputValue]);
   
   // Custom hooks for side effects
   const { handleScroll, scrollToBottom } = useAutoScroll({
@@ -122,7 +151,7 @@ const AIChat: React.FC<AIChatProps> = ({
 
   // デフォルトの初期メッセージを返す関数
   const getDefaultInitialMessage = (): string => {
-    return AI_INITIAL_MESSAGE;
+    return initialMessage || AI_INITIAL_MESSAGE;
   };
 
   // デフォルトのクエストカードを返す関数
@@ -177,19 +206,33 @@ const AIChat: React.FC<AIChatProps> = ({
       role: 'assistant',
       content: messageContent,
       timestamp: new Date(),
-      questCards: getDefaultQuestCards(),
+      questCards: isTutorialLocked ? undefined : getDefaultQuestCards(),
     };
     addMessage(initialMsg);
     
     // Create new conversation asynchronously
     // Note: 実際の作成は最初のメッセージ送信時に行われる
-  }, [initialMessage, clearMessages, setHistoryOpen, setConversationId, addMessage]); // 関数の依存を最小化
+  }, [initialMessage, isTutorialLocked, clearMessages, setHistoryOpen, setConversationId, addMessage]); // 関数の依存を最小化
 
   // Initialize event manager after handleNewChat is defined
-  const eventManager = useEventManager({
-    onNewChat: handleNewChat,
-    onHistoryOpen: () => setHistoryOpen(true),
+  useEventManager({
+    onNewChat: () => {
+      if (!isTutorialLocked) {
+        void handleNewChat();
+      }
+    },
+    onHistoryOpen: () => {
+      if (!isTutorialLocked) {
+        setHistoryOpen(true);
+      }
+    },
   });
+
+  useEffect(() => {
+    if (isTutorialLocked && isHistoryOpen) {
+      setHistoryOpen(false);
+    }
+  }, [isTutorialLocked, isHistoryOpen, setHistoryOpen]);
 
   // メッセージクリア関数（イベント駆動）
   const clearMessagesIfNeeded = useCallback(() => {
@@ -219,7 +262,7 @@ const AIChat: React.FC<AIChatProps> = ({
           role: 'assistant',
           content: getDefaultInitialMessage(),
           timestamp: new Date(),
-          questCards: getDefaultQuestCards(),
+          questCards: isTutorialLocked ? undefined : getDefaultQuestCards(),
         };
         setMessages([initialMessage]);
         setHistoryLoaded(true);
@@ -236,7 +279,7 @@ const AIChat: React.FC<AIChatProps> = ({
           role: 'assistant',
           content: getDefaultInitialMessage(),
           timestamp: new Date(),
-          questCards: getDefaultQuestCards(),
+          questCards: isTutorialLocked ? undefined : getDefaultQuestCards(),
         };
         setMessages([initialMessage]);
       } else if (historyMessages.length > 0) {
@@ -255,7 +298,7 @@ const AIChat: React.FC<AIChatProps> = ({
           role: 'assistant',
           content: getDefaultInitialMessage(),
           timestamp: new Date(),
-          questCards: getDefaultQuestCards(),
+          questCards: isTutorialLocked ? undefined : getDefaultQuestCards(),
         };
         setMessages([initialMessage]);
       }
@@ -265,7 +308,7 @@ const AIChat: React.FC<AIChatProps> = ({
       console.error('対話履歴の読み込みエラー:', error);
       setHistoryLoaded(true); // エラーでも処理を続行
     }
-  }, [isDashboard, loadHistoryFromDB, historyLoaded, setMessages, setConversationId, conversation.conversationId]);
+  }, [initialMessage, isDashboard, isTutorialLocked, loadHistoryFromDB, historyLoaded, setMessages, setConversationId, conversation.conversationId]);
 
   // 初期メッセージ設定関数（イベント駆動）
   const loadInitialMessages = useCallback(async () => {
@@ -297,7 +340,7 @@ const AIChat: React.FC<AIChatProps> = ({
         role: 'assistant',
         content: getDefaultInitialMessage(),
         timestamp: new Date(),
-        questCards: getDefaultQuestCards(),
+        questCards: isTutorialLocked ? undefined : getDefaultQuestCards(),
       });
     }
     
@@ -306,7 +349,7 @@ const AIChat: React.FC<AIChatProps> = ({
       // 初期化完了を記録
       initializationKeyRef.current = 'initialized';
     }
-  }, [initialMessage, initialAIResponse, isDashboard, loadHistoryFromDB, historyLoaded, messages.length, autoStart, setMessages]);
+  }, [initialMessage, initialAIResponse, isDashboard, isTutorialLocked, loadHistoryFromDB, historyLoaded, messages.length, autoStart, setMessages]);
 
   // 新しい会話を作成
   const createNewConversation = async (): Promise<string | null> => {
@@ -503,6 +546,7 @@ const AIChat: React.FC<AIChatProps> = ({
               // AI応答完了時はユーザーメッセージフラグをリセット
               setLastMessageIsFromUser(false);
 
+              onMessageResult?.({ status: 'success', conversationId: result.conversation_id || conversationId || null });
               setLoading(false);
               isSendingRef.current = false;
               inputRef.current?.focus();
@@ -535,7 +579,8 @@ const AIChat: React.FC<AIChatProps> = ({
         // notificationManagerRef.current?.recordActivity(assistantMessage.content, 'ai');
 
         // AI応答完了時も条件付きで最下部にスクロール
-        setManagedTimeout(() => scrollToBottomIfNeeded(), 200);
+        setManagedTimeout(() => scrollToBottom(), 200);
+        onMessageResult?.({ status: 'success', conversationId: conversationId || null });
       } catch (error) {
         console.error('AI応答エラー:', error);
         const errorMessage: Message = {
@@ -546,6 +591,7 @@ const AIChat: React.FC<AIChatProps> = ({
         };
         // 統一されたフックでエラーメッセージを追加
         addMessage(errorMessage);
+        onMessageResult?.({ status: 'error', conversationId: conversationId || null });
       } finally {
         setLoading(false);
         isSendingRef.current = false;
@@ -616,6 +662,10 @@ const AIChat: React.FC<AIChatProps> = ({
     setInputValue('');
     setLoading(true);
     setProcessingStatus('AI処理を開始しています...');
+    onMessageSendStart?.({
+      message: userMessage.content,
+      responseStyleId: responseStyleRef.current?.id || null,
+    });
     
     // ユーザーメッセージフラグをセット（送信時に強制スクロール）
     setLastMessageIsFromUser(true);
@@ -706,6 +756,7 @@ const AIChat: React.FC<AIChatProps> = ({
               // AI応答完了時はユーザーメッセージフラグをリセット
               setLastMessageIsFromUser(false);
               
+              onMessageResult?.({ status: 'success', conversationId: result.conversation_id || conversationId || null });
               setLoading(false);
               isSendingRef.current = false;
               inputRef.current?.focus();
@@ -732,6 +783,7 @@ const AIChat: React.FC<AIChatProps> = ({
               // AI応答完了時はユーザーメッセージフラグをリセット
               setLastMessageIsFromUser(false);
               
+              onMessageResult?.({ status: 'success', conversationId: result.conversation_id || conversationId || null });
               setLoading(false);
               isSendingRef.current = false;
               inputRef.current?.focus();
@@ -757,6 +809,7 @@ const AIChat: React.FC<AIChatProps> = ({
 
       // AI応答を追加
       addMessage(assistantMessage);
+      onMessageResult?.({ status: 'success', conversationId: conversationId || null });
     } catch (error) {
       console.error('AI応答エラー:', error);
       const errorMessage: Message = {
@@ -767,6 +820,7 @@ const AIChat: React.FC<AIChatProps> = ({
       };
       // エラーメッセージを追加
       addMessage(errorMessage);
+      onMessageResult?.({ status: 'error', conversationId: conversationId || null });
     } finally {
       setLoading(false);
       setProcessingStatus(null);
@@ -954,6 +1008,7 @@ const AIChat: React.FC<AIChatProps> = ({
           <ChatInputArea
             inputValue={inputValue}
             isLoading={conversation.isLoading}
+            isMessageInputDisabled={isMessageInputDisabled}
             responseStyle={responseStyle}
             processingStatus={conversation.processingStatus}
             fallbackUsed={conversation.fallbackUsed}
@@ -961,14 +1016,21 @@ const AIChat: React.FC<AIChatProps> = ({
             onInputChange={setInputValue}
             onSendMessage={handleSendMessage}
             onKeyPress={handleKeyPress}
-            onStyleChange={setResponseStyle}
+            onStyleChange={handleResponseStyleChange}
+            dataTutorialId={inputAreaDataTutorialId}
+            inputDataTutorialId={inputDataTutorialId}
+            sendButtonDataTutorialId={sendButtonDataTutorialId}
+            tutorialGuide={tutorialGuide}
+            responseStyleSelectorDataTutorialId={responseStyleSelectorDataTutorialId}
+            forceResponseStyleSelectorOpen={forceResponseStyleSelectorOpen}
+            highlightResponseStyleSelector={highlightResponseStyleSelector}
           />
         </Suspense>
       </Box>
 
       {/* チャット履歴パネル */}
       <AnimatePresence>
-        {isHistoryOpen && (
+        {isHistoryOpen && !isTutorialLocked && (
           <Suspense fallback={<LoadingFallback text="チャット履歴を読み込み中..." height="300px" />}>
             <ChatHistory
               isOpen={isHistoryOpen}
