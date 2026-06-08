@@ -23,9 +23,10 @@ import {
 import { LockOutlined } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { API_BASE_URL } from '../config/api';
+import InterestTagPicker from '../components/Profile/InterestTagPicker';
 import { tokenManager } from '../utils/tokenManager';
 import { useAuthStore } from '../stores/authStore';
-import { borderRadius, colors, shadows } from '../styles/design-system';
+import { colors, shadows } from '../styles/design-system';
 import { getPostOnboardingRoute } from '../utils/onboardingGuards';
 
 interface DiaryRecord {
@@ -74,6 +75,7 @@ const ProfilePage: React.FC = () => {
     grade: '',
     class_name: '',
     attendance_number: '',
+    interests: [] as string[],
     theme: '',
     question: '',
     hypothesis: '',
@@ -130,6 +132,7 @@ const ProfilePage: React.FC = () => {
         grade: nextProfile?.grade || '',
         class_name: nextProfile?.class_name || '',
         attendance_number: nextProfile?.attendance_number ? String(nextProfile.attendance_number) : '',
+        interests: Array.isArray(nextProfile?.interests) ? nextProfile.interests : [],
         theme: nextProfile?.theme || '',
         question: nextProfile?.question || '',
         hypothesis: nextProfile?.hypothesis || '',
@@ -171,6 +174,7 @@ const ProfilePage: React.FC = () => {
           grade: formData.grade || null,
           class_name: formData.class_name || null,
           attendance_number: formData.attendance_number ? Number(formData.attendance_number) : null,
+          interests: formData.interests,
           theme: formData.theme || null,
           question: formData.question || null,
           hypothesis: formData.hypothesis || null,
@@ -343,9 +347,18 @@ const ProfilePage: React.FC = () => {
                           探究コンテキスト
                         </Typography>
                         <Typography variant="body2" sx={{ color: colors.text.secondary, mb: 2 }}>
-                          AIが探究を支援するときに参照する内容です。後から更新できます。
+                          AIが探究を支援するときに参照する内容です。好きなものや気になることは単語で追加できます。
                         </Typography>
                         <Grid container spacing={2}>
+                          <Grid item xs={12}>
+                            <InterestTagPicker
+                              value={formData.interests}
+                              onChange={(interests) => setFormData((prev) => ({ ...prev, interests }))}
+                              helperText="興味はAI支援の入口として使われます。先生向けにそのまま公開する情報ではありません。"
+                              disabled={saving}
+                              showSuggestions={false}
+                            />
+                          </Grid>
                           <Grid item xs={12}>
                             <TextField
                               fullWidth
@@ -411,6 +424,34 @@ const ProfilePage: React.FC = () => {
                           <Typography variant="body1" sx={{ color: colors.text.primary, fontWeight: 600 }}>
                             {[formData.grade, formData.class_name].filter(Boolean).join(' / ') || '未設定'}
                           </Typography>
+                        </Box>
+                        <Box>
+                          <Typography variant="caption" sx={{ color: colors.text.secondary, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                            興味
+                          </Typography>
+                          {formData.interests.length > 0 ? (
+                            <Stack direction="row" spacing={0.6} sx={{ mt: 1, flexWrap: 'wrap', useFlexGap: true }}>
+                              {formData.interests.slice(0, 6).map((interest) => (
+                                <Chip
+                                  key={interest}
+                                  size="small"
+                                  label={interest}
+                                  sx={{
+                                    backgroundColor: colors.accentWarm.soft,
+                                    color: colors.accentWarm.active,
+                                    border: `1px solid ${colors.border.warm}`,
+                                  }}
+                                />
+                              ))}
+                              {formData.interests.length > 6 && (
+                                <Chip size="small" label={`+${formData.interests.length - 6}`} />
+                              )}
+                            </Stack>
+                          ) : (
+                            <Typography variant="body1" sx={{ color: colors.text.primary, fontWeight: 600 }}>
+                              未設定
+                            </Typography>
+                          )}
                         </Box>
                         <Box>
                           <Typography variant="caption" sx={{ color: colors.text.secondary, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
