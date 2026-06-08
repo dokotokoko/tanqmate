@@ -42,7 +42,7 @@ class AsyncDatabaseHelper:
                 return self.supabase.table("profiles")\
                     .select(
                         "id, email, username, role, school_id, school_code_locked, "
-                        "grade, class_name, attendance_number, theme, question, hypothesis, "
+                        "grade, class_name, attendance_number, interests, theme, question, hypothesis, "
                         "created_at, updated_at"
                     )\
                     .eq("id", user_id)\
@@ -55,7 +55,7 @@ class AsyncDatabaseHelper:
                     lambda: self.supabase.table("profiles")
                     .select(
                         "id, email, username, role, school_id, school_code_locked, "
-                        "grade, class_name, attendance_number, theme, question, hypothesis, "
+                        "grade, class_name, attendance_number, interests, theme, question, hypothesis, "
                         "created_at, updated_at"
                     )
                     .eq("legacy_user_id", int(user_id))

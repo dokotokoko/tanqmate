@@ -3,7 +3,13 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore, type ProfileData } from '../stores/authStore';
 import LoadingScreen from './LoadingScreen';
-import { getPostOnboardingRoute, isOnboardingComplete } from '../utils/onboardingGuards';
+import {
+  FIRST_AI_TUTORIAL_ROUTE,
+  getPostOnboardingRoute,
+  isFirstAiTutorialRequired,
+  isFirstAiTutorialRoute,
+  isOnboardingComplete,
+} from '../utils/onboardingGuards';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -41,6 +47,17 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
       userId: user.id,
     });
     return <Navigate to="/onboarding" state={{ from: location }} replace />;
+  }
+
+  if (
+    isFirstAiTutorialRequired(profile) &&
+    !isFirstAiTutorialRoute(location.pathname, location.search)
+  ) {
+    console.warn('[ProtectedRoute] redirecting-to-first-ai-tutorial', {
+      pathname: location.pathname,
+      userId: user.id,
+    });
+    return <Navigate to={FIRST_AI_TUTORIAL_ROUTE} state={{ from: location }} replace />;
   }
 
   if (requiredRole && profile?.role !== requiredRole) {

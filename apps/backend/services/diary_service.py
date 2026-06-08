@@ -82,6 +82,58 @@ class DiaryService(CacheableService):
             self.logger.error("Get single profile error: %s", exc)
             return None
 
+    def _assert_teacher_can_access_student(
+        self,
+        teacher_id: UserID,
+        student_id: UserID,
+    ) -> Dict[str, Any]:
+        teacher_profile = self._get_single_profile(
+            teacher_id,
+            fields="id, email, name, role, school_id",
+        )
+        if not teacher_profile or teacher_profile.get("role") not in ("teacher", "admin"):
+            raise HTTPException(status_code=403, detail="Teacher access is required")
+
+        student_profile = self._get_single_profile(
+            student_id,
+            fields="id, email, name, role, school_id",
+        )
+        if not student_profile or student_profile.get("role") != "student":
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        if teacher_profile.get("role") == "admin":
+            return student_profile
+
+        teacher_school_id = teacher_profile.get("school_id")
+        student_school_id = student_profile.get("school_id")
+        if not teacher_school_id:
+            raise HTTPException(status_code=400, detail="Teacher school is not configured")
+        if teacher_school_id != student_school_id:
+            raise HTTPException(status_code=403, detail="Student is outside teacher school")
+
+        return student_profile
+
+    def _sanitize_teacher_diary_entry(self, diary: Dict[str, Any]) -> Dict[str, Any]:
+        allowed_fields = {
+            "id",
+            "student_id",
+            "date",
+            "published_body",
+            "published_quote",
+            "published_tags",
+            "shared_summary",
+            "share_status",
+            "shared_at",
+            "emotion",
+            "turning_point",
+            "submitted_at",
+            "status",
+        }
+        sanitized = {key: diary.get(key) for key in allowed_fields if key in diary}
+        sanitized["published_body"] = None
+        sanitized["status"] = "submitted"
+        return sanitized
+
     def _derive_follow_up_flag(self, entry: Dict[str, Any]) -> Optional[str]:
         emotion = entry.get("emotion") or {}
         mood_tags = emotion.get("mood_tags") or []
@@ -492,10 +544,14 @@ class DiaryService(CacheableService):
     ) -> List[Dict[str, Any]]:
         """特定生徒の日誌履歴取得（先生用）"""
         try:
+            self._assert_teacher_can_access_student(teacher_id, student_id)
+
             result = self._apply_student_scope(
                 self.supabase.table("diary_entries")\
                 .select("*")\
                 .filter("submitted_at", "not.is", "null")\
+                .eq("share_status", "shared")\
+                .filter("shared_at", "not.is", "null")\
                 .order("submitted_at", desc=True)\
                 .limit(limit),
                 student_id
@@ -504,14 +560,14 @@ class DiaryService(CacheableService):
             diaries = []
             for diary in result.data:
                 diary = self._normalize_diary_entry(diary)
-                diary["status"] = "submitted"
-                diary["published_body"] = None
-                diaries.append(diary)
+                diaries.append(self._sanitize_teacher_diary_entry(diary))
             
             return diaries
             
         except Exception as e:
             self.logger.error(f"Get student diaries error: {e}")
+            if isinstance(e, HTTPException):
+                raise
             return []
     
     async def get_user_stats(self, user_id: UserID) -> Dict[str, Any]:

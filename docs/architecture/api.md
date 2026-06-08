@@ -35,6 +35,18 @@ Rules:
 - Do not add public unauthenticated APIs unless the endpoint is safe to expose.
 - Do not weaken CORS, token validation, or role checks.
 
+## Profile Context APIs
+
+`auth_router` owns profile context used by onboarding, profile editing, and AI support context.
+
+- `POST /auth/onboarding` accepts `name`, required `interests: string[]`, optional school/class fields, optional migration request fields `migration_requested`, `legacy_username`, `migration_note`, and optional inquiry context fields `theme`, `question`, `hypothesis`.
+- `GET /auth/profile` returns the full profile, including `interests`, `first_ai_tutorial_completed`, and `first_ai_tutorial_completed_at`.
+- `PUT /auth/profile` accepts optional `interests: string[]` together with existing profile and inquiry context fields.
+- `POST /auth/first-ai-tutorial/complete` marks the authenticated user's first AI tutorial complete. It updates only the caller's `profiles` row, is idempotent, and is a no-op success for teacher/admin roles because the forced tutorial applies only to students.
+- Interest tags are normalized server-side by trimming empty values, deduplicating, and rejecting tags longer than the configured short-tag limit.
+- When `migration_requested` is true, `legacy_username` is required and a pending `migration_requests` row is inserted or updated for the authenticated user.
+- The first AI tutorial completion state is stored in `profiles`, not local browser storage.
+
 ## Frontend API Usage
 
 Frontend code should use existing API clients and service layers:

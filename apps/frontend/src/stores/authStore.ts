@@ -12,12 +12,15 @@ export interface ProfileData {
   grade?: string;
   class_name?: string;
   attendance_number?: number;
+  interests?: string[];
   theme?: string;
   question?: string;
   hypothesis?: string;
   role: 'student' | 'teacher' | 'admin';
   school_id: string | null;
   school_code_locked?: boolean;
+  first_ai_tutorial_completed?: boolean;
+  first_ai_tutorial_completed_at?: string | null;
   email?: string;
   schools?: {
     id: string;
