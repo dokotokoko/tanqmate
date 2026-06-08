@@ -11,12 +11,8 @@ import {
 } from '@mui/material';
 import {
   ChatBubbleOutline,
-  CheckCircleOutline,
-  EmojiObjectsOutlined,
-  LockOutlined,
   Psychology,
   StyleOutlined,
-  TuneOutlined,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
@@ -25,12 +21,24 @@ import { colors, shadows } from '../styles/design-system';
 const BUG_REPORT_URL = 'https://forms.gle/K9u31TJYHcFzY3Fn9';
 
 const featureItems = [
-  { icon: <StyleOutlined />, title: 'AIの会話スタイルを選べる', body: '探究の状況に合わせて、AIのアプローチを切り替えられます。' },
-  { icon: <EmojiObjectsOutlined />, title: '興味・テーマをAIに共有できる', body: '自分の関心や背景をAIに渡して、対話の質を上げられます。' },
-  { icon: <ChatBubbleOutline />, title: 'カードUIで次の話題を選べる', body: '続きの話題をカードから選ぶだけで、対話が自然に進みます。' },
-  { icon: <TuneOutlined />, title: '感情ベースのリフレクション', body: '今の気持ちを選ぶだけで、AIが見立てを返してくれます。' },
-  { icon: <CheckCircleOutline />, title: '共有内容をプレビューできる', body: '先生に届く内容を送信前に確認できます。' },
-  { icon: <LockOutlined />, title: '対話ログは先生に見えない', body: 'raw対話ログとAIの見立て全文は、先生画面に表示しません。' },
+  { 
+    icon: <StyleOutlined />, 
+    title: '会話スタイルの選択', 
+    body: '探究の状況に合わせて、AIのアプローチを切り替えられます。',
+    image: '/images/response-style.png'
+  },
+  { 
+    icon: <Psychology />, 
+    title: 'AIがあなたの探究を分析', 
+    body: '自分の関心や背景をAIに渡して、対話の質を上げられます。',
+    image: '/images/ai-chat.png'
+  },
+  { 
+    icon: <ChatBubbleOutline />, 
+    title: 'カードUIで話題を選べる', 
+    body: '続きの話題をカードから選ぶだけで、対話が自然に進みます。',
+    image: '/images/card-ui.png'
+  },
 ];
 
 const faqs = [
@@ -166,12 +174,12 @@ const GuidePage: React.FC = () => {
             </Stack>
             <Box
               component="img"
-              src="/images/app-screenshot-main.png"
+              src="/images/about-tanqmate.png"
               alt="探Qメイト アプリ画面"
               sx={{
                 width: '100%',
                 maxWidth: 760,
-                borderRadius: 3,
+                borderRadius: 1.5,
                 boxShadow: shadows.lg,
                 border: `1px solid ${colors.border.soft}`,
                 display: 'block',
@@ -218,9 +226,9 @@ const GuidePage: React.FC = () => {
                 <Grid item xs={12} md={7}>
                   <Box
                     component="img"
-                    src="/images/app-screenshot-chat.png"
+                    src="/images/ai-chat.png"
                     alt="AI対話 画面"
-                    sx={{ width: '100%', borderRadius: 2.5, boxShadow: shadows.md, border: `1px solid ${colors.border.soft}` }}
+                    sx={{ width: '100%', borderRadius: 1.5, boxShadow: shadows.md, border: `1px solid ${colors.border.soft}` }}
                   />
                 </Grid>
               </Grid>
@@ -241,9 +249,9 @@ const GuidePage: React.FC = () => {
                 <Grid item xs={12} md={7}>
                   <Box
                     component="img"
-                    src="/images/usecase3.png"
+                    src="/images/reflection-empathy.png"
                     alt="リフレクション 画面"
-                    sx={{ width: '100%', borderRadius: 2.5, boxShadow: shadows.md, border: `1px solid ${colors.border.soft}` }}
+                    sx={{ width: '100%', borderRadius: 1.5, boxShadow: shadows.md, border: `1px solid ${colors.border.soft}` }}
                   />
                 </Grid>
               </Grid>
@@ -262,29 +270,44 @@ const GuidePage: React.FC = () => {
               できること、特徴
             </Typography>
           </Box>
-          <Grid container spacing={3}>
+          <Stack spacing={{ xs: 8, md: 10 }}>
             {featureItems.map((item, i) => (
-              <Grid item xs={12} sm={6} md={4} key={item.title}>
-                <motion.div initial={{ opacity: 0, y: 12 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.06 }}>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 3.5,
-                      height: '100%',
-                      borderRadius: 2.5,
-                      border: `1px solid ${colors.border.soft}`,
-                      bgcolor: colors.background.default,
-                      '& svg': { fontSize: 36 },
-                    }}
-                  >
-                    <Box sx={{ color: colors.accentWarm.main, mb: 2 }}>{item.icon}</Box>
-                    <Typography sx={{ fontWeight: 700, mb: 1, fontSize: 19, color: colors.text.primary }}>{item.title}</Typography>
-                    <Typography sx={{ fontSize: 16, color: colors.text.secondary, lineHeight: 1.8 }}>{item.body}</Typography>
-                  </Paper>
-                </motion.div>
-              </Grid>
+              <motion.div 
+                key={item.title} 
+                initial={{ opacity: 0, y: 20 }} 
+                whileInView={{ opacity: 1, y: 0 }} 
+                viewport={{ once: true }} 
+                transition={{ delay: i * 0.1 }}
+              >
+                <Grid container spacing={{ xs: 4, md: 6 }} alignItems="center" direction={i % 2 === 0 ? 'row' : 'row-reverse'}>
+                  <Grid item xs={12} md={6}>
+                    <Box sx={{ mb: 3 }}>
+                      <Box sx={{ color: colors.accentWarm.main, mb: 2 }}>{item.icon}</Box>
+                      <Typography variant="h3" sx={{ fontWeight: 800, mb: 2, fontSize: { xs: 24, md: 32 }, color: colors.text.primary }}>
+                        {item.title}
+                      </Typography>
+                      <Typography sx={{ fontSize: { xs: 16, md: 18 }, color: colors.text.secondary, lineHeight: 1.8 }}>
+                        {item.body}
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Box
+                      component="img"
+                      src={item.image}
+                      alt={item.title}
+                      sx={{
+                        width: '100%',
+                        borderRadius: 1.5,
+                        boxShadow: shadows.md,
+                        border: `1px solid ${colors.border.soft}`,
+                      }}
+                    />
+                  </Grid>
+                </Grid>
+              </motion.div>
             ))}
-          </Grid>
+          </Stack>
         </Container>
       </Box>
 
