@@ -15,6 +15,10 @@ from collections import deque
 logger = logging.getLogger(__name__)
 
 
+class LLMContentFilterError(RuntimeError):
+    """安全上の中断を別モデルへのフォールバック理由にしない。"""
+
+
 class learning_plannner():
     """
     統合版LLMクライアント
@@ -29,7 +33,14 @@ class learning_plannner():
             pool_size: 非同期処理用のセマフォプールサイズ（Noneの場合は環境変数から取得）
         """
         load_dotenv()
-        self.model = "gpt-4.1"
+        self.model = "gpt-6-luna"
+        self.reasoning_effort = "medium"
+        self.reasoning_token_budget = int(os.getenv("LLM_REASONING_TOKEN_BUDGET", "4096"))
+        self.default_text_token_budget = int(os.getenv("LLM_DEFAULT_TEXT_TOKEN_BUDGET", "4096"))
+        if not 0 < self.reasoning_token_budget < 128000:
+            raise ValueError("LLM_REASONING_TOKEN_BUDGET must be between 1 and 127999.")
+        if not 0 < self.default_text_token_budget <= 128000:
+            raise ValueError("LLM_DEFAULT_TEXT_TOKEN_BUDGET must be between 1 and 128000.")
         self.api_key = os.getenv("OPENAI_API_KEY")
 
         if not self.api_key:
@@ -67,6 +78,30 @@ class learning_plannner():
     # =====================================
     # 共通メソッド
     # =====================================
+
+    def _build_request_params(
+        self,
+        input_items: List[Dict[str, Any]],
+        max_tokens: Optional[int] = None,
+        *,
+        stream: bool = False,
+    ) -> Dict[str, Any]:
+        """本文の目安に推論予算を加え、主モデルの共通引数を作る。"""
+        text_budget = max_tokens if max_tokens is not None else self.default_text_token_budget
+        if text_budget <= 0:
+            raise ValueError("max_tokens must be positive.")
+        params: Dict[str, Any] = {
+            "model": self.model,
+            "reasoning": {"effort": self.reasoning_effort},
+            "text": {"verbosity": "low"},
+            "input": input_items,
+            "tools": [{"type": "web_search"}],
+            "store": True,
+            "max_output_tokens": min(text_budget + self.reasoning_token_budget, 128000),
+        }
+        if stream:
+            params["stream"] = True
+        return params
 
     @staticmethod
     def text_type_role(role: str) -> str:
@@ -123,8 +158,13 @@ class learning_plannner():
         """
         SDK差分を吸収しつつ、最終テキストを取り出す
         """
-        if hasattr(resp, "output_text") and resp.output_text:
-            return resp.output_text
+        if getattr(resp, "status", None) not in (None, "completed"):
+            if getattr(getattr(resp, "incomplete_details", None), "reason", None) == "content_filter":
+                raise LLMContentFilterError("LLM response was interrupted by a content filter.")
+            raise RuntimeError("LLM response did not complete.")
+        output_text = getattr(resp, "output_text", None)
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text
 
         # fallback: output の message を走査
         texts: List[str] = []
@@ -132,15 +172,16 @@ class learning_plannner():
         for item in output:
             if getattr(item, "type", None) == "message":
                 for c in getattr(item, "content", None) or []:
-                    if getattr(c, "type", None) in ("output_text", "text"):
-                        t = getattr(c, "text", None)
-                        if t:
+                    content_type = getattr(c, "type", None)
+                    if content_type in ("output_text", "text", "refusal"):
+                        t = getattr(c, "refusal", None) if content_type == "refusal" else getattr(c, "text", None)
+                        if isinstance(t, str) and t.strip():
                             texts.append(t)
 
         if texts:
             return "\n".join(texts)
 
-        return str(resp)
+        raise RuntimeError("LLM response did not contain output text.")
     
     # =====================================
     # 同期メソッド
@@ -160,18 +201,11 @@ class learning_plannner():
         start_time = time.time()
 
         # Response APIのパラメータ構築
-        request_params: Dict[str, Any] = {
-            "model": self.model,
-            "input": input_items,
-            "tools": [{"type": "web_search"}], # NOTE: web_search ツールを常に渡す（呼び出すかはモデルが判断）
-            "store": True,
-        }
-
-        if max_tokens is not None:
-            request_params["max_output_tokens"] = max_tokens
+        request_params = self._build_request_params(input_items, max_tokens)
 
         # Response APIを呼び出し
         resp = self.client.responses.create(**request_params)
+        self.extract_output_text(resp)
         response_time = time.time() - start_time
         
         # トークン数の取得と詳細ログ出力
@@ -217,13 +251,7 @@ class learning_plannner():
         Returns:
             WebSearch結果を含むLLMからの応答
         """
-        resp = self.client.responses.create(
-            model=self.model,
-            input=input_items,
-            tools=[{"type": "web_search"}],
-            store=True,
-        )
-        return resp.output_text
+        return self.extract_output_text(self.generate_response(input_items))
     
     # =====================================
     # 非同期メソッド
@@ -253,18 +281,11 @@ class learning_plannner():
                 if status_callback:
                     await status_callback("AIが考え中です...")
                 # Response APIのパラメータ構築
-                request_params: Dict[str, Any] = {
-                    "model": self.model,
-                    "input": input_items,
-                    "tools": [{"type": "web_search"}],
-                    "store": True,
-                }
-                
-                if max_tokens is not None:
-                    request_params["max_output_tokens"] = max_tokens
+                request_params = self._build_request_params(input_items, max_tokens)
                 
                 # Response APIを呼び出し
                 response = await self.async_client.responses.create(**request_params)
+                self.extract_output_text(response)
                 response_time = time.time() - start_time
                 
                 # トークン数の取得と詳細ログ出力
@@ -283,6 +304,8 @@ class learning_plannner():
                 
                 return response
                 
+        except LLMContentFilterError:
+            raise
         except Exception as e:
             logger.error(f"❌ OpenAI API非同期呼び出しエラー: {e}")
             
@@ -318,37 +341,31 @@ class learning_plannner():
             Responses API の streaming は event.type を見て delta を拾う
             """
             async with self.semaphore:
-                request_params: Dict[str, Any] = {
-                    "model": self.model,
-                    "input": input_items,
-                    "tools": [{"type": "web_search"}],
-                    "stream": True,
-                    "store": True,
-                }
-                if max_tokens is not None:
-                    request_params["max_output_tokens"] = max_tokens
+                request_params = self._build_request_params(input_items, max_tokens, stream=True)
 
                 stream = await self.async_client.responses.create(**request_params)
+                async with stream:
+                    completed = False
+                    async for event in stream:
+                        etype = getattr(event, "type", None)
 
-                async for event in stream:
-                    etype = getattr(event, "type", None)
+                        # テキスト生成の増分
+                        if etype == "response.output_text.delta":
+                            delta = getattr(event, "delta", "") or ""
+                            if delta:
+                                if callback:
+                                    await callback(delta)
+                                yield delta
 
-                    # テキスト生成の増分
-                    if etype == "response.output_text.delta":
-                        delta = getattr(event, "delta", "") or ""
-                        if delta:
-                            if callback:
-                                await callback(delta)
-                            yield delta
+                        # エラーイベント
+                        elif etype in ("error", "response.failed", "response.incomplete"):
+                            raise RuntimeError("LLM stream did not complete.")
+                        elif etype == "response.completed":
+                            self.extract_output_text(event.response)
+                            completed = True
 
-                    # エラーイベント
-                    elif etype == "error":
-                        raise RuntimeError(str(event))
-
-                    # 完了イベントなどは無視（必要ならここでハンドル）
-                    # - response.completed
-                    # - response.created
-                    # - response.web_search.* など
+                    if not completed:
+                        raise RuntimeError("LLM stream ended before completion.")
     
     async def batch_generate_responses(
         self, 
@@ -404,6 +421,8 @@ class learning_plannner():
             # まずメインモデルで試行
             return await self.generate_response_async(input_items, max_tokens)
             
+        except LLMContentFilterError:
+            raise
         except Exception as primary_error:
             logger.warning(f"⚠️ プライマリモデルエラー、フォールバックを使用: {primary_error}")
             
@@ -421,6 +440,7 @@ class learning_plannner():
                             request_params["max_output_tokens"] = min(max_tokens, 1500)
                         
                         response = await self.async_client.responses.create(**request_params)
+                        self.extract_output_text(response)
                         return response
                         
                 except Exception as fallback_error:
@@ -468,6 +488,7 @@ class learning_plannner():
                     request_params["max_output_tokens"] = 1000
                 
                 response = await fallback_client.responses.create(**request_params)
+                self.extract_output_text(response)
                 response_time = time.time() - start_time
                 
                 # トークン数の取得と詳細ログ出力
@@ -503,14 +524,8 @@ class learning_plannner():
         Returns:
             WebSearch結果を含むLLMからの応答
         """
-        async with self.semaphore:
-            response = await self.async_client.responses.create(
-                model=self.model,
-                input=input_items,
-                tools=[{"type": "web_search"}],
-                store=True
-            )
-            return response.output_text if hasattr(response, 'output_text') else str(response)
+        response = await self.generate_response_async(input_items)
+        return self.extract_output_text(response)
     
     # =====================================
     # ユーティリティメソッド
