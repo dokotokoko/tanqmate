@@ -118,18 +118,13 @@ class ChatService(BaseService):
         logger = logging.getLogger(__name__)
 
         try:
-            logger.info(f"dump_response_events: resp type={type(resp)} repr={repr(resp)[:200]}")
-
-            events = getattr(resp, "output", []) or []
-            logger.info("=== Response.output events dump ===")
-            for i, ev in enumerate(events):
-                # SDKオブジェクトをdict化して出す（可能なら）
-                if hasattr(ev, "model_dump"):
-                    logger.info(f"[{i}] {json.dumps(ev.model_dump(), ensure_ascii=False)}")
-                else:
-                    logger.info(f"[{i}] {repr(ev)}")
-        except Exception as e:
-            logger.exception(f"Failed to dump response events: {e}")
+            event_counts: Dict[str, int] = {}
+            for event in getattr(resp, "output", []) or []:
+                event_type = getattr(event, "type", "unknown")
+                event_counts[event_type] = event_counts.get(event_type, 0) + 1
+            logger.info("LLM response output types: %s", event_counts)
+        except Exception:
+            logger.warning("LLM response metadata was unavailable.")
 
     async def _generate_tutor_llm_decision(self, prompt: str) -> Dict[str, Any]:
         """Run the optional slow-path LLM judgement for ambiguous ITS strategy cases."""
